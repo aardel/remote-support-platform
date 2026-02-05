@@ -1,37 +1,9 @@
-import React, { useState } from 'react';
-import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import React from 'react';
 import './Login.css';
 
-function Login({ setIsAuthenticated }) {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    try {
-      const response = await axios.post('/api/auth/login', {
-        username,
-        password
-      });
-
-      if (response.data.success) {
-        localStorage.setItem('token', response.data.token);
-        localStorage.setItem('technician', JSON.stringify(response.data.technician));
-        setIsAuthenticated(true);
-        navigate('/dashboard');
-      }
-    } catch (err) {
-      setError(err.response?.data?.error || 'Login failed');
-    } finally {
-      setLoading(false);
-    }
+function Login() {
+  const startLogin = () => {
+    window.location.href = '/api/auth/login';
   };
 
   return (
@@ -39,39 +11,17 @@ function Login({ setIsAuthenticated }) {
       <div className="login-box">
         <h1>🔧 Remote Support</h1>
         <h2>Technician Login</h2>
-        
-        {error && <div className="error-message">{error}</div>}
-        
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>Username</label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-              disabled={loading}
-            />
-          </div>
-          
-          <div className="form-group">
-            <label>Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={loading}
-            />
-          </div>
-          
-          <button type="submit" disabled={loading} className="login-btn">
-            {loading ? 'Logging in...' : 'Login'}
-          </button>
-        </form>
-        
+
+        <p style={{ marginBottom: '20px', color: '#666' }}>
+          Sign in with your Nextcloud account to access the technician dashboard.
+        </p>
+
+        <button type="button" onClick={startLogin} className="login-btn">
+          Continue with Nextcloud
+        </button>
+
         <p className="register-link">
-          Don't have an account? <a href="/register">Register here</a>
+          Accounts are managed in Nextcloud.
         </p>
       </div>
     </div>

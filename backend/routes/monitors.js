@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
+const { requireAuth } = require('../middleware/sessionAuth');
 
 // Get monitors for session
-router.get('/session/:sessionId', async (req, res) => {
+router.get('/session/:sessionId', requireAuth, async (req, res) => {
     try {
         const { sessionId } = req.params;
         
@@ -20,7 +21,7 @@ router.get('/session/:sessionId', async (req, res) => {
 });
 
 // Switch monitor
-router.post('/session/:sessionId/switch', async (req, res) => {
+router.post('/session/:sessionId/switch', requireAuth, async (req, res) => {
     try {
         const { sessionId } = req.params;
         const { monitorIndex } = req.body;

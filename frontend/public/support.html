@@ -131,6 +131,41 @@
             padding: 40px;
             color: #64748b;
         }
+
+        .settings-section {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .toggle-row input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+
+        .os-selector {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .os-selector select {
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: 1px solid #cbd5e1;
+            background: #fff;
+        }
     </style>
 </head>
 <body>
@@ -156,6 +191,19 @@
                     <strong>Status:</strong> <span id="sessionStatus">Preparing support package...</span>
                 </div>
             </div>
+
+            <!-- Session Settings -->
+            <div class="settings-section">
+                <div class="toggle-row">
+                    <input type="checkbox" id="allowConnection" checked />
+                    <label for="allowConnection"><strong>Allow remote connection</strong></label>
+                </div>
+                <div class="toggle-row">
+                    <input type="checkbox" id="allowUnattended" checked />
+                    <label for="allowUnattended"><strong>Allow unattended connections</strong> (uncheck to require approval)</label>
+                </div>
+                <small style="color:#64748b;">You can change this anytime. If unchecked, the technician must request approval each time.</small>
+            </div>
             
             <!-- Download Section -->
             <div class="download-section">
@@ -166,8 +214,14 @@
                 <a id="downloadBtn" href="#" class="download-btn" onclick="downloadPackage(event)">
                     ⬇️ Download Support Helper
                 </a>
+                <div class="os-selector">
+                    <label for="osSelect"><strong>Detected OS:</strong></label>
+                    <select id="osSelect"></select>
+                    <label for="packageSelect"><strong>Package:</strong></label>
+                    <select id="packageSelect"></select>
+                </div>
                 <p style="color: #64748b; font-size: 14px; margin-top: 15px;">
-                    File size: ~5 MB | Compatible with Windows XP+, macOS, and Linux
+                    File size: ~5-15 MB | Windows EXE, macOS DMG, and ZIP fallback
                 </p>
             </div>
             
@@ -179,16 +233,11 @@
                         <strong>Download</strong> the support helper package using the button above
                     </li>
                     <li>
-                        <strong>Extract</strong> the ZIP file to a folder on your computer
+                        <strong>Run</strong> the file you downloaded:
+                        <span id="instructionsRun">If you received a ZIP, extract it first.</span>
                     </li>
                     <li>
-                        <strong>Run the appropriate launcher:</strong>
-                        <ul style="margin-top: 10px; margin-left: 20px;">
-                            <li><strong>Windows:</strong> Double-click <code>launch.bat</code> (works on Windows XP and later)</li>
-                            <li><strong>macOS:</strong> Open Terminal, navigate to folder, run <code>bash launch.sh</code></li>
-                            <li><strong>Linux:</strong> Open Terminal, navigate to folder, run <code>bash launch.sh</code></li>
-                            <li><strong>Auto-detect:</strong> Run <code>./start-support</code> (detects your OS automatically)</li>
-                        </ul>
+                        <strong>Follow the on-screen helper</strong> and keep it open while support is active
                     </li>
                     <li>
                         The support helper will automatically connect to your technician
@@ -229,6 +278,8 @@
         }
         
         const sessionId = getSessionIdFromURL();
+        let packageManifest = [];
+        let selectedPackageType = 'zip';
         
         if (!sessionId) {
             document.getElementById('loading').innerHTML = 
@@ -263,11 +314,8 @@
                 }
                 
                 // Set download URL
-                const downloadBtn = document.getElementById('downloadBtn');
-                downloadBtn.href = `/api/packages/download/${sessionId}`;
-                downloadBtn.onclick = (e) => {
-                    downloadPackage(e);
-                };
+                await loadPackageManifest();
+                setupSettingsControls();
                 
                 // Show content
                 document.getElementById('loading').style.display = 'none';
@@ -277,6 +325,114 @@
                 document.getElementById('loading').innerHTML = 
                     `<div class="error-message">Error loading session: ${error.message}</div>`;
             }
+        }
+
+        function detectOS() {
+            const ua = navigator.userAgent.toLowerCase();
+            if (ua.includes('windows')) return 'windows';
+            if (ua.includes('mac')) return 'mac';
+            if (ua.includes('linux')) return 'linux';
+            return 'unknown';
+        }
+
+        async function loadPackageManifest() {
+            const os = detectOS();
+            const response = await fetch(`/api/packages/manifest/${sessionId}`);
+            const data = await response.json();
+            packageManifest = data.packages || [];
+
+            const osSelect = document.getElementById('osSelect');
+            osSelect.innerHTML = '';
+            ['windows', 'mac', 'linux', 'other'].forEach((value) => {
+                const opt = document.createElement('option');
+                opt.value = value;
+                opt.textContent = value === 'mac' ? 'macOS' : value.charAt(0).toUpperCase() + value.slice(1);
+                osSelect.appendChild(opt);
+            });
+            osSelect.value = os === 'unknown' ? 'other' : os;
+
+            const packageSelect = document.getElementById('packageSelect');
+            packageSelect.innerHTML = '';
+            packageManifest.forEach((pkg) => {
+                const opt = document.createElement('option');
+                opt.value = pkg.type;
+                opt.textContent = pkg.available ? pkg.label : `${pkg.label} (Not Ready)`;
+                opt.disabled = !pkg.available;
+                packageSelect.appendChild(opt);
+            });
+
+            // Auto-select best package
+            if (osSelect.value === 'windows') {
+                selectedPackageType = packageManifest.find(p => p.type === 'exe' && p.available)?.type || 'zip';
+            } else if (osSelect.value === 'mac') {
+                selectedPackageType = packageManifest.find(p => p.type === 'dmg' && p.available)?.type || 'zip';
+            } else {
+                selectedPackageType = 'zip';
+            }
+            packageSelect.value = selectedPackageType;
+            updateDownloadLink();
+
+            osSelect.addEventListener('change', () => {
+                if (osSelect.value === 'windows') {
+                    selectedPackageType = packageManifest.find(p => p.type === 'exe' && p.available)?.type || 'zip';
+                } else if (osSelect.value === 'mac') {
+                    selectedPackageType = packageManifest.find(p => p.type === 'dmg' && p.available)?.type || 'zip';
+                } else {
+                    selectedPackageType = 'zip';
+                }
+                packageSelect.value = selectedPackageType;
+                updateDownloadLink();
+            });
+
+            packageSelect.addEventListener('change', () => {
+                selectedPackageType = packageSelect.value;
+                updateDownloadLink();
+            });
+        }
+
+        function updateDownloadLink() {
+            const downloadBtn = document.getElementById('downloadBtn');
+            downloadBtn.href = `/api/packages/download/${sessionId}?type=${selectedPackageType}`;
+            downloadBtn.onclick = (e) => {
+                downloadPackage(e);
+            };
+
+            const instructionsRun = document.getElementById('instructionsRun');
+            if (selectedPackageType === 'exe') {
+                instructionsRun.textContent = 'Double-click the EXE and follow the helper.';
+            } else if (selectedPackageType === 'dmg') {
+                instructionsRun.textContent = 'Open the DMG and run the Remote Support Helper app.';
+            } else {
+                instructionsRun.textContent = 'Extract the ZIP and run the launcher inside.';
+            }
+        }
+
+        function setupSettingsControls() {
+            const allowConnection = document.getElementById('allowConnection');
+            const allowUnattended = document.getElementById('allowUnattended');
+            const downloadBtn = document.getElementById('downloadBtn');
+
+            allowConnection.addEventListener('change', () => {
+                if (!allowConnection.checked) {
+                    downloadBtn.disabled = true;
+                    downloadBtn.textContent = 'Connection Disabled';
+                } else {
+                    downloadBtn.disabled = false;
+                    downloadBtn.textContent = '⬇️ Download Support Helper';
+                }
+            });
+
+            allowUnattended.addEventListener('change', async () => {
+                try {
+                    await fetch(`/api/sessions/${sessionId}/settings`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ allowUnattended: allowUnattended.checked })
+                    });
+                } catch (error) {
+                    console.warn('Failed to update session settings:', error);
+                }
+            });
         }
         
         function downloadPackage(event) {
@@ -288,8 +444,8 @@
             
             // Create a temporary link to trigger download
             const link = document.createElement('a');
-            link.href = `/api/packages/download/${sessionId}`;
-            link.download = `support-helper-${sessionId}.zip`;
+            link.href = `/api/packages/download/${sessionId}?type=${selectedPackageType}`;
+            link.download = `support-helper-${sessionId}.${selectedPackageType === 'dmg' ? 'dmg' : selectedPackageType === 'exe' ? 'exe' : 'zip'}`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);

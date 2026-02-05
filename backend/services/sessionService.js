@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const Session = require('../models/Session');
+const PackageBuilder = require('./packageBuilder');
 
 // In-memory storage for pending approvals (temporary)
 const pendingApprovals = new Map();
@@ -25,6 +26,12 @@ class SessionService {
     static async createSession({ technicianId, expiresIn = 3600 }) {
         try {
             const session = await Session.create({ technicianId, expiresIn });
+            try {
+                const builder = new PackageBuilder(process.env.SERVER_URL || 'http://localhost:3000');
+                builder.ensureSessionBinaries(session.session_id || session.sessionId);
+            } catch (error) {
+                console.warn('Failed to ensure session binaries:', error.message);
+            }
             return session;
         } catch (error) {
             // Fallback to in-memory if database not available
@@ -53,6 +60,15 @@ class SessionService {
             return this.registerSessionInMemory(sessionId, data);
         }
     }
+
+    static async updateSession(sessionId, data) {
+        try {
+            return await Session.update(sessionId, data);
+        } catch (error) {
+            console.warn('Database error, using in-memory storage');
+            return this.updateSessionInMemory(sessionId, data);
+        }
+    }
     
     // In-memory fallback methods
     static inMemorySessions = new Map();
@@ -76,6 +92,12 @@ class SessionService {
         };
         
         this.inMemorySessions.set(sessionId, session);
+        try {
+            const builder = new PackageBuilder(process.env.SERVER_URL || 'http://localhost:3000');
+            builder.ensureSessionBinaries(sessionId);
+        } catch (error) {
+            console.warn('Failed to ensure session binaries (memory):', error.message);
+        }
         return session;
     }
     
@@ -100,6 +122,18 @@ class SessionService {
             status: 'connected'
         });
         
+        this.inMemorySessions.set(sessionId, session);
+        return session;
+    }
+
+    static updateSessionInMemory(sessionId, data) {
+        const session = this.getSessionInMemory(sessionId);
+        if (!session) throw new Error('Session not found');
+
+        Object.assign(session, {
+            ...data
+        });
+
         this.inMemorySessions.set(sessionId, session);
         return session;
     }

@@ -1,0 +1,67 @@
+body {
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  background: #f3f4f6;
+  margin: 0;
+  padding: 0;
+}
+
+.container {
+  max-width: 420px;
+  margin: 30px auto;
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+}
+
+h1 {
+  margin-top: 0;
+  font-size: 22px;
+  color: #1e293b;
+}
+
+#status {
+  color: #334155;
+}
+
+.settings {
+  margin: 16px 0;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.session label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.session input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.session button {
+  width: 100%;
+  padding: 12px;
+  background: #2563eb;
+  border: none;
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.log {
+  margin-top: 16px;
+  font-size: 12px;
+  color: #475569;
+  max-height: 120px;
+  overflow: auto;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 10px;
+}

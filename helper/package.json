@@ -1,0 +1,33 @@
+{
+  "name": "remote-support-helper",
+  "version": "0.1.0",
+  "description": "Customer helper app for Remote Support",
+  "author": "ServiceLC",
+  "main": "src/main.js",
+  "scripts": {
+    "dev": "electron .",
+    "build:win": "electron-builder --win nsis",
+    "build:mac": "electron-builder --mac dmg"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "productName": "Remote Support Helper",
+    "appId": "com.servicelc.remotesupport.helper",
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "signAndEditExecutable": false,
+      "verifyUpdateCodeSignature": false
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ]
+    }
+  }
+}

@@ -1,0 +1,40 @@
+name: Build macOS DMG
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label (optional)"
+        required: false
+        default: ""
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            helper/package-lock.json
+
+      - name: Install helper dependencies
+        working-directory: helper
+        run: npm install
+
+      - name: Build DMG
+        working-directory: helper
+        run: npm run build:mac
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-support-helper-dmg
+          path: helper/dist/*.dmg

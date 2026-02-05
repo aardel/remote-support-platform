@@ -99,6 +99,25 @@ User's PC (TightVNC) → Reverse Connection → Your Server (websockify) → Tec
 
 See `docs/DEPLOYMENT.md` for detailed deployment instructions.
 
+## Packaging (CI)
+
+This repo includes GitHub Actions workflows to build the helper installers.
+
+**Windows EXE**
+1. Open GitHub → `Actions` → **Build Windows EXE**.
+2. Click **Run workflow**.
+3. Download artifact `remote-support-helper-exe`.
+4. Upload it in the dashboard under **Helper Templates** as `EXE`.
+
+**macOS DMG**
+1. Open GitHub → `Actions` → **Build macOS DMG**.
+2. Click **Run workflow**.
+3. Download artifact `remote-support-helper-dmg`.
+4. Upload it in the dashboard under **Helper Templates** as `DMG`.
+
+After upload, new sessions will automatically copy the template into
+`packages/support-<SESSION_ID>.<ext>` for immediate download.
+
 ## Documentation
 
 All documentation is in the `docs/` folder:

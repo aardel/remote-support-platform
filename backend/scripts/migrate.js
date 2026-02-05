@@ -16,11 +16,18 @@ async function migrate() {
                 allow_unattended BOOLEAN DEFAULT true,
                 client_info JSONB,
                 vnc_port INTEGER,
+                device_id VARCHAR(255),
                 connected_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW(),
                 expires_at TIMESTAMP NOT NULL
             )
+        `);
+
+        // Ensure device_id column exists
+        await client.query(`
+            ALTER TABLE sessions
+            ADD COLUMN IF NOT EXISTS device_id VARCHAR(255)
         `);
         
         // Create technicians table
@@ -52,6 +59,26 @@ async function migrate() {
                 created_at TIMESTAMP DEFAULT NOW()
             )
         `);
+
+        // Create devices table
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS devices (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                device_id VARCHAR(255) UNIQUE NOT NULL,
+                technician_id VARCHAR(255),
+                display_name VARCHAR(255),
+                os VARCHAR(255),
+                hostname VARCHAR(255),
+                arch VARCHAR(50),
+                last_ip VARCHAR(100),
+                allow_unattended BOOLEAN DEFAULT true,
+                pending_session_id VARCHAR(255),
+                pending_requested_at TIMESTAMP,
+                last_seen TIMESTAMP,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
         
         // Create session_monitors table
         await client.query(`
@@ -74,6 +101,8 @@ async function migrate() {
         await client.query('CREATE INDEX IF NOT EXISTS idx_files_session ON file_transfers(session_id)');
         await client.query('CREATE INDEX IF NOT EXISTS idx_files_expires ON file_transfers(expires_at)');
         await client.query('CREATE INDEX IF NOT EXISTS idx_monitors_session ON session_monitors(session_id)');
+        await client.query('CREATE INDEX IF NOT EXISTS idx_devices_technician ON devices(technician_id)');
+        await client.query('CREATE INDEX IF NOT EXISTS idx_devices_pending ON devices(pending_session_id)');
         
         await client.query('COMMIT');
         console.log('✅ Database migration completed successfully');

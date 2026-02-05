@@ -3,11 +3,12 @@ const WebSocket = require('ws');
 const sessionMapper = require('../utils/sessionMapper');
 
 class VNCBridge {
-    constructor() {
+    constructor(httpServer) {
         this.vncConnections = new Map(); // sessionId -> VNC connection
         this.wsConnections = new Map(); // sessionId -> WebSocket connection
         this.vncListener = null;
         this.wss = null;
+        this.httpServer = httpServer || null;
     }
     
     start() {
@@ -76,8 +77,25 @@ class VNCBridge {
     }
     
     startWebSocketServer() {
+        if (this.httpServer) {
+            this.wss = new WebSocket.Server({ noServer: true });
+
+            this.httpServer.on('upgrade', (req, socket, head) => {
+                if (!req.url || !req.url.startsWith('/websockify')) {
+                    return;
+                }
+
+                this.wss.handleUpgrade(req, socket, head, (ws) => {
+                    this.wss.emit('connection', ws, req);
+                });
+            });
+
+            console.log('✅ WebSocket server attached at /websockify');
+            return;
+        }
+
         const port = process.env.WEBSOCKET_PORT || 6080;
-        
+
         this.wss = new WebSocket.Server({ port });
         
         this.wss.on('connection', (ws, req) => {

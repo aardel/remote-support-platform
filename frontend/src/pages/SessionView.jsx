@@ -47,9 +47,8 @@ function SessionView() {
     try {
       // WebSocket URL for noVNC
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsHost = window.location.hostname;
-      const wsPort = process.env.NODE_ENV === 'production' ? '' : ':6080';
-      const wsUrl = `${wsProtocol}//${wsHost}${wsPort}/websockify?session=${sessionId}`;
+      const wsHost = window.location.host;
+      const wsUrl = `${wsProtocol}//${wsHost}/websockify?session=${sessionId}`;
       
       console.log('Connecting to VNC:', wsUrl);
       

@@ -2,16 +2,15 @@ const express = require('express');
 const router = express.Router();
 const SessionService = require('../services/sessionService');
 const Session = require('../models/Session');
+const Device = require('../models/Device');
+const { requireAuth } = require('../middleware/sessionAuth');
 
 // Create new session
-router.post('/create', async (req, res) => {
+router.post('/create', requireAuth, async (req, res) => {
     try {
-        const { technicianId } = req.body;
-        
-        if (!technicianId) {
-            return res.status(400).json({ error: 'Technician ID required' });
-        }
-        
+        const { technicianId: bodyTechnicianId } = req.body;
+        const technicianId = bodyTechnicianId || req.user?.id || req.user?.nextcloudId;
+
         const session = await SessionService.createSession({
             technicianId,
             expiresIn: 3600 // 1 hour
@@ -63,15 +62,44 @@ router.get('/:sessionId', async (req, res) => {
 // Register session (when user connects)
 router.post('/register', async (req, res) => {
     try {
-        const { sessionId, clientInfo, allowUnattended, vncPort } = req.body;
+        const { sessionId, clientInfo, allowUnattended, vncPort, deviceId, deviceName } = req.body;
         
-        const session = await SessionService.registerSession(sessionId, {
+        const sessionUpdate = {
             client_info: clientInfo,
-            allow_unattended: allowUnattended !== false, // Default to true
             vnc_port: vncPort || 5900,
+            device_id: deviceId || null,
             status: 'connected',
             connected_at: new Date()
-        });
+        };
+        if (typeof allowUnattended === 'boolean') {
+            sessionUpdate.allow_unattended = allowUnattended;
+        }
+
+        const session = await SessionService.registerSession(sessionId, sessionUpdate);
+
+        // Upsert device registration
+        if (deviceId) {
+            try {
+                await Device.upsert({
+                    deviceId,
+                    technicianId: session.technician_id || session.technicianId,
+                    displayName: deviceName,
+                    os: clientInfo?.os,
+                    hostname: clientInfo?.hostname,
+                    arch: clientInfo?.arch,
+                    allowUnattended: allowUnattended !== false,
+                    lastIp: req.ip
+                });
+
+                // Clear pending session for this device if matches
+                const device = await Device.findByDeviceId(deviceId);
+                if (device?.pending_session_id === sessionId) {
+                    await Device.clearPendingSession(deviceId);
+                }
+            } catch (error) {
+                console.warn('Device registration failed:', error.message);
+            }
+        }
         
         // Map VNC connection if bridge is available
         const vncBridge = req.app.get('vncBridge');
@@ -105,11 +133,39 @@ router.post('/register', async (req, res) => {
     }
 });
 
-// Request connection approval
-router.post('/:sessionId/connect', async (req, res) => {
+// Update session settings (customer controls)
+router.patch('/:sessionId/settings', async (req, res) => {
     try {
         const { sessionId } = req.params;
-        const { technicianId, technicianName } = req.body;
+        const { allowUnattended } = req.body;
+
+        const session = await SessionService.getSession(sessionId);
+        if (!session) {
+            return res.status(404).json({ error: 'Session not found' });
+        }
+
+        const updated = await SessionService.updateSession(sessionId, {
+            allow_unattended: allowUnattended !== false
+        });
+
+        res.json({
+            success: true,
+            sessionId,
+            allowUnattended: updated.allow_unattended !== false
+        });
+    } catch (error) {
+        console.error('Error updating session settings:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Request connection approval
+router.post('/:sessionId/connect', requireAuth, async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const { technicianId: bodyTechnicianId, technicianName } = req.body;
+        const technicianId = bodyTechnicianId || req.user?.id || req.user?.nextcloudId;
+        const resolvedName = technicianName || req.user?.username || 'Unknown';
         
         const session = await SessionService.getSession(sessionId);
         if (!session) {
@@ -120,7 +176,7 @@ router.post('/:sessionId/connect', async (req, res) => {
         const approvalHandler = req.app.get('approvalHandler');
         const approval = await approvalHandler.requestConnectionApproval(sessionId, {
             id: technicianId,
-            name: technicianName || 'Unknown'
+            name: resolvedName
         });
         
         res.json({

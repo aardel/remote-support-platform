@@ -3,6 +3,7 @@ const http = require('http');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const session = require('express-session');
 const VNCBridge = require('./services/vncBridge');
 const WebSocketHandler = require('./services/websocketHandler');
 require('dotenv').config();
@@ -20,9 +21,26 @@ const approvalHandler = new ApprovalHandler(io);
 app.set('approvalHandler', approvalHandler);
 
 // Middleware
-app.use(cors());
+app.set('trust proxy', 1);
+app.use(cors({
+    origin: true,
+    credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Session Management (Nextcloud OAuth2)
+const sessionParser = session({
+    secret: process.env.SESSION_SECRET || 'dev-session-secret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 24 * 60 * 60 * 1000
+    }
+});
+app.use(sessionParser);
 
 // Serve static files (customer UI)
 app.use('/customer', express.static(path.join(__dirname, '../frontend/public')));
@@ -31,17 +49,19 @@ app.use('/customer', express.static(path.join(__dirname, '../frontend/public')))
 app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
 // Routes
-const { router: authRouter, verifyToken } = require('./routes/auth');
+const { router: authRouter } = require('./routes/auth');
 const sessionsRouter = require('./routes/sessions');
 const packagesRouter = require('./routes/packages');
 const filesRouter = require('./routes/files');
 const monitorsRouter = require('./routes/monitors');
+const devicesRouter = require('./routes/devices');
 
 app.use('/api/auth', authRouter);
 app.use('/api/sessions', sessionsRouter);
 app.use('/api/packages', packagesRouter);
 app.use('/api/files', filesRouter);
 app.use('/api/monitors', monitorsRouter);
+app.use('/api/devices', devicesRouter);
 app.use('/api/websocket', require('./routes/websocket'));
 
 // Customer support page route (download page with instructions)
@@ -104,7 +124,7 @@ app.set('io', io);
 app.set('approvalHandler', approvalHandler);
 
 // Start VNC Bridge
-const vncBridge = new VNCBridge();
+const vncBridge = new VNCBridge(server);
 vncBridge.start();
 
 // Start Cleanup Service

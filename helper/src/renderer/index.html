@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Remote Support Helper</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Remote Support Helper</h1>
+      <p id="status">Preparing...</p>
+
+      <div class="settings">
+        <label>
+          <input type="checkbox" id="allowUnattended" checked />
+          Allow unattended connections
+        </label>
+      </div>
+
+      <div class="session">
+        <label>Session ID</label>
+        <input type="text" id="sessionId" placeholder="ABC-123-XYZ" />
+        <button id="startBtn">Start Support</button>
+      </div>
+
+      <div class="log" id="log"></div>
+    </div>
+    <script src="renderer.js"></script>
+  </body>
+</html>

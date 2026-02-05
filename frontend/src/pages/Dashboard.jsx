@@ -1,18 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import io from 'socket.io-client';
 import './Dashboard.css';
 
-function Dashboard() {
+function Dashboard({ user, onLogout }) {
   const [sessions, setSessions] = useState([]);
+  const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [requestingDevice, setRequestingDevice] = useState(null);
+  const [templateType, setTemplateType] = useState('exe');
+  const [templateFile, setTemplateFile] = useState(null);
+  const [uploadingTemplate, setUploadingTemplate] = useState(false);
+  const [templateStatus, setTemplateStatus] = useState(null);
+  const fileInputRef = useRef(null);
   const navigate = useNavigate();
-  const technician = JSON.parse(localStorage.getItem('technician') || '{}');
+  const technician = user || {};
 
   useEffect(() => {
     loadSessions();
+    loadDevices();
+    loadTemplateStatus();
     setupWebSocket();
   }, []);
 
@@ -41,17 +50,33 @@ function Dashboard() {
     }
   };
 
+  const loadDevices = async () => {
+    try {
+      const response = await axios.get('/api/devices');
+      setDevices(response.data.devices || []);
+    } catch (error) {
+      console.error('Error loading devices:', error);
+    }
+  };
+
+  const loadTemplateStatus = async () => {
+    try {
+      const response = await axios.get('/api/packages/templates');
+      setTemplateStatus(response.data?.templates || null);
+    } catch (error) {
+      console.error('Error loading template status:', error);
+    }
+  };
+
   const generatePackage = async () => {
     setGenerating(true);
     try {
-      const response = await axios.post('/api/packages/generate', {
-        technicianId: technician.id || 'tech123'
-      });
+      const response = await axios.post('/api/packages/generate');
 
       if (response.data.success) {
         const newSession = {
           session_id: response.data.sessionId,
-          technician_id: technician.id,
+          technician_id: technician.id || technician.username || 'technician',
           status: 'waiting',
           created_at: new Date().toISOString(),
           expires_at: response.data.expiresAt,
@@ -79,11 +104,62 @@ function Dashboard() {
     }
   };
 
+  const uploadTemplate = async () => {
+    if (!templateFile) {
+      alert('Select a file to upload.');
+      return;
+    }
+
+    setUploadingTemplate(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', templateFile);
+
+      const response = await axios.post(`/api/packages/templates?type=${templateType}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      if (response.data?.success) {
+        alert(`Template uploaded: ${templateType.toUpperCase()}`);
+        setTemplateFile(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        await loadTemplateStatus();
+      } else {
+        alert('Template upload failed.');
+      }
+    } catch (error) {
+      console.error('Error uploading template:', error);
+      alert('Error uploading template: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setUploadingTemplate(false);
+    }
+  };
+
+  const formatBytes = (bytes) => {
+    if (!bytes && bytes !== 0) return '—';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let value = bytes;
+    let unitIndex = 0;
+    while (value >= 1024 && unitIndex < units.length - 1) {
+      value /= 1024;
+      unitIndex += 1;
+    }
+    return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+  };
+
+  const formatDateTime = (value) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString();
+  };
+
   const connectToSession = async (sessionId) => {
     try {
       // Request connection approval
       const response = await axios.post(`/api/sessions/${sessionId}/connect`, {
-        technicianId: technician.id,
         technicianName: technician.username
       });
 
@@ -98,9 +174,32 @@ function Dashboard() {
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('technician');
+  const requestSessionForDevice = async (deviceId) => {
+    setRequestingDevice(deviceId);
+    try {
+      const response = await axios.post(`/api/devices/${deviceId}/request`);
+      if (response.data.success) {
+        const newSession = {
+          session_id: response.data.sessionId,
+          technician_id: technician.id || technician.username || 'technician',
+          status: 'waiting',
+          created_at: new Date().toISOString()
+        };
+        setSessions(prev => [newSession, ...prev]);
+        alert('Session requested. Ask the user to open the helper.');
+      }
+    } catch (error) {
+      console.error('Error requesting session:', error);
+      alert('Error requesting session: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setRequestingDevice(null);
+    }
+  };
+
+  const logout = async () => {
+    if (onLogout) {
+      await onLogout();
+    }
     navigate('/login');
   };
 
@@ -115,6 +214,49 @@ function Dashboard() {
       </header>
 
       <div className="dashboard-content">
+        <div className="sessions-list" style={{ marginBottom: '30px' }}>
+          <h2>Registered Devices</h2>
+          {devices.length === 0 ? (
+            <div className="empty-state">
+              <p>No registered devices yet</p>
+              <p>Once a customer runs the helper, they will appear here.</p>
+            </div>
+          ) : (
+            <div className="sessions-grid">
+              {devices.map(device => (
+                <div key={device.device_id} className="session-card">
+                  <div className="session-header">
+                    <span className="session-id">{device.display_name || device.hostname || device.device_id}</span>
+                    <span className={`status-badge ${device.pending_session_id ? 'waiting' : 'ready'}`}>
+                      {device.pending_session_id ? 'Pending' : 'Ready'}
+                    </span>
+                  </div>
+
+                  <div className="session-info">
+                    <div className="client-info">
+                      <strong>OS:</strong> {device.os || 'Unknown'}<br />
+                      <strong>Hostname:</strong> {device.hostname || 'Unknown'}
+                    </div>
+                    <div className="session-meta">
+                      <small>Last seen: {device.last_seen ? new Date(device.last_seen).toLocaleString() : 'Never'}</small>
+                    </div>
+                  </div>
+
+                  <div className="session-actions">
+                    <button
+                      onClick={() => requestSessionForDevice(device.device_id)}
+                      className="connect-btn"
+                      disabled={requestingDevice === device.device_id}
+                    >
+                      {requestingDevice === device.device_id ? 'Requesting...' : 'Request Session'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="dashboard-actions">
           <button 
             onClick={generatePackage} 
@@ -123,6 +265,58 @@ function Dashboard() {
           >
             {generating ? 'Generating...' : '➕ Generate Support Package'}
           </button>
+
+            <div className="template-card">
+              <div className="template-title">Helper Templates</div>
+              <div className="template-status">
+                <div className={`template-status-item ${templateStatus?.exe?.available ? 'ready' : 'missing'}`}>
+                  EXE: {templateStatus?.exe?.available ? 'Installed' : 'Missing'}
+                </div>
+                <div className={`template-status-item ${templateStatus?.dmg?.available ? 'ready' : 'missing'}`}>
+                  DMG: {templateStatus?.dmg?.available ? 'Installed' : 'Missing'}
+                </div>
+              </div>
+              <div className="template-meta">
+                <div className="template-meta-row">
+                  <span className="template-meta-label">EXE</span>
+                  <span className="template-meta-value">
+                    {formatBytes(templateStatus?.exe?.size)} · {formatDateTime(templateStatus?.exe?.updatedAt)}
+                  </span>
+                </div>
+                <div className="template-meta-row">
+                  <span className="template-meta-label">DMG</span>
+                  <span className="template-meta-value">
+                    {formatBytes(templateStatus?.dmg?.size)} · {formatDateTime(templateStatus?.dmg?.updatedAt)}
+                  </span>
+                </div>
+              </div>
+            <div className="template-row">
+              <select
+                value={templateType}
+                onChange={(e) => setTemplateType(e.target.value)}
+                className="template-select"
+              >
+                <option value="exe">Windows (EXE)</option>
+                <option value="dmg">macOS (DMG)</option>
+              </select>
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={(e) => setTemplateFile(e.target.files?.[0] || null)}
+                className="template-file"
+              />
+              <button
+                onClick={uploadTemplate}
+                disabled={uploadingTemplate}
+                className="template-upload-btn"
+              >
+                {uploadingTemplate ? 'Uploading...' : 'Upload Template'}
+              </button>
+            </div>
+            <div className="template-hint">
+              Upload a template once. New sessions will auto-copy it.
+            </div>
+          </div>
         </div>
 
         <div className="sessions-list">

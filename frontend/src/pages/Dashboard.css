@@ -49,6 +49,9 @@
 
 .dashboard-actions {
   margin-bottom: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .generate-btn {
@@ -70,6 +73,111 @@
 .generate-btn:disabled {
   background: #ccc;
   cursor: not-allowed;
+}
+
+.template-card {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.template-title {
+  font-weight: bold;
+  margin-bottom: 10px;
+  color: #333;
+}
+
+.template-status {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.template-status-item {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.template-status-item.ready {
+  background: #d4edda;
+  color: #155724;
+}
+
+.template-status-item.missing {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.template-meta {
+  margin-bottom: 10px;
+  color: #666;
+  font-size: 12px;
+}
+
+.template-meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px dashed #e5e7eb;
+}
+
+.template-meta-row:last-child {
+  border-bottom: none;
+}
+
+.template-meta-label {
+  font-weight: bold;
+  color: #444;
+}
+
+.template-meta-value {
+  font-family: 'Courier New', monospace;
+}
+
+.template-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.template-select {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+}
+
+.template-file {
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  background: #fafafa;
+}
+
+.template-upload-btn {
+  padding: 8px 14px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.template-upload-btn:disabled {
+  background: #9bb3f5;
+  cursor: not-allowed;
+}
+
+.template-hint {
+  margin-top: 8px;
+  color: #777;
+  font-size: 12px;
 }
 
 .sessions-list h2 {

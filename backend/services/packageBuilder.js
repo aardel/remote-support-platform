@@ -160,14 +160,15 @@ pause >nul
     // Windows connect script
     createWindowsConnect(config) {
         const serverHost = new URL(config.server).hostname;
+        const serverPort = config.port || 5500;
         return `@echo off
 REM Connect TightVNC to server (reverse connection)
 
 cd /d "%~dp0"
 
 if exist "tightvnc\\tvnserver.exe" (
-    echo Connecting to ${serverHost}:5500...
-    "tightvnc\\tvnserver.exe" -controlapp -connect ${serverHost}:5500
+    echo Connecting to ${serverHost}:${serverPort}...
+    "tightvnc\\tvnserver.exe" -controlapp -connect ${serverHost}:${serverPort}
     if %ERRORLEVEL% EQU 0 (
         echo Connected successfully!
     ) else (
@@ -181,7 +182,7 @@ if exist "tightvnc\\tvnserver.exe" (
     
     // Windows registration script (PowerShell, compatible with XP SP3+)
     createWindowsRegistration(config) {
-        const serverHost = new URL(config.server).hostname;
+        const serverHost = new URL(config.server).host;
         const serverProtocol = new URL(config.server).protocol === 'https:' ? 'https' : 'http';
         return `param(
     [string]$SessionId = "${config.sessionId}",
@@ -207,12 +208,33 @@ $clientInfo = @{
     username = $env:USERNAME
 }
 
+$deviceDir = Join-Path $env:APPDATA "RemoteSupport"
+$deviceFile = Join-Path $deviceDir "device_id.txt"
+if (!(Test-Path $deviceDir)) { New-Item -ItemType Directory -Path $deviceDir | Out-Null }
+if (Test-Path $deviceFile) {
+    $deviceId = Get-Content $deviceFile -ErrorAction SilentlyContinue
+} else {
+    $deviceId = [guid]::NewGuid().ToString()
+    $deviceId | Out-File -FilePath $deviceFile -Encoding ascii
+}
+
+# Check for pending session
+try {
+    $pending = Invoke-RestMethod -Uri "$Protocol://$Server/api/devices/pending/$deviceId" -Method GET -ErrorAction Stop
+    if ($pending.pending -eq $true -and $pending.sessionId) {
+        $SessionId = $pending.sessionId
+    }
+} catch {
+    # Ignore pending lookup errors
+}
+
 $body = @{
     sessionId = $SessionId
     clientInfo = $clientInfo
-    allowUnattended = $true
     vncPort = 5900
     status = "connected"
+    deviceId = $deviceId
+    deviceName = $env:COMPUTERNAME
 } | ConvertTo-Json
 
 try {
@@ -236,8 +258,8 @@ try {
 cd "$(dirname "$0")"
 
 SESSION_ID="${config.sessionId}"
-SERVER_HOST="${new URL(config.server).hostname}"
-SERVER_PORT=5500
+SERVER_HOST="${new URL(config.server).host}"
+SERVER_PORT=${config.port || 5500}
 
 echo "========================================"
 echo "  Remote Support Helper"
@@ -319,13 +341,14 @@ echo "Press Ctrl+C to stop."
     // Unix connect script
     createUnixConnect(config) {
         const serverHost = new URL(config.server).hostname;
+        const serverPort = config.port || 5500;
         return `#!/bin/bash
 # Connect VNC to server (reverse connection)
 
 cd "$(dirname "$0")"
 
 SERVER_HOST="${serverHost}"
-SERVER_PORT=5500
+SERVER_PORT=${serverPort}
 
 echo "Connecting to $SERVER_HOST:$SERVER_PORT..."
 
@@ -345,7 +368,7 @@ fi
     
     // Unix registration script
     createUnixRegistration(config) {
-        const serverHost = new URL(config.server).hostname;
+        const serverHost = new URL(config.server).host;
         const serverProtocol = new URL(config.server).protocol === 'https:' ? 'https' : 'http';
         return `#!/bin/bash
 # Register session with server
@@ -355,6 +378,25 @@ cd "$(dirname "$0")"
 SESSION_ID="${config.sessionId}"
 SERVER_HOST="${serverHost}"
 SERVER_PROTOCOL="${serverProtocol}"
+
+DEVICE_DIR="$HOME/.remote-support"
+DEVICE_FILE="$DEVICE_DIR/device_id"
+mkdir -p "$DEVICE_DIR"
+if [ -f "$DEVICE_FILE" ]; then
+    DEVICE_ID=$(cat "$DEVICE_FILE")
+else
+    DEVICE_ID=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid)
+    echo "$DEVICE_ID" > "$DEVICE_FILE"
+fi
+
+# Check for pending session
+PENDING_JSON=$(curl -s "$SERVER_PROTOCOL://$SERVER_HOST/api/devices/pending/$DEVICE_ID")
+PENDING_SESSION=$(echo "$PENDING_JSON" | sed -n 's/.*"sessionId"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p')
+if echo "$PENDING_JSON" | grep -q '"pending"[[:space:]]*:[[:space:]]*true'; then
+    if [ -n "$PENDING_SESSION" ]; then
+        SESSION_ID="$PENDING_SESSION"
+    fi
+fi
 
 # Detect OS and architecture
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -384,9 +426,10 @@ CLIENT_INFO=$(cat <<EOF
         "hostname": "$HOSTNAME",
         "username": "$USERNAME"
     },
-    "allowUnattended": true,
     "vncPort": 5900,
-    "status": "connected"
+    "status": "connected",
+    "deviceId": "$DEVICE_ID",
+    "deviceName": "$HOSTNAME"
 }
 EOF
 )
@@ -546,14 +589,109 @@ For support, contact your technician.
         });
     }
     
-    async getPackagePath(sessionId) {
-        const zipPath = path.join(this.packagesDir, `support-${sessionId}.zip`);
-        
-        if (fs.existsSync(zipPath)) {
-            return zipPath;
+    async getPackagePath(sessionId, type = 'zip') {
+        const normalized = type.toLowerCase();
+        const extension = this.getExtension(normalized);
+        const filePath = path.join(this.packagesDir, `support-${sessionId}.${extension}`);
+
+        if (fs.existsSync(filePath)) {
+            return filePath;
         }
-        
+
+        if (normalized === 'exe' || normalized === 'dmg') {
+            const ensured = this.ensureSessionBinary(sessionId, normalized);
+            if (ensured && fs.existsSync(filePath)) {
+                return filePath;
+            }
+        }
+
         return null;
+    }
+
+    getDownloadName(sessionId, type = 'zip') {
+        const extension = this.getExtension(type);
+        return `support-helper-${sessionId}.${extension}`;
+    }
+
+    getExtension(type) {
+        switch (type) {
+            case 'exe':
+                return 'exe';
+            case 'dmg':
+                return 'dmg';
+            case 'zip':
+            default:
+                return 'zip';
+        }
+    }
+
+    async getPackageManifest(sessionId) {
+        const variants = [
+            { type: 'exe', label: 'Windows Helper (EXE)' },
+            { type: 'dmg', label: 'macOS Helper (DMG)' },
+            { type: 'zip', label: 'Universal ZIP (Fallback/XP)' }
+        ];
+
+        const packages = [];
+        for (const variant of variants) {
+            const path = await this.getPackagePath(sessionId, variant.type);
+            const available = !!path;
+            const size = available ? fs.statSync(path).size : null;
+            packages.push({
+                type: variant.type,
+                label: variant.label,
+                available,
+                size,
+                downloadUrl: `/api/packages/download/${sessionId}?type=${variant.type}`
+            });
+        }
+
+        return packages;
+    }
+
+    getTemplatePath(type) {
+        const normalized = type.toLowerCase();
+        const envKey = normalized === 'exe' ? 'SUPPORT_TEMPLATE_EXE' : 'SUPPORT_TEMPLATE_DMG';
+        const envPath = process.env[envKey];
+
+        if (envPath) {
+            return path.isAbsolute(envPath) ? envPath : path.resolve(envPath);
+        }
+
+        const extension = this.getExtension(normalized);
+        return path.join(this.packagesDir, `support-template.${extension}`);
+    }
+
+    getSessionBinaryPath(sessionId, type) {
+        const extension = this.getExtension(type);
+        return path.join(this.packagesDir, `support-${sessionId}.${extension}`);
+    }
+
+    ensureSessionBinary(sessionId, type) {
+        const normalized = type.toLowerCase();
+        if (normalized !== 'exe' && normalized !== 'dmg') {
+            return false;
+        }
+
+        const targetPath = this.getSessionBinaryPath(sessionId, normalized);
+        if (fs.existsSync(targetPath)) {
+            return true;
+        }
+
+        const templatePath = this.getTemplatePath(normalized);
+        if (!templatePath || !fs.existsSync(templatePath)) {
+            return false;
+        }
+
+        fs.copyFileSync(templatePath, targetPath);
+        return true;
+    }
+
+    ensureSessionBinaries(sessionId) {
+        return {
+            exe: this.ensureSessionBinary(sessionId, 'exe'),
+            dmg: this.ensureSessionBinary(sessionId, 'dmg')
+        };
     }
 }
 
