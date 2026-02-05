@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remote Support - Download Helper</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .support-container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 30px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .support-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .support-header h1 {
+            color: #2563eb;
+            margin-bottom: 10px;
+        }
+        
+        .support-header p {
+            color: #666;
+            font-size: 16px;
+        }
+        
+        .download-section {
+            background: #f0f9ff;
+            border: 2px dashed #2563eb;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .download-btn {
+            display: inline-block;
+            background: #2563eb;
+            color: white;
+            padding: 15px 40px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 18px;
+            font-weight: bold;
+            margin: 15px 0;
+            transition: background 0.3s;
+        }
+        
+        .download-btn:hover {
+            background: #1d4ed8;
+        }
+        
+        .download-btn:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+        
+        .session-info {
+            background: #f8fafc;
+            border-left: 4px solid #2563eb;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        .session-info strong {
+            color: #1e293b;
+        }
+        
+        .instructions {
+            margin-top: 30px;
+        }
+        
+        .instructions h2 {
+            color: #1e293b;
+            margin-bottom: 20px;
+        }
+        
+        .instructions ol {
+            line-height: 2;
+            color: #475569;
+        }
+        
+        .instructions li {
+            margin-bottom: 15px;
+        }
+        
+        .instructions code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #dc2626;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            margin-left: 10px;
+        }
+        
+        .status-waiting {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .status-ready {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .error-message {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <div class="support-container">
+        <div class="support-header">
+            <h1>🔧 Remote Support Session</h1>
+            <p>Your technician has created a support session for you</p>
+        </div>
+        
+        <div id="loading" class="loading">
+            <p>Loading session information...</p>
+        </div>
+        
+        <div id="content" style="display: none;">
+            <!-- Session Info -->
+            <div class="session-info">
+                <div style="margin-bottom: 10px;">
+                    <strong>Session ID:</strong> 
+                    <span id="sessionIdDisplay">-</span>
+                    <span id="statusBadge" class="status-badge status-waiting">Waiting</span>
+                </div>
+                <div>
+                    <strong>Status:</strong> <span id="sessionStatus">Preparing support package...</span>
+                </div>
+            </div>
+            
+            <!-- Download Section -->
+            <div class="download-section">
+                <h2 style="margin-top: 0; color: #1e293b;">📦 Download Support Helper</h2>
+                <p style="color: #475569; margin-bottom: 20px;">
+                    Download and run the support helper to allow your technician to connect to your computer.
+                </p>
+                <a id="downloadBtn" href="#" class="download-btn" onclick="downloadPackage(event)">
+                    ⬇️ Download Support Helper
+                </a>
+                <p style="color: #64748b; font-size: 14px; margin-top: 15px;">
+                    File size: ~5 MB | Compatible with Windows XP+, macOS, and Linux
+                </p>
+            </div>
+            
+            <!-- Instructions -->
+            <div class="instructions">
+                <h2>📋 Instructions</h2>
+                <ol>
+                    <li>
+                        <strong>Download</strong> the support helper package using the button above
+                    </li>
+                    <li>
+                        <strong>Extract</strong> the ZIP file to a folder on your computer
+                    </li>
+                    <li>
+                        <strong>Run the appropriate launcher:</strong>
+                        <ul style="margin-top: 10px; margin-left: 20px;">
+                            <li><strong>Windows:</strong> Double-click <code>launch.bat</code> (works on Windows XP and later)</li>
+                            <li><strong>macOS:</strong> Open Terminal, navigate to folder, run <code>bash launch.sh</code></li>
+                            <li><strong>Linux:</strong> Open Terminal, navigate to folder, run <code>bash launch.sh</code></li>
+                            <li><strong>Auto-detect:</strong> Run <code>./start-support</code> (detects your OS automatically)</li>
+                        </ul>
+                    </li>
+                    <li>
+                        The support helper will automatically connect to your technician
+                    </li>
+                    <li>
+                        <strong>Keep the window/terminal open</strong> while receiving support
+                    </li>
+                    <li>
+                        <strong>Wait</strong> for your technician to connect - you'll see a notification when they do
+                    </li>
+                </ol>
+                
+                <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin-top: 20px;">
+                    <strong>⚠️ Security Note:</strong> Only download and run this if you trust the person who sent you this link. 
+                    The support helper allows remote access to your computer.
+                </div>
+            </div>
+            
+            <!-- Connection Status (shown after download/connection) -->
+            <div id="connectionSection" style="display: none; margin-top: 30px;">
+                <h2>🔌 Connection Status</h2>
+                <div class="session-info">
+                    <div id="connectionStatus">Not connected yet</div>
+                </div>
+            </div>
+            
+            <!-- Error Message -->
+            <div id="errorMessage" class="error-message" style="display: none;"></div>
+        </div>
+    </div>
+    
+    <script>
+        // Get session ID from URL
+        function getSessionIdFromURL() {
+            const path = window.location.pathname;
+            const match = path.match(/\/support\/([A-Z0-9-]+)/);
+            return match ? match[1] : null;
+        }
+        
+        const sessionId = getSessionIdFromURL();
+        
+        if (!sessionId) {
+            document.getElementById('loading').innerHTML = 
+                '<div class="error-message">Invalid session link. Please check the URL.</div>';
+        } else {
+            // Load session info
+            loadSessionInfo();
+        }
+        
+        async function loadSessionInfo() {
+            try {
+                const response = await fetch(`/api/sessions/${sessionId}`);
+                
+                if (!response.ok) {
+                    throw new Error('Session not found');
+                }
+                
+                const session = await response.json();
+                
+                // Display session info
+                document.getElementById('sessionIdDisplay').textContent = session.sessionId;
+                document.getElementById('sessionStatus').textContent = 
+                    session.status === 'connected' ? 'Connected - Ready for support' : 
+                    session.status === 'waiting' ? 'Waiting for connection...' : 
+                    'Session active';
+                
+                // Update status badge
+                const statusBadge = document.getElementById('statusBadge');
+                if (session.status === 'connected') {
+                    statusBadge.className = 'status-badge status-ready';
+                    statusBadge.textContent = 'Connected';
+                }
+                
+                // Set download URL
+                const downloadBtn = document.getElementById('downloadBtn');
+                downloadBtn.href = `/api/packages/download/${sessionId}`;
+                downloadBtn.onclick = (e) => {
+                    downloadPackage(e);
+                };
+                
+                // Show content
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+                
+            } catch (error) {
+                document.getElementById('loading').innerHTML = 
+                    `<div class="error-message">Error loading session: ${error.message}</div>`;
+            }
+        }
+        
+        function downloadPackage(event) {
+            const downloadBtn = document.getElementById('downloadBtn');
+            const originalText = downloadBtn.textContent;
+            
+            downloadBtn.textContent = '⬇️ Downloading...';
+            downloadBtn.disabled = true;
+            
+            // Create a temporary link to trigger download
+            const link = document.createElement('a');
+            link.href = `/api/packages/download/${sessionId}`;
+            link.download = `support-helper-${sessionId}.zip`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Reset button after a delay
+            setTimeout(() => {
+                downloadBtn.textContent = '✅ Download Complete';
+                downloadBtn.style.background = '#10b981';
+                setTimeout(() => {
+                    downloadBtn.textContent = originalText;
+                    downloadBtn.style.background = '';
+                    downloadBtn.disabled = false;
+                }, 3000);
+            }, 2000);
+            
+            // Prevent default if event provided
+            if (event) {
+                event.preventDefault();
+            }
+        }
+    </script>
+</body>
+</html>

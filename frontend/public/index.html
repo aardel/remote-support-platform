@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remote Support Helper</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Remote Support Helper</h1>
+        
+        <div class="checkbox-container">
+            <input type="checkbox" id="allowConnection" />
+            <label for="allowConnection">Allow remote connection</label>
+        </div>
+        
+        <div class="checkbox-container">
+            <input type="checkbox" id="allowUnattended" checked />
+            <label for="allowUnattended">
+                Allow unattended connections
+                <span class="help-text">(Uncheck to require approval for each connection)</span>
+            </label>
+        </div>
+        
+        <div class="session-id-container">
+            <div class="session-id-label">Session ID:</div>
+            <div class="session-id-box">
+                <span class="session-id" id="sessionId">Generating...</span>
+                <button class="copy-btn" onclick="copySessionId()">Copy</button>
+            </div>
+        </div>
+        
+        <div class="status waiting" id="status">
+            ⚪ Waiting for technician...
+        </div>
+        
+        <button class="connect-btn" id="connectBtn" onclick="connectToServer()">
+            Connect to Server
+        </button>
+    </div>
+    
+    <!-- Connection Approval Modal -->
+    <div class="approval-modal" id="approvalModal">
+        <div class="approval-box">
+            <h2>⚠️ Connection Request</h2>
+            <p>A technician is trying to connect to your computer.</p>
+            
+            <div class="approval-info">
+                <div class="approval-info-item">
+                    <strong>Technician:</strong> <span id="techName">Unknown</span>
+                </div>
+                <div class="approval-info-item">
+                    <strong>Session ID:</strong> <span id="approvalSessionId"></span>
+                </div>
+                <div class="approval-info-item">
+                    <strong>Time:</strong> <span id="approvalTime"></span>
+                </div>
+            </div>
+            
+            <p style="margin: 15px 0; color: #666;">
+                Do you want to allow this connection?
+            </p>
+            
+            <div class="approval-buttons">
+                <button class="approval-btn deny" onclick="denyConnection()">
+                    Deny
+                </button>
+                <button class="approval-btn allow" onclick="allowConnection()">
+                    Allow
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>

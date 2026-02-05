@@ -1,0 +1,40 @@
+{
+  "name": "remote-support-platform",
+  "version": "1.0.0",
+  "description": "Browser-based remote support solution using VNC technology",
+  "main": "backend/server.js",
+  "scripts": {
+    "dev": "nodemon backend/server.js",
+    "start": "node backend/server.js",
+    "migrate": "node backend/scripts/migrate.js",
+    "create-test-user": "node backend/scripts/create-test-technician.js",
+    "build": "cd frontend && npm install && npm run build",
+    "deploy": "bash deploy.sh",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "remote-support",
+    "vnc",
+    "remote-desktop",
+    "websocket"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "archiver": "^6.0.1",
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "pg": "^8.11.0",
+    "redis": "^4.6.7",
+    "socket.io": "^4.5.4",
+    "uuid": "^9.0.0",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}

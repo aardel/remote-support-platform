@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>noVNC VNC Client</title>
+    <script src="https://cdn.jsdelivr.net/npm/@novnc/novnc@1.4.0/core/rfb.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            overflow: hidden;
+        }
+        #screen {
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+    <div id="screen"></div>
+    <script>
+        // Get session ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const sessionId = urlParams.get('session') || window.location.pathname.split('/').pop();
+        
+        // WebSocket URL
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsHost = window.location.hostname;
+        const wsPort = window.location.port ? `:${window.location.port === '3001' ? '6080' : window.location.port}` : '';
+        const wsUrl = `${wsProtocol}//${wsHost}${wsPort}/websockify?session=${sessionId}`;
+        
+        console.log('Connecting to VNC:', wsUrl);
+        
+        // Create RFB instance
+        const rfb = new RFB(document.getElementById('screen'), wsUrl, {
+            credentials: {
+                password: ''
+            }
+        });
+        
+        rfb.addEventListener('connect', () => {
+            console.log('Connected to VNC');
+        });
+        
+        rfb.addEventListener('disconnect', (e) => {
+            console.log('Disconnected:', e.detail);
+            if (e.detail.clean !== true) {
+                alert('Connection lost');
+            }
+        });
+    </script>
+</body>
+</html>

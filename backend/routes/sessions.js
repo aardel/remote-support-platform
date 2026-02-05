@@ -1,0 +1,160 @@
+const express = require('express');
+const router = express.Router();
+const SessionService = require('../services/sessionService');
+const Session = require('../models/Session');
+
+// Create new session
+router.post('/create', async (req, res) => {
+    try {
+        const { technicianId } = req.body;
+        
+        if (!technicianId) {
+            return res.status(400).json({ error: 'Technician ID required' });
+        }
+        
+        const session = await SessionService.createSession({
+            technicianId,
+            expiresIn: 3600 // 1 hour
+        });
+        
+        const sessionId = session.session_id || session.sessionId;
+        const expiresAt = session.expires_at || session.expiresAt;
+        
+        res.json({
+            success: true,
+            sessionId: sessionId,
+            link: `${process.env.SERVER_URL || 'http://localhost:3000'}/support/${sessionId}`,
+            expiresAt: expiresAt
+        });
+    } catch (error) {
+        console.error('Error creating session:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get session info
+router.get('/:sessionId', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const session = await SessionService.getSession(sessionId);
+        
+        if (!session) {
+            return res.status(404).json({ error: 'Session not found' });
+        }
+        
+        // Format response
+        res.json({
+            sessionId: session.session_id || session.sessionId,
+            technicianId: session.technician_id || session.technicianId,
+            status: session.status,
+            allowUnattended: session.allow_unattended !== false,
+            clientInfo: session.client_info || session.clientInfo,
+            vncPort: session.vnc_port || session.vncPort,
+            createdAt: session.created_at || session.createdAt,
+            expiresAt: session.expires_at || session.expiresAt,
+            connectedAt: session.connected_at || session.connectedAt
+        });
+    } catch (error) {
+        console.error('Error getting session:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Register session (when user connects)
+router.post('/register', async (req, res) => {
+    try {
+        const { sessionId, clientInfo, allowUnattended, vncPort } = req.body;
+        
+        const session = await SessionService.registerSession(sessionId, {
+            client_info: clientInfo,
+            allow_unattended: allowUnattended !== false, // Default to true
+            vnc_port: vncPort || 5900,
+            status: 'connected',
+            connected_at: new Date()
+        });
+        
+        // Map VNC connection if bridge is available
+        const vncBridge = req.app.get('vncBridge');
+        if (vncBridge) {
+            // Store session mapping for VNC connections
+            vncBridge.mapSessionToConnection(sessionId, {
+                clientInfo,
+                vncPort: vncPort || 5900
+            });
+            console.log(`Session ${sessionId} registered, waiting for VNC connection`);
+        }
+        
+        // Notify technician via WebSocket
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`session-${sessionId}`).emit('session-connected', {
+                sessionId,
+                clientInfo,
+                status: 'ready'
+            });
+        }
+        
+        res.json({
+            success: true,
+            message: 'Session registered',
+            sessionId
+        });
+    } catch (error) {
+        console.error('Error registering session:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Request connection approval
+router.post('/:sessionId/connect', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const { technicianId, technicianName } = req.body;
+        
+        const session = await SessionService.getSession(sessionId);
+        if (!session) {
+            return res.status(404).json({ error: 'Session not found' });
+        }
+        
+        // Use approval handler
+        const approvalHandler = req.app.get('approvalHandler');
+        const approval = await approvalHandler.requestConnectionApproval(sessionId, {
+            id: technicianId,
+            name: technicianName || 'Unknown'
+        });
+        
+        res.json({
+            success: true,
+            approved: approval.approved,
+            autoApproved: approval.autoApproved || false,
+            reason: approval.reason
+        });
+    } catch (error) {
+        console.error('Error requesting connection:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Handle approval response
+router.post('/:sessionId/approval', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const { approved } = req.body;
+        
+        // Handle via approval handler if available
+        const approvalHandler = req.app.get('approvalHandler');
+        if (approvalHandler) {
+            approvalHandler.handleApprovalResponse(sessionId, approved);
+        } else {
+            // Fallback to session service
+            await SessionService.handleApprovalResponse(sessionId, approved);
+        }
+        
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error handling approval:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+module.exports = router;
