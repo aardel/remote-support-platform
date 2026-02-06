@@ -9,6 +9,10 @@ function SessionView() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const videoRef = useRef(null);
+  const videoTopRef = useRef(null);
+  const videoBottomRef = useRef(null);
+  const splitTopRef = useRef(null);
+  const splitBottomRef = useRef(null);
   const [socket, setSocket] = useState(null);
   const [peerConnection, setPeerConnection] = useState(null);
   const [connected, setConnected] = useState(false);
@@ -16,6 +20,9 @@ function SessionView() {
   const [error, setError] = useState(null);
   const [monitorIndex, setMonitorIndex] = useState(0);
   const [switchingMonitor, setSwitchingMonitor] = useState(false);
+  const [streamQuality, setStreamQuality] = useState('balanced');
+  const [splitView, setSplitView] = useState(false);
+  const [remoteStream, setRemoteStream] = useState(null);
   const [files, setFiles] = useState([]);
   const [filesOpen, setFilesOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -205,6 +212,13 @@ function SessionView() {
     if (sessionId) loadFiles();
   }, [sessionId]);
 
+  // Apply stream quality preset when connection is established
+  useEffect(() => {
+    if (connected && socket && sessionId && streamQuality) {
+      socket.emit('set-stream-quality', { sessionId, quality: streamQuality });
+    }
+  }, [connected]);
+
   // Request remote directory listing when file modal opens, path changes, or refresh
   useEffect(() => {
     if (!socket || !sessionId || !filesOpen) return;
@@ -226,8 +240,9 @@ function SessionView() {
 
     pc.ontrack = (event) => {
       console.log('Received track:', event.track.kind);
-      if (videoRef.current && event.streams[0]) {
-        videoRef.current.srcObject = event.streams[0];
+      if (event.streams[0]) {
+        setRemoteStream(event.streams[0]);
+        if (videoRef.current) videoRef.current.srcObject = event.streams[0];
         setConnected(true);
         setStatus('Connected');
       }
@@ -258,25 +273,37 @@ function SessionView() {
     return pc;
   }
 
-  const handleMouseEvent = (e) => {
-    if (!socket || !connected || !videoRef.current) return;
+  // half: undefined = single view, 'top' = top half, 'bottom' = bottom half (for split view)
+  const handleMouseEvent = (e, half) => {
+    if (!socket || !connected) return;
 
-    const video = videoRef.current;
-    const rect = video.getBoundingClientRect();
+    const video = half === 'top' ? videoTopRef.current : half === 'bottom' ? videoBottomRef.current : videoRef.current;
+    if (!video) return;
+
     const vw = video.videoWidth;
     const vh = video.videoHeight;
     if (!vw || !vh) return;
 
-    // Map to video content space (0-1) so cursor matches remote screen with object-fit: contain
-    const scale = Math.min(rect.width / vw, rect.height / vh);
+    // In split view use wrapper rect (visible area); in single view use video rect
+    const rect = half === 'top' && splitTopRef.current
+      ? splitTopRef.current.getBoundingClientRect()
+      : half === 'bottom' && splitBottomRef.current
+        ? splitBottomRef.current.getBoundingClientRect()
+        : video.getBoundingClientRect();
+
+    const contentHeight = half === 'top' || half === 'bottom' ? vh / 2 : vh;
+    const scale = Math.min(rect.width / vw, rect.height / contentHeight);
     const contentW = vw * scale;
-    const contentH = vh * scale;
+    const contentH = contentHeight * scale;
     const contentLeft = rect.left + (rect.width - contentW) / 2;
     const contentTop = rect.top + (rect.height - contentH) / 2;
     let x = (e.clientX - contentLeft) / contentW;
     let y = (e.clientY - contentTop) / contentH;
     x = Math.max(0, Math.min(1, x));
     y = Math.max(0, Math.min(1, y));
+
+    if (half === 'top') y = y * 0.5;
+    else if (half === 'bottom') y = 0.5 + y * 0.5;
 
     socket.emit('remote-mouse', {
       sessionId,
@@ -497,20 +524,48 @@ function SessionView() {
         </div>
         <div className="session-controls">
           {connected && (
-            <div className="monitor-switch">
-              <label htmlFor="session-monitor">Monitor:</label>
-              <select
-                id="session-monitor"
-                value={monitorIndex}
-                onChange={(e) => switchMonitor(Number(e.target.value))}
-                disabled={switchingMonitor}
-                title="Switch which display the user is sharing"
-              >
-                {MONITOR_OPTIONS.map((n) => (
-                  <option key={n} value={n - 1}>Monitor {n}</option>
-                ))}
-              </select>
-            </div>
+            <>
+              <div className="monitor-switch">
+                <label htmlFor="session-monitor">Monitor:</label>
+                <select
+                  id="session-monitor"
+                  value={monitorIndex}
+                  onChange={(e) => switchMonitor(Number(e.target.value))}
+                  disabled={switchingMonitor}
+                  title="Switch which display the user is sharing"
+                >
+                  {MONITOR_OPTIONS.map((n) => (
+                    <option key={n} value={n - 1}>Monitor {n}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="stream-quality-switch">
+                <label htmlFor="session-stream-quality">Stream:</label>
+                <select
+                  id="session-stream-quality"
+                  value={streamQuality}
+                  onChange={(e) => {
+                    const q = e.target.value;
+                    setStreamQuality(q);
+                    if (socket && sessionId) socket.emit('set-stream-quality', { sessionId, quality: q });
+                  }}
+                  title="Optimize for picture quality or for speed (lower bandwidth)"
+                >
+                  <option value="quality">Best quality</option>
+                  <option value="balanced">Balanced</option>
+                  <option value="speed">Optimize for speed</option>
+                </select>
+              </div>
+              <label className="split-view-toggle">
+                <input
+                  type="checkbox"
+                  checked={splitView}
+                  onChange={(e) => setSplitView(e.target.checked)}
+                  title="Split vertical screen: show top and bottom halves side by side"
+                />
+                <span>Split view</span>
+              </label>
+            </>
           )}
           <button
             type="button"
@@ -635,25 +690,68 @@ function SessionView() {
         </div>
       )}
 
-      <div className="video-container">
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          onClick={handleMouseEvent}
-          onMouseMove={handleMouseEvent}
-          onMouseDown={handleMouseEvent}
-          onMouseUp={handleMouseEvent}
-          onKeyDown={handleKeyEvent}
-          onKeyUp={handleKeyEvent}
-          tabIndex={0}
-          style={{
-            width: '100%',
-            height: '100%',
-            backgroundColor: '#000',
-            cursor: connected ? 'crosshair' : 'default'
-          }}
-        />
+      <div className={`video-container ${splitView ? 'video-container-split' : ''}`}>
+        {splitView && remoteStream ? (
+          <>
+            <div
+              ref={splitTopRef}
+              className="split-view-half split-view-top"
+              onClick={(e) => handleMouseEvent(e, 'top')}
+              onMouseMove={(e) => handleMouseEvent(e, 'top')}
+              onMouseDown={(e) => handleMouseEvent(e, 'top')}
+              onMouseUp={(e) => handleMouseEvent(e, 'top')}
+              onKeyDown={handleKeyEvent}
+              onKeyUp={handleKeyEvent}
+              tabIndex={0}
+              role="presentation"
+            >
+              <video
+                ref={videoTopRef}
+                srcObject={remoteStream}
+                autoPlay
+                playsInline
+                style={{ width: '100%', height: '200%', objectFit: 'contain', position: 'absolute', top: 0, left: 0, right: 0 }}
+              />
+            </div>
+            <div
+              ref={splitBottomRef}
+              className="split-view-half split-view-bottom"
+              onClick={(e) => handleMouseEvent(e, 'bottom')}
+              onMouseMove={(e) => handleMouseEvent(e, 'bottom')}
+              onMouseDown={(e) => handleMouseEvent(e, 'bottom')}
+              onMouseUp={(e) => handleMouseEvent(e, 'bottom')}
+              role="presentation"
+            >
+              <video
+                ref={videoBottomRef}
+                srcObject={remoteStream}
+                autoPlay
+                playsInline
+                style={{ width: '100%', height: '200%', objectFit: 'contain', position: 'absolute', top: '-100%', left: 0, right: 0 }}
+              />
+            </div>
+          </>
+        ) : (
+          <video
+            ref={videoRef}
+            srcObject={remoteStream || undefined}
+            autoPlay
+            playsInline
+            onClick={(e) => handleMouseEvent(e)}
+            onMouseMove={(e) => handleMouseEvent(e)}
+            onMouseDown={(e) => handleMouseEvent(e)}
+            onMouseUp={(e) => handleMouseEvent(e)}
+            onKeyDown={handleKeyEvent}
+            onKeyUp={handleKeyEvent}
+            tabIndex={0}
+            style={{
+              width: '100%',
+              height: '100%',
+              backgroundColor: '#000',
+              cursor: connected ? 'crosshair' : 'default'
+            }}
+          />
+        )}
         {!connected && (
           <div className="connecting-overlay">
             <div className="spinner"></div>

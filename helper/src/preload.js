@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld('helperApi', {
   // Technician requested monitor switch
   onSwitchMonitor: (callback) => ipcRenderer.on('signaling:switch-monitor', (_event, data) => callback(data)),
 
+  // Stream quality preset (optimize for quality vs speed)
+  onSetStreamQuality: (callback) => ipcRenderer.on('signaling:set-stream-quality', (_event, data) => callback(data)),
+
   // File transfer
   onFileAvailable: (callback) => ipcRenderer.on('signaling:file-available', (_event, data) => callback(data)),
   fileDownload: (url, defaultName) => ipcRenderer.invoke('helper:file-download', url, defaultName),

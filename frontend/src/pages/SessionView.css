@@ -62,7 +62,8 @@
   font-weight: 500;
 }
 
-.monitor-switch select {
+.monitor-switch select,
+.stream-quality-switch select {
   padding: 6px 10px;
   background: #1e293b;
   color: #fff;
@@ -70,6 +71,18 @@
   border-radius: 6px;
   font-size: 14px;
   cursor: pointer;
+}
+
+.stream-quality-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stream-quality-switch label {
+  color: #e2e8f0;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .files-header-btn {
@@ -596,10 +609,53 @@
   background: #000;
 }
 
+.video-container.video-container-split {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px;
+}
+
+.split-view-half {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  cursor: crosshair;
+}
+
+.split-view-half video {
+  pointer-events: none;
+}
+
 .video-container video {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+}
+
+.split-view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #e2e8f0;
+  font-size: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.split-view-toggle input {
+  cursor: pointer;
+}
+
+.split-view-toggle span {
+  white-space: nowrap;
 }
 
 .connecting-overlay {

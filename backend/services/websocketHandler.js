@@ -145,6 +145,12 @@ class WebSocketHandler {
                 socket.to(`session-${sessionId}`).emit('remote-keyboard', data);
             });
 
+            // Stream quality: technician chooses quality/speed preset
+            socket.on('set-stream-quality', (data) => {
+                const { sessionId } = data;
+                socket.to(`session-${sessionId}`).emit('set-stream-quality', data);
+            });
+
             // Remote file browser: technician -> helper (forward to session room)
             socket.on('list-remote-dir', (data) => {
                 const { sessionId } = data;

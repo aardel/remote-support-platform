@@ -159,6 +159,37 @@ async function connectSignaling(sessionId) {
       }
     });
 
+    window.helperApi.onSetStreamQuality(async (data) => {
+      const quality = (data && data.quality) || 'balanced';
+      if (!peerConnection) return;
+      const sender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+      if (!sender) return;
+      try {
+        const params = await sender.getParameters();
+        if (!params.encodings || !params.encodings.length) {
+          params.encodings = [{}];
+        }
+        const enc = params.encodings[0];
+        if (quality === 'speed') {
+          enc.scaleResolutionDownBy = 2;
+          enc.maxBitrate = 500000;
+          enc.maxFramerate = 15;
+        } else if (quality === 'quality') {
+          enc.scaleResolutionDownBy = 1;
+          enc.maxBitrate = 2500000;
+          enc.maxFramerate = 30;
+        } else {
+          enc.scaleResolutionDownBy = 1.25;
+          enc.maxBitrate = 1200000;
+          enc.maxFramerate = 24;
+        }
+        await sender.setParameters(params);
+        log(`Stream: ${quality}`);
+      } catch (e) {
+        log(`Set quality failed: ${e.message}`);
+      }
+    });
+
     // Set up event listeners for signaling
     window.helperApi.onWebrtcAnswer(async (data) => {
       log('Received WebRTC answer');

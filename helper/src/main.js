@@ -323,6 +323,12 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
       }
     });
 
+    socket.on('set-stream-quality', (data) => {
+      if (mainWindow) {
+        mainWindow.webContents.send('signaling:set-stream-quality', data);
+      }
+    });
+
     socket.on('file-available', (data) => {
       if (mainWindow && data) {
         const base = readConfig().server.replace(/\/$/, '');
