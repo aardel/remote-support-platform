@@ -4,6 +4,9 @@ const fs = require('fs');
 const os = require('os');
 const { execFile } = require('child_process');
 
+// Allow self-signed SSL certificates (for development/testing)
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 let mainWindow;
 
 function getAppDataDir() {
