@@ -28,13 +28,35 @@ function Dashboard({ user, onLogout }) {
 
   const setupWebSocket = () => {
     const socket = io(window.location.origin);
-    
+
+    // Listen for session updates (global broadcast)
+    socket.on('session-updated', (data) => {
+      setSessions(prev => prev.map(s => {
+        const sId = s.session_id || s.sessionId;
+        if (sId === data.sessionId) {
+          return { ...s, status: data.status, client_info: data.clientInfo };
+        }
+        return s;
+      }));
+    });
+
+    // Also listen for specific session-connected events
     socket.on('session-connected', (data) => {
-      setSessions(prev => prev.map(s => 
-        s.session_id === data.sessionId 
-          ? { ...s, status: 'connected', client_info: data.clientInfo }
-          : s
-      ));
+      setSessions(prev => prev.map(s => {
+        const sId = s.session_id || s.sessionId;
+        if (sId === data.sessionId) {
+          return { ...s, status: 'connected', client_info: data.clientInfo };
+        }
+        return s;
+      }));
+    });
+
+    // Listen for session deletion
+    socket.on('session-ended', (data) => {
+      setSessions(prev => prev.filter(s => {
+        const sId = s.session_id || s.sessionId;
+        return sId !== data.sessionId;
+      }));
     });
 
     return () => socket.disconnect();

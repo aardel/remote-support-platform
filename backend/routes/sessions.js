@@ -115,10 +115,17 @@ router.post('/register', async (req, res) => {
         // Notify technician via WebSocket
         const io = req.app.get('io');
         if (io) {
+            // Emit to specific session room
             io.to(`session-${sessionId}`).emit('session-connected', {
                 sessionId,
                 clientInfo,
-                status: 'ready'
+                status: 'connected'
+            });
+            // Also broadcast globally for dashboard updates
+            io.emit('session-updated', {
+                sessionId,
+                clientInfo,
+                status: 'connected'
             });
         }
         
