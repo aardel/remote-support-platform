@@ -332,6 +332,75 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
         });
       }
     });
+
+    // Remote file browser: list directory on user's machine (restricted to homedir)
+    const safeBase = path.resolve(os.homedir());
+    function toSafePath(rawPath) {
+      if (!rawPath || rawPath === '' || rawPath === '~') return safeBase;
+      const normalized = path.normalize(rawPath).replace(/^(\.\.(\/|\\))+/, '');
+      const resolved = path.isAbsolute(normalized) ? path.resolve(normalized) : path.resolve(safeBase, normalized);
+      return resolved.startsWith(safeBase) ? resolved : safeBase;
+    }
+
+    socket.on('list-remote-dir', (data) => {
+      const { sessionId, path: rawPath, requestId } = data;
+      try {
+        const dirPath = toSafePath(rawPath);
+        const names = fs.readdirSync(dirPath, { withFileTypes: true });
+        const list = names.map((d) => {
+          const fullPath = path.join(dirPath, d.name);
+          let size = 0;
+          let mtime = null;
+          try {
+            const stat = fs.statSync(fullPath);
+            size = stat.size;
+            mtime = stat.mtime ? stat.mtime.toISOString() : null;
+          } catch (_) {}
+          return {
+            name: d.name,
+            path: fullPath,
+            isDirectory: d.isDirectory(),
+            size,
+            mtime
+          };
+        });
+        socket.emit('list-remote-dir-result', { sessionId, requestId, list });
+      } catch (err) {
+        socket.emit('list-remote-dir-result', { sessionId, requestId, error: err.message, list: [] });
+      }
+    });
+
+    socket.on('get-remote-file', (data) => {
+      const { sessionId, path: filePath, requestId } = data;
+      try {
+        const safePath = toSafePath(filePath);
+        if (fs.statSync(safePath).isDirectory()) {
+          socket.emit('get-remote-file-result', { sessionId, requestId, error: 'Cannot download a folder' });
+          return;
+        }
+        const buf = fs.readFileSync(safePath);
+        const content = buf.toString('base64');
+        socket.emit('get-remote-file-result', { sessionId, requestId, content, name: path.basename(safePath) });
+      } catch (err) {
+        socket.emit('get-remote-file-result', { sessionId, requestId, error: err.message });
+      }
+    });
+
+    socket.on('put-remote-file', (data) => {
+      const { sessionId, path: dirPath, filename, content, requestId } = data;
+      try {
+        const safeDir = toSafePath(dirPath);
+        const fullPath = path.join(safeDir, path.basename(filename));
+        if (!fullPath.startsWith(safeBase)) {
+          throw new Error('Path not allowed');
+        }
+        const buf = Buffer.from(content, 'base64');
+        fs.writeFileSync(fullPath, buf);
+        socket.emit('put-remote-file-result', { sessionId, requestId, success: true });
+      } catch (err) {
+        socket.emit('put-remote-file-result', { sessionId, requestId, success: false, error: err.message });
+      }
+    });
   });
 });
 

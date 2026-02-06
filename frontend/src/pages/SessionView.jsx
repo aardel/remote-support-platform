@@ -19,7 +19,47 @@ function SessionView() {
   const [files, setFiles] = useState([]);
   const [filesOpen, setFilesOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [filesToSend, setFilesToSend] = useState([]);
+  const [expandedFolders, setExpandedFolders] = useState({});
+  const [remotePath, setRemotePath] = useState('');
+  const [remoteEntries, setRemoteEntries] = useState([]);
+  const [remoteLoading, setRemoteLoading] = useState(false);
+  const [remoteError, setRemoteError] = useState(null);
+  const [selectedRemotePaths, setSelectedRemotePaths] = useState(new Set());
+  const [receiving, setReceiving] = useState(false);
+  const [remoteRefreshKey, setRemoteRefreshKey] = useState(0);
   const fileInputRef = useRef(null);
+  const folderInputRef = useRef(null);
+  const remoteRequestIdRef = useRef(0);
+  const pendingGetFilesRef = useRef(new Map());
+
+  function buildFileTree(fileList) {
+    const root = { name: '', children: {}, files: [] };
+    fileList.forEach((file) => {
+      const path = file.webkitRelativePath || file.name;
+      const parts = path.split('/');
+      if (parts.length > 1) {
+        let current = root;
+        for (let i = 0; i < parts.length - 1; i++) {
+          const p = parts[i];
+          if (!current.children[p]) current.children[p] = { name: p, children: {}, files: [] };
+          current = current.children[p];
+        }
+        current.files.push(file);
+      } else {
+        root.files.push(file);
+      }
+    });
+    return root;
+  }
+
+  function flattenTreeForSend(node) {
+    let list = [...(node.files || [])];
+    Object.values(node.children || {}).forEach((child) => {
+      list = list.concat(flattenTreeForSend(child));
+    });
+    return list;
+  }
 
   const loadFiles = async () => {
     try {
@@ -100,6 +140,41 @@ function SessionView() {
       loadFiles();
     });
 
+    newSocket.on('list-remote-dir-result', (data) => {
+      setRemoteLoading(false);
+      if (data.error) setRemoteError(data.error);
+      else setRemoteEntries(data.list || []);
+    });
+    newSocket.on('get-remote-file-result', (data) => {
+      const pending = pendingGetFilesRef.current.get(data.requestId);
+      if (pending) {
+        pendingGetFilesRef.current.delete(data.requestId);
+        if (data.error) {
+          pending.reject(new Error(data.error));
+        } else {
+          try {
+            const bin = atob(data.content);
+            const arr = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            const blob = new Blob([arr]);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = data.name || 'download';
+            a.click();
+            URL.revokeObjectURL(url);
+            pending.resolve();
+          } catch (e) {
+            pending.reject(e);
+          }
+        }
+      }
+      if (pendingGetFilesRef.current.size === 0) setReceiving(false);
+    });
+    newSocket.on('put-remote-file-result', (data) => {
+      if (data.success) loadFiles();
+    });
+
     return () => {
       if (peerConnection) {
         peerConnection.close();
@@ -129,6 +204,15 @@ function SessionView() {
   useEffect(() => {
     if (sessionId) loadFiles();
   }, [sessionId]);
+
+  // Request remote directory listing when file modal opens, path changes, or refresh
+  useEffect(() => {
+    if (!socket || !sessionId || !filesOpen) return;
+    setRemoteLoading(true);
+    setRemoteError(null);
+    const reqId = ++remoteRequestIdRef.current;
+    socket.emit('list-remote-dir', { sessionId, path: remotePath, requestId: reqId });
+  }, [socket, sessionId, filesOpen, remotePath, remoteRefreshKey]);
 
   function createPeerConnection(socket, sessionId) {
     const rtcConfig = {
@@ -229,34 +313,158 @@ function SessionView() {
     navigate('/dashboard');
   };
 
-  const uploadFileToUser = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const addFilesToSend = (e) => {
+    const chosen = e.target.files;
+    if (!chosen?.length) return;
+    setFilesToSend((prev) => [...prev, ...Array.from(chosen)]);
+    e.target.value = '';
+  };
+
+  const addFolderToSend = (e) => {
+    const chosen = e.target.files;
+    if (!chosen?.length) return;
+    setFilesToSend((prev) => [...prev, ...Array.from(chosen)]);
+    e.target.value = '';
+  };
+
+  const removeFileToSend = (index) => {
+    setFilesToSend((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const toggleFolder = (path) => {
+    setExpandedFolders((prev) => ({ ...prev, [path]: !prev[path] }));
+  };
+
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const buf = reader.result;
+        let binary = '';
+        const bytes = new Uint8Array(buf);
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+        resolve(btoa(binary));
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  const sendSelectedToRemote = async () => {
+    if (!socket || !sessionId || !filesToSend.length || uploading) return;
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('sessionId', sessionId);
-      formData.append('direction', 'technician-to-user');
-      const res = await fetch('/api/files/upload', {
-        method: 'POST',
-        credentials: 'include',
-        body: formData
-      });
-      if (res.ok) {
-        await loadFiles();
+      const toSend = flattenTreeForSend(buildFileTree(filesToSend));
+      for (const file of toSend) {
+        const content = await fileToBase64(file);
+        const requestId = ++remoteRequestIdRef.current;
+        socket.emit('put-remote-file', {
+          sessionId,
+          path: remotePath,
+          filename: file.name,
+          content,
+          requestId
+        });
       }
+      setFilesToSend([]);
+      await loadFiles();
     } catch (err) {
       console.error('Upload failed', err);
     } finally {
       setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   const downloadFile = (fileId, fileName) => {
     window.open(`${window.location.origin}/api/files/download/${fileId}`, '_blank');
   };
+
+  const remoteParentPath = () => {
+    if (!remotePath) return null;
+    const sep = remotePath.includes('\\') ? '\\' : '/';
+    const idx = Math.max(remotePath.lastIndexOf(sep), remotePath.lastIndexOf('/'));
+    if (idx <= 0) return '';
+    return remotePath.slice(0, idx);
+  };
+
+  const goRemoteUp = () => {
+    const parent = remoteParentPath();
+    setRemotePath(parent !== null ? parent : '');
+  };
+
+  const goRemoteInto = (entry) => {
+    if (!entry.isDirectory) return;
+    setRemotePath(entry.path);
+  };
+
+  const toggleRemoteSelection = (pathKey) => {
+    setSelectedRemotePaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(pathKey)) next.delete(pathKey);
+      else next.add(pathKey);
+      return next;
+    });
+  };
+
+  const receiveSelectedFromRemote = async () => {
+    if (!socket || !sessionId || selectedRemotePaths.size === 0 || receiving) return;
+    const entries = remoteEntries.filter((e) => selectedRemotePaths.has(e.path) && !e.isDirectory);
+    if (entries.length === 0) return;
+    setReceiving(true);
+    try {
+      for (const entry of entries) {
+        const requestId = ++remoteRequestIdRef.current;
+        await new Promise((resolve, reject) => {
+          pendingGetFilesRef.current.set(requestId, { resolve, reject });
+          socket.emit('get-remote-file', { sessionId, path: entry.path, requestId });
+        });
+      }
+    } catch (err) {
+      console.error('Receive failed', err);
+    } finally {
+      if (pendingGetFilesRef.current.size === 0) setReceiving(false);
+    }
+  };
+
+  function renderTree(node, path = '') {
+    if (!node) return null;
+    const entries = [];
+    Object.entries(node.children || {}).forEach(([name, child]) => {
+      const childPath = path ? `${path}/${name}` : name;
+      const isExpanded = expandedFolders[childPath] !== false;
+      entries.push(
+        <div key={childPath} className="file-tree-node">
+          <button type="button" className="file-tree-folder" onClick={() => toggleFolder(childPath)}>
+            <span className="file-tree-icon">{isExpanded ? '▼' : '▶'}</span>
+            <span className="file-tree-folder-icon">📁</span>
+            <span className="file-tree-label">{name}</span>
+          </button>
+          {isExpanded && (
+            <div className="file-tree-children">
+              {renderTree(child, childPath)}
+              {(child.files || []).map((file, i) => (
+                <div key={`${childPath}-f-${i}`} className="file-tree-file">
+                  <span className="file-tree-file-icon">📄</span>
+                  <span className="file-tree-label" title={file.name}>{file.name}</span>
+                  <span className="file-tree-size">{(file.size / 1024).toFixed(1)} KB</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    });
+    (node.files || []).forEach((file, i) => {
+      entries.push(
+        <div key={`root-f-${i}`} className="file-tree-file">
+          <span className="file-tree-file-icon">📄</span>
+          <span className="file-tree-label" title={file.name}>{file.name}</span>
+          <span className="file-tree-size">{(file.size / 1024).toFixed(1)} KB</span>
+        </div>
+      );
+    });
+    return entries.length ? entries : null;
+  }
 
   const switchMonitor = async (index) => {
     if (index === monitorIndex || switchingMonitor) return;
@@ -296,6 +504,7 @@ function SessionView() {
                 value={monitorIndex}
                 onChange={(e) => switchMonitor(Number(e.target.value))}
                 disabled={switchingMonitor}
+                title="Switch which display the user is sharing"
               >
                 {MONITOR_OPTIONS.map((n) => (
                   <option key={n} value={n - 1}>Monitor {n}</option>
@@ -303,6 +512,14 @@ function SessionView() {
               </select>
             </div>
           )}
+          <button
+            type="button"
+            className={`files-header-btn ${filesOpen ? 'open' : ''}`}
+            onClick={() => setFilesOpen(!filesOpen)}
+            title="Send or download files"
+          >
+            📁 Files {filesOpen ? '▼' : '▶'}
+          </button>
           <button onClick={disconnect} className="disconnect-btn">
             Disconnect
           </button>
@@ -315,39 +532,108 @@ function SessionView() {
         </div>
       )}
 
-      <div className="session-files">
-        <button type="button" className="files-toggle" onClick={() => setFilesOpen(!filesOpen)}>
-          📁 Files {filesOpen ? '▼' : '▶'}
-        </button>
-        {filesOpen && (
-          <div className="files-panel">
-            <div className="files-actions">
-              <input
-                ref={fileInputRef}
-                type="file"
-                onChange={uploadFileToUser}
-                disabled={uploading}
-                style={{ display: 'none' }}
-              />
-              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-                {uploading ? 'Uploading…' : 'Send file to user'}
-              </button>
+      {filesOpen && (
+        <div className="files-modal-overlay" onClick={() => setFilesOpen(false)} role="dialog" aria-modal="true" aria-label="File transfer">
+          <div className="files-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="files-modal-header">
+              <h3 className="files-modal-title">File transfer</h3>
+              <button type="button" className="files-modal-close" onClick={() => setFilesOpen(false)} aria-label="Close">×</button>
             </div>
-            <ul className="files-list">
-              {files.length === 0 && <li className="files-empty">No files yet</li>}
-              {files.map((f) => (
-                <li key={f.id}>
-                  <span className="files-item-name">{f.original_name || f.originalName}</span>
-                  <span className="files-item-dir">{f.direction === 'user-to-technician' ? '← from user' : '→ to user'}</span>
-                  {f.direction === 'user-to-technician' && (
-                    <button type="button" onClick={() => downloadFile(f.id, f.original_name || f.originalName)}>Download</button>
+            <div className="files-modal-body two-panel">
+              <div className="files-panel-left">
+                <div className="files-panel-title">Your computer</div>
+                <div className="files-toolbar">
+                  <input ref={fileInputRef} type="file" multiple onChange={addFilesToSend} style={{ display: 'none' }} />
+                  <input ref={folderInputRef} type="file" webkitDirectory multiple onChange={addFolderToSend} style={{ display: 'none' }} />
+                  <button type="button" className="files-add-btn" onClick={() => fileInputRef.current?.click()} disabled={uploading}>Add files</button>
+                  <button type="button" className="files-add-btn" onClick={() => folderInputRef.current?.click()} disabled={uploading}>Add folder</button>
+                  <button
+                    type="button"
+                    className="files-send-right-btn"
+                    onClick={sendSelectedToRemote}
+                    disabled={uploading || !filesToSend.length}
+                    title="Send to remote computer"
+                  >
+                    {uploading ? 'Sending…' : 'Send to remote →'}
+                  </button>
+                </div>
+                <div className="file-browser-tree">
+                  {filesToSend.length === 0 ? (
+                    <div className="files-empty">Add files or open a folder to browse</div>
+                  ) : (
+                    renderTree(buildFileTree(filesToSend))
                   )}
-                </li>
-              ))}
-            </ul>
+                </div>
+              </div>
+              <div className="files-panel-divider" />
+              <div className="files-panel-right">
+                <div className="files-panel-title">Remote computer</div>
+                <div className="files-toolbar files-remote-toolbar">
+                  <button type="button" className="files-up-btn" onClick={goRemoteUp} disabled={!remotePath} title="Up">↑ Up</button>
+                  <button type="button" className="files-refresh-btn" onClick={() => setRemoteRefreshKey((k) => k + 1)} title="Refresh">Refresh</button>
+                  <button
+                    type="button"
+                    className="files-receive-btn"
+                    onClick={receiveSelectedFromRemote}
+                    disabled={receiving || selectedRemotePaths.size === 0}
+                    title="Download selected from remote"
+                  >
+                    {receiving ? 'Receiving…' : '← Receive'}
+                  </button>
+                </div>
+                <div className="files-remote-path" title={remotePath || 'Home'}>{remotePath || 'Home'}</div>
+                {remoteError && <div className="files-remote-error">{remoteError}</div>}
+                <div className="file-browser-table-wrap">
+                  {remoteLoading ? (
+                    <div className="files-empty">Loading…</div>
+                  ) : (
+                    <table className="file-browser-table">
+                      <thead>
+                        <tr>
+                          <th className="col-select" />
+                          <th className="col-icon" />
+                          <th className="col-name">Name</th>
+                          <th className="col-size">Size</th>
+                          <th className="col-date">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {remoteEntries.map((e) => (
+                          <tr
+                            key={e.path}
+                            className={e.isDirectory ? 'file-row-dir' : ''}
+                            onDoubleClick={() => goRemoteInto(e)}
+                          >
+                            <td className="col-select">
+                              {!e.isDirectory && (
+                                <input
+                                  type="checkbox"
+                                  checked={selectedRemotePaths.has(e.path)}
+                                  onChange={() => toggleRemoteSelection(e.path)}
+                                  onClick={(ev) => ev.stopPropagation()}
+                                />
+                              )}
+                            </td>
+                            <td className="col-icon">
+                              <span className="file-type-icon">{e.isDirectory ? '📁' : '📄'}</span>
+                            </td>
+                            <td className="col-name" title={e.name}>{e.name}</td>
+                            <td className="col-size">{e.isDirectory ? '—' : `${(e.size / 1024).toFixed(1)} KB`}</td>
+                            <td className="col-date">{e.mtime ? new Date(e.mtime).toLocaleString() : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  {!remoteLoading && remoteEntries.length === 0 && !remoteError && (
+                    <div className="files-empty">No items. Use Up to go back or send files here.</div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="video-container">
         <video

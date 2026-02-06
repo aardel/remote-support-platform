@@ -145,6 +145,34 @@ class WebSocketHandler {
                 socket.to(`session-${sessionId}`).emit('remote-keyboard', data);
             });
 
+            // Remote file browser: technician -> helper (forward to session room)
+            socket.on('list-remote-dir', (data) => {
+                const { sessionId } = data;
+                socket.to(`session-${sessionId}`).emit('list-remote-dir', data);
+            });
+            socket.on('get-remote-file', (data) => {
+                const { sessionId } = data;
+                socket.to(`session-${sessionId}`).emit('get-remote-file', data);
+            });
+            socket.on('put-remote-file', (data) => {
+                const { sessionId } = data;
+                socket.to(`session-${sessionId}`).emit('put-remote-file', data);
+            });
+
+            // Remote file browser: helper -> technician (forward result to room excluding sender)
+            socket.on('list-remote-dir-result', (data) => {
+                const { sessionId } = data;
+                socket.to(`session-${sessionId}`).emit('list-remote-dir-result', data);
+            });
+            socket.on('get-remote-file-result', (data) => {
+                const { sessionId } = data;
+                socket.to(`session-${sessionId}`).emit('get-remote-file-result', data);
+            });
+            socket.on('put-remote-file-result', (data) => {
+                const { sessionId } = data;
+                socket.to(`session-${sessionId}`).emit('put-remote-file-result', data);
+            });
+
             // Handle approval responses
             socket.on('approval-response', (data) => {
                 const { sessionId, approved } = data;
