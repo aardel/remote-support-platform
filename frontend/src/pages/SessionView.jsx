@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
 import './SessionView.css';
 
+const MONITOR_OPTIONS = [1, 2, 3, 4];
+
 function SessionView() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -12,6 +14,24 @@ function SessionView() {
   const [connected, setConnected] = useState(false);
   const [status, setStatus] = useState('Connecting...');
   const [error, setError] = useState(null);
+  const [monitorIndex, setMonitorIndex] = useState(0);
+  const [switchingMonitor, setSwitchingMonitor] = useState(false);
+  const [files, setFiles] = useState([]);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const loadFiles = async () => {
+    try {
+      const res = await fetch(`/api/files/session/${sessionId}`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setFiles(data.files || []);
+      }
+    } catch (err) {
+      console.error('Load files failed', err);
+    }
+  };
 
   useEffect(() => {
     const newSocket = io(window.location.origin);
@@ -76,6 +96,10 @@ function SessionView() {
       }
     });
 
+    newSocket.on('file-available', () => {
+      loadFiles();
+    });
+
     return () => {
       if (peerConnection) {
         peerConnection.close();
@@ -101,6 +125,10 @@ function SessionView() {
     socket.on('webrtc-ice-candidate', handleIceCandidate);
     return () => socket.off('webrtc-ice-candidate', handleIceCandidate);
   }, [socket, peerConnection]);
+
+  useEffect(() => {
+    if (sessionId) loadFiles();
+  }, [sessionId]);
 
   function createPeerConnection(socket, sessionId) {
     const rtcConfig = {
@@ -191,6 +219,55 @@ function SessionView() {
     navigate('/dashboard');
   };
 
+  const uploadFileToUser = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('sessionId', sessionId);
+      formData.append('direction', 'technician-to-user');
+      const res = await fetch('/api/files/upload', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      });
+      if (res.ok) {
+        await loadFiles();
+      }
+    } catch (err) {
+      console.error('Upload failed', err);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const downloadFile = (fileId, fileName) => {
+    window.open(`${window.location.origin}/api/files/download/${fileId}`, '_blank');
+  };
+
+  const switchMonitor = async (index) => {
+    if (index === monitorIndex || switchingMonitor) return;
+    setSwitchingMonitor(true);
+    try {
+      const res = await fetch(`/api/monitors/session/${sessionId}/switch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ monitorIndex: index })
+      });
+      if (res.ok) {
+        setMonitorIndex(index);
+      }
+    } catch (err) {
+      console.error('Switch monitor failed', err);
+    } finally {
+      setSwitchingMonitor(false);
+    }
+  };
+
   return (
     <div className="session-view">
       <div className="session-header">
@@ -201,6 +278,21 @@ function SessionView() {
           </span>
         </div>
         <div className="session-controls">
+          {connected && (
+            <div className="monitor-switch">
+              <label htmlFor="session-monitor">Monitor:</label>
+              <select
+                id="session-monitor"
+                value={monitorIndex}
+                onChange={(e) => switchMonitor(Number(e.target.value))}
+                disabled={switchingMonitor}
+              >
+                {MONITOR_OPTIONS.map((n) => (
+                  <option key={n} value={n - 1}>Monitor {n}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <button onClick={disconnect} className="disconnect-btn">
             Disconnect
           </button>
@@ -212,6 +304,40 @@ function SessionView() {
           {error}
         </div>
       )}
+
+      <div className="session-files">
+        <button type="button" className="files-toggle" onClick={() => setFilesOpen(!filesOpen)}>
+          📁 Files {filesOpen ? '▼' : '▶'}
+        </button>
+        {filesOpen && (
+          <div className="files-panel">
+            <div className="files-actions">
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={uploadFileToUser}
+                disabled={uploading}
+                style={{ display: 'none' }}
+              />
+              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                {uploading ? 'Uploading…' : 'Send file to user'}
+              </button>
+            </div>
+            <ul className="files-list">
+              {files.length === 0 && <li className="files-empty">No files yet</li>}
+              {files.map((f) => (
+                <li key={f.id}>
+                  <span className="files-item-name">{f.original_name || f.originalName}</span>
+                  <span className="files-item-dir">{f.direction === 'user-to-technician' ? '← from user' : '→ to user'}</span>
+                  {f.direction === 'user-to-technician' && (
+                    <button type="button" onClick={() => downloadFile(f.id, f.original_name || f.originalName)}>Download</button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
 
       <div className="video-container">
         <video

@@ -10,7 +10,8 @@
     "build:mac": "electron-builder --mac dmg"
   },
   "dependencies": {
-    "socket.io-client": "^4.7.5"
+    "socket.io-client": "^4.7.5",
+    "form-data": "^4.0.0"
   },
   "devDependencies": {
     "electron": "^30.0.0",
@@ -31,5 +32,8 @@
         "dmg"
       ]
     }
+  },
+  "optionalDependencies": {
+    "robotjs": "^0.6.0"
   }
 }

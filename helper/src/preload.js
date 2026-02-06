@@ -25,5 +25,13 @@ contextBridge.exposeInMainWorld('helperApi', {
 
   // Remote control APIs (for receiving technician input)
   onMouseEvent: (callback) => ipcRenderer.on('signaling:remote-mouse', (_event, data) => callback(data)),
-  onKeyboardEvent: (callback) => ipcRenderer.on('signaling:remote-keyboard', (_event, data) => callback(data))
+  onKeyboardEvent: (callback) => ipcRenderer.on('signaling:remote-keyboard', (_event, data) => callback(data)),
+
+  // Technician requested monitor switch
+  onSwitchMonitor: (callback) => ipcRenderer.on('signaling:switch-monitor', (_event, data) => callback(data)),
+
+  // File transfer
+  onFileAvailable: (callback) => ipcRenderer.on('signaling:file-available', (_event, data) => callback(data)),
+  fileDownload: (url, defaultName) => ipcRenderer.invoke('helper:file-download', url, defaultName),
+  filePickAndUpload: (sessionId, serverUrl) => ipcRenderer.invoke('helper:file-pick-upload', sessionId, serverUrl)
 });

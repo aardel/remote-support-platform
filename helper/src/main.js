@@ -4,11 +4,56 @@ const fs = require('fs');
 const os = require('os');
 const { io } = require('socket.io-client');
 
+let robot = null;
+try {
+  robot = require('robotjs');
+} catch (e) {
+  console.warn('robotjs not available (remote control disabled):', e.message);
+}
+
 // Allow self-signed SSL certificates (for development/testing)
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 let mainWindow;
 let socket = null;
+
+const MOUSE_BUTTONS = ['left', 'middle', 'right'];
+
+function injectMouse(data) {
+  if (!robot) return;
+  try {
+    const bounds = screen.getPrimaryDisplay().bounds;
+    const x = Math.round(bounds.x + data.x * bounds.width);
+    const y = Math.round(bounds.y + data.y * bounds.height);
+    if (data.type === 'mousemove') {
+      robot.moveMouse(x, y);
+    } else if (data.type === 'mousedown' || data.type === 'mouseup') {
+      const btn = MOUSE_BUTTONS[data.button] || 'left';
+      if (btn === 'middle' && !robot.mouseToggle) return;
+      robot.moveMouse(x, y);
+      robot.mouseToggle(data.type === 'mousedown' ? 'down' : 'up', btn);
+    }
+  } catch (e) {
+    console.warn('Mouse injection error:', e.message);
+  }
+}
+
+function injectKeyboard(data) {
+  if (!robot) return;
+  try {
+    const mods = [];
+    if (data.ctrlKey) mods.push('control');
+    if (data.shiftKey) mods.push('shift');
+    if (data.altKey) mods.push('alt');
+    if (data.metaKey) mods.push('command');
+    const key = data.key && data.key.length === 1 ? data.key.toLowerCase() : (data.key || data.code || '').toLowerCase();
+    const down = data.type === 'keydown' ? 'down' : 'up';
+    if (!key) return;
+    robot.keyToggle(key, down, mods.length ? mods : undefined);
+  } catch (e) {
+    console.warn('Keyboard injection error:', e.message);
+  }
+}
 
 function getAppDataDir() {
   const base =
@@ -264,19 +309,75 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
     });
 
     socket.on('remote-mouse', (data) => {
-      console.log('Remote mouse event');
-      if (mainWindow) {
-        mainWindow.webContents.send('signaling:remote-mouse', data);
-      }
+      injectMouse(data);
     });
 
     socket.on('remote-keyboard', (data) => {
-      console.log('Remote keyboard event');
+      injectKeyboard(data);
+    });
+
+    socket.on('switch-monitor', (data) => {
+      console.log('Switch monitor request:', data);
       if (mainWindow) {
-        mainWindow.webContents.send('signaling:remote-keyboard', data);
+        mainWindow.webContents.send('signaling:switch-monitor', data);
+      }
+    });
+
+    socket.on('file-available', (data) => {
+      if (mainWindow && data) {
+        const base = readConfig().server.replace(/\/$/, '');
+        mainWindow.webContents.send('signaling:file-available', {
+          ...data,
+          downloadUrl: data.downloadUrl || `${base}/api/files/download/${data.id}`
+        });
       }
     });
   });
+});
+
+const { dialog } = require('electron');
+
+ipcMain.handle('helper:file-download', async (_event, url, defaultName) => {
+  try {
+    const res = await fetch(url, { rejectUnauthorized: false });
+    if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+    const buf = await res.arrayBuffer();
+    const { filePath, canceled } = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: defaultName || 'download'
+    });
+    if (canceled || !filePath) return { canceled: true };
+    fs.writeFileSync(filePath, Buffer.from(buf));
+    return { canceled: false, filePath };
+  } catch (e) {
+    console.error('File download error:', e);
+    return { error: e.message };
+  }
+});
+
+ipcMain.handle('helper:file-pick-upload', async (_event, sessionId, serverUrl) => {
+  const base = (serverUrl || readConfig().server).replace(/\/$/, '');
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    title: 'Send file to technician'
+  });
+  if (canceled || !filePaths?.length) return { canceled: true };
+  try {
+    const FormData = require('form-data');
+    const form = new FormData();
+    form.append('file', fs.createReadStream(filePaths[0]), path.basename(filePaths[0]));
+    form.append('sessionId', sessionId);
+    form.append('direction', 'user-to-technician');
+    const res = await fetch(`${base}/api/files/upload`, {
+      method: 'POST',
+      body: form,
+      headers: form.getHeaders()
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return { success: true };
+  } catch (e) {
+    console.error('File upload error:', e);
+    return { error: e.message };
+  }
 });
 
 // Send WebRTC offer

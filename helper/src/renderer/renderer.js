@@ -11,6 +11,7 @@ let config = null;
 let currentSessionId = null;
 let isConnected = false;
 let screenSources = [];
+let receivedFiles = [];
 
 function log(message) {
   const line = document.createElement('div');
@@ -18,6 +19,32 @@ function log(message) {
   logEl.appendChild(line);
   logEl.scrollTop = logEl.scrollHeight;
   console.log(message);
+}
+
+function renderReceivedFiles() {
+  const el = document.getElementById('receivedFiles');
+  if (!el) return;
+  el.innerHTML = receivedFiles.length === 0
+    ? '<span class="no-files">No files received</span>'
+    : receivedFiles.map((f) => `
+        <div class="received-file-item">
+          <span class="received-file-name">${escapeHtml(f.name)}</span>
+          <button type="button" class="download-file-btn" data-url="${escapeHtml(f.downloadUrl)}" data-name="${escapeHtml(f.name)}">Download</button>
+        </div>
+      `).join('');
+  el.querySelectorAll('.download-file-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const result = await window.helperApi.fileDownload(btn.dataset.url, btn.dataset.name);
+      if (result?.error) log(`Download failed: ${result.error}`);
+      else if (!result?.canceled) log(`Saved: ${result.filePath}`);
+    });
+  });
+}
+
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s || '';
+  return div.innerHTML;
 }
 
 async function init() {
@@ -51,6 +78,17 @@ async function init() {
   }
 
   await loadMonitorOptions();
+  renderReceivedFiles();
+  document.getElementById('sendFileBtn').addEventListener('click', async () => {
+    const sid = currentSessionId || sessionInput.value.trim();
+    if (!sid) {
+      log('Start a session first to send files.');
+      return;
+    }
+    const result = await window.helperApi.filePickAndUpload(sid, config?.server);
+    if (result?.error) log(`Upload failed: ${result.error}`);
+    else if (!result?.canceled && result?.success) log('File sent to technician.');
+  });
 }
 
 async function loadMonitorOptions() {
@@ -84,8 +122,10 @@ async function loadMonitorOptions() {
   }
 }
 
-async function startScreenCapture() {
-  const selectedIndex = parseInt(monitorSelect.value, 10);
+async function startScreenCapture(overrideIndex) {
+  const selectedIndex = overrideIndex != null
+    ? overrideIndex
+    : parseInt(monitorSelect.value, 10);
   const screenSource = screenSources[selectedIndex] || screenSources[0];
   if (!screenSource) {
     throw new Error('No screen source selected');
@@ -96,7 +136,7 @@ async function startScreenCapture() {
     const displayInfo = await window.helperApi.getDisplayInfo(displayIndex);
     log(`Display: ${displayInfo.width}x${displayInfo.height}`);
 
-    mediaStream = await navigator.mediaDevices.getUserMedia({
+    const newStream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
         mandatory: {
@@ -108,7 +148,10 @@ async function startScreenCapture() {
         }
       }
     });
-
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(t => t.stop());
+    }
+    mediaStream = newStream;
     log('Screen capture started');
     return mediaStream;
   } catch (error) {
@@ -123,6 +166,40 @@ async function connectSignaling(sessionId) {
   try {
     await window.helperApi.socketConnect(sessionId);
     log('Connected to signaling server');
+
+    window.helperApi.onFileAvailable((data) => {
+      if (data.direction === 'technician-to-user' || !data.direction) {
+        receivedFiles.push({
+          id: data.id,
+          name: data.original_name || data.originalName,
+          downloadUrl: data.downloadUrl
+        });
+        renderReceivedFiles();
+        log(`File received: ${data.original_name || data.originalName}`);
+      }
+    });
+
+    window.helperApi.onSwitchMonitor(async (data) => {
+      const idx = data.monitorIndex;
+      if (typeof idx !== 'number' || idx < 0 || !peerConnection || !screenSources.length) return;
+      if (idx >= screenSources.length) {
+        log(`Monitor ${idx + 1} not available`);
+        return;
+      }
+      log(`Switching to monitor ${idx + 1}...`);
+      try {
+        await startScreenCapture(idx);
+        const videoTrack = mediaStream.getVideoTracks()[0];
+        if (!videoTrack) return;
+        const sender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender) {
+          await sender.replaceTrack(videoTrack);
+          log(`Switched to monitor ${idx + 1}`);
+        }
+      } catch (e) {
+        log(`Switch monitor failed: ${e.message}`);
+      }
+    });
 
     // Set up event listeners for signaling
     window.helperApi.onWebrtcAnswer(async (data) => {
@@ -205,6 +282,7 @@ async function createPeerConnection(sessionId) {
       statusEl.textContent = 'Connected - Technician viewing screen';
       startBtn.textContent = 'Disconnect';
       startBtn.classList.add('disconnect');
+      startBtn.disabled = false;
       monitorSelect.disabled = true;
     } else if (peerConnection.iceConnectionState === 'disconnected' || peerConnection.iceConnectionState === 'failed') {
       if (isConnected) {
