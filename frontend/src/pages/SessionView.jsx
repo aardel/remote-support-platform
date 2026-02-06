@@ -1,94 +1,192 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import io from 'socket.io-client';
 import './SessionView.css';
-
-// noVNC will be loaded from CDN
-let RFB = null;
-if (typeof window !== 'undefined') {
-    // Load noVNC from CDN
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/@novnc/novnc@1.4.0/core/rfb.js';
-    script.onload = () => {
-        RFB = window.RFB;
-    };
-    document.head.appendChild(script);
-}
 
 function SessionView() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
-  const screenRef = useRef(null);
-  const [rfb, setRfb] = useState(null);
+  const videoRef = useRef(null);
+  const [socket, setSocket] = useState(null);
+  const [peerConnection, setPeerConnection] = useState(null);
   const [connected, setConnected] = useState(false);
+  const [status, setStatus] = useState('Connecting...');
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    connectToVNC();
-    
-    return () => {
-      if (rfb) {
-        rfb.disconnect();
+    const newSocket = io(window.location.origin);
+    setSocket(newSocket);
+
+    newSocket.on('connect', () => {
+      console.log('Connected to signaling server');
+      setStatus('Waiting for helper...');
+      newSocket.emit('join-session', { sessionId, role: 'technician' });
+    });
+
+    newSocket.on('connect_error', (err) => {
+      console.error('Socket connection error:', err);
+      setError('Connection error: ' + err.message);
+    });
+
+    // When helper sends WebRTC offer
+    newSocket.on('webrtc-offer', async (data) => {
+      console.log('Received WebRTC offer');
+      setStatus('Connecting to helper...');
+
+      try {
+        const pc = createPeerConnection(newSocket, sessionId);
+        setPeerConnection(pc);
+
+        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+        console.log('Set remote description');
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        console.log('Created and set local description');
+
+        newSocket.emit('webrtc-answer', {
+          sessionId,
+          answer: pc.localDescription,
+          role: 'technician'
+        });
+        console.log('Sent answer');
+      } catch (err) {
+        console.error('Error handling offer:', err);
+        setError('Failed to connect: ' + err.message);
       }
+    });
+
+    // Handle ICE candidates from helper
+    newSocket.on('webrtc-ice-candidate', async (data) => {
+      console.log('Received ICE candidate from', data.role);
+      if (peerConnection && data.role === 'helper') {
+        try {
+          await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+        } catch (err) {
+          console.error('Error adding ICE candidate:', err);
+        }
+      }
+    });
+
+    // Handle peer disconnect
+    newSocket.on('peer-disconnected', (data) => {
+      if (data.role === 'helper') {
+        setStatus('Helper disconnected');
+        setConnected(false);
+      }
+    });
+
+    return () => {
+      if (peerConnection) {
+        peerConnection.close();
+      }
+      newSocket.disconnect();
     };
   }, [sessionId]);
 
-  const connectToVNC = () => {
-    if (!RFB && typeof window !== 'undefined') {
-      // Wait for RFB to load
-      setTimeout(connectToVNC, 100);
-      return;
-    }
-    
-    if (!RFB) {
-      setError('noVNC library not loaded');
-      return;
-    }
-    
-    try {
-      // WebSocket URL for noVNC
-      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsHost = window.location.host;
-      const wsUrl = `${wsProtocol}//${wsHost}/websockify?session=${sessionId}`;
-      
-      console.log('Connecting to VNC:', wsUrl);
-      
-      const rfbInstance = new RFB(screenRef.current, wsUrl, {
-        credentials: {
-          password: '' // VNC password if needed
-        }
-      });
+  // Update ICE candidate handler when peerConnection changes
+  useEffect(() => {
+    if (!socket || !peerConnection) return;
 
-      rfbInstance.addEventListener('connect', () => {
-        console.log('✅ Connected to VNC');
+    const handleIceCandidate = async (data) => {
+      if (data.role === 'helper') {
+        try {
+          await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+        } catch (err) {
+          console.error('Error adding ICE candidate:', err);
+        }
+      }
+    };
+
+    socket.on('webrtc-ice-candidate', handleIceCandidate);
+    return () => socket.off('webrtc-ice-candidate', handleIceCandidate);
+  }, [socket, peerConnection]);
+
+  function createPeerConnection(socket, sessionId) {
+    const rtcConfig = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
+    };
+
+    const pc = new RTCPeerConnection(rtcConfig);
+
+    pc.ontrack = (event) => {
+      console.log('Received track:', event.track.kind);
+      if (videoRef.current && event.streams[0]) {
+        videoRef.current.srcObject = event.streams[0];
         setConnected(true);
-        setError(null);
-      });
+        setStatus('Connected');
+      }
+    };
 
-      rfbInstance.addEventListener('disconnect', (e) => {
-        console.log('❌ Disconnected from VNC:', e.detail);
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log('Sending ICE candidate');
+        socket.emit('webrtc-ice-candidate', {
+          sessionId,
+          candidate: event.candidate,
+          role: 'technician'
+        });
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log('ICE connection state:', pc.iceConnectionState);
+      if (pc.iceConnectionState === 'connected') {
+        setConnected(true);
+        setStatus('Connected');
+      } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
         setConnected(false);
-        if (e.detail.clean !== true) {
-          setError('Connection lost');
-        }
-      });
+        setStatus('Disconnected');
+      }
+    };
 
-      rfbInstance.addEventListener('credentialsrequired', () => {
-        console.log('Credentials required');
-        // Handle password if needed
-      });
+    return pc;
+  }
 
-      setRfb(rfbInstance);
-    } catch (err) {
-      console.error('Error connecting to VNC:', err);
-      setError('Failed to connect: ' + err.message);
-    }
+  const handleMouseEvent = (e) => {
+    if (!socket || !connected) return;
+
+    const rect = videoRef.current.getBoundingClientRect();
+    const video = videoRef.current;
+
+    // Calculate relative position (0-1 range)
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+
+    socket.emit('remote-mouse', {
+      sessionId,
+      type: e.type,
+      x,
+      y,
+      button: e.button
+    });
+  };
+
+  const handleKeyEvent = (e) => {
+    if (!socket || !connected) return;
+
+    e.preventDefault();
+    socket.emit('remote-keyboard', {
+      sessionId,
+      type: e.type,
+      key: e.key,
+      code: e.code,
+      ctrlKey: e.ctrlKey,
+      shiftKey: e.shiftKey,
+      altKey: e.altKey,
+      metaKey: e.metaKey
+    });
   };
 
   const disconnect = () => {
-    if (rfb) {
-      rfb.disconnect();
-      setRfb(null);
-      setConnected(false);
+    if (peerConnection) {
+      peerConnection.close();
+    }
+    if (socket) {
+      socket.disconnect();
     }
     navigate('/dashboard');
   };
@@ -99,7 +197,7 @@ function SessionView() {
         <div className="session-info">
           <h2>Session: {sessionId}</h2>
           <span className={`status-indicator ${connected ? 'connected' : 'disconnected'}`}>
-            {connected ? '✅ Connected' : '⚪ Disconnected'}
+            {connected ? '🟢 ' : '⚪ '}{status}
           </span>
         </div>
         <div className="session-controls">
@@ -112,20 +210,34 @@ function SessionView() {
       {error && (
         <div className="error-banner">
           {error}
-          <button onClick={connectToVNC}>Retry</button>
         </div>
       )}
 
-      <div className="vnc-container">
-        <div 
-          ref={screenRef} 
-          className="vnc-screen"
-          style={{ 
-            width: '100%', 
+      <div className="video-container">
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          onClick={handleMouseEvent}
+          onMouseMove={handleMouseEvent}
+          onMouseDown={handleMouseEvent}
+          onMouseUp={handleMouseEvent}
+          onKeyDown={handleKeyEvent}
+          onKeyUp={handleKeyEvent}
+          tabIndex={0}
+          style={{
+            width: '100%',
             height: '100%',
-            backgroundColor: '#000'
+            backgroundColor: '#000',
+            cursor: connected ? 'crosshair' : 'default'
           }}
         />
+        {!connected && (
+          <div className="connecting-overlay">
+            <div className="spinner"></div>
+            <p>{status}</p>
+          </div>
+        )}
       </div>
     </div>
   );

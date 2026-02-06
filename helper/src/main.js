@@ -1,8 +1,7 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { execFile } = require('child_process');
 
 // Allow self-signed SSL certificates (for development/testing)
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -141,14 +140,40 @@ ipcMain.handle('helper:register-device', async (allowUnattended) => {
   return res.json();
 });
 
-ipcMain.handle('helper:start-vnc', async () => {
-  // Phase 1 placeholder: TightVNC should be bundled and launched here.
-  // In production, start tvnserver.exe and reverse-connect to server.
-  const config = readConfig();
-  const vncPath = path.join(process.resourcesPath, 'tightvnc', 'tvnserver.exe');
-  if (process.platform === 'win32' && fs.existsSync(vncPath)) {
-    execFile(vncPath, ['-controlapp', '-connect', `${new URL(config.server).hostname}:${config.port || 5500}`]);
-    return { started: true };
-  }
-  return { started: false, message: 'VNC not bundled yet' };
+// Get available screen sources for capture
+ipcMain.handle('helper:get-sources', async () => {
+  const sources = await desktopCapturer.getSources({
+    types: ['screen', 'window'],
+    thumbnailSize: { width: 150, height: 150 }
+  });
+  return sources.map(source => ({
+    id: source.id,
+    name: source.name,
+    thumbnail: source.thumbnail.toDataURL()
+  }));
+});
+
+// Get primary display info
+ipcMain.handle('helper:get-display-info', () => {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  return {
+    width: primaryDisplay.size.width,
+    height: primaryDisplay.size.height,
+    scaleFactor: primaryDisplay.scaleFactor
+  };
+});
+
+// Simulate mouse events (for remote control)
+ipcMain.handle('helper:mouse-event', async (_event, data) => {
+  // This requires robotjs or similar - placeholder for now
+  // In production, use robotjs: robot.moveMouse(x, y); robot.mouseClick();
+  console.log('Mouse event:', data);
+  return { success: true };
+});
+
+// Simulate keyboard events (for remote control)
+ipcMain.handle('helper:keyboard-event', async (_event, data) => {
+  // This requires robotjs or similar - placeholder for now
+  console.log('Keyboard event:', data);
+  return { success: true };
 });
