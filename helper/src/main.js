@@ -35,7 +35,7 @@ function readConfig() {
   }
   return {
     sessionId: '',
-    server: 'http://localhost:3500',
+    server: 'https://173.249.10.40:8460',
     port: 5500
   };
 }
