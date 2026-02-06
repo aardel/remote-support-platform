@@ -36,8 +36,16 @@ function readConfig() {
   if (fs.existsSync(configPath)) {
     return JSON.parse(fs.readFileSync(configPath, 'utf8'));
   }
+  // Placeholder gets replaced by server when downloading
+  // Server replaces ___SESSID___ with session ID padded to 12 chars
+  const embeddedId = '___SESSID___';
+  let sessionId = '';
+  if (!embeddedId.startsWith('___')) {
+    // Remove trailing underscores used for padding
+    sessionId = embeddedId.replace(/_+$/, '');
+  }
   return {
-    sessionId: '',
+    sessionId,
     server: 'https://173.249.10.40:8460',
     port: 5500
   };

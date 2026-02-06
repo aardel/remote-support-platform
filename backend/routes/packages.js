@@ -146,27 +146,27 @@ router.get('/download/:sessionId', async (req, res) => {
     try {
         const { sessionId } = req.params;
         const type = (req.query.type || 'zip').toString().toLowerCase();
-        
+
         const SessionService = require('../services/sessionService');
         const session = await SessionService.getSession(sessionId);
-        
+
         if (!session) {
             return res.status(404).json({ error: 'Session not found' });
         }
-        
+
         const packageBuilder = new PackageBuilder(
             process.env.SERVER_URL || 'http://localhost:3000'
         );
-        
+
         let packagePath = await packageBuilder.getPackagePath(sessionId, type);
-        
+
         // If package doesn't exist, generate it
         if (!packagePath && type === 'zip') {
             console.log(`Package not found for session ${sessionId}, generating...`);
             const technicianId = session.technician_id || session.technicianId;
             await packageBuilder.buildPackage(sessionId, technicianId);
             packagePath = await packageBuilder.getPackagePath(sessionId, type);
-            
+
             if (!packagePath) {
                 return res.status(500).json({ error: 'Failed to generate package' });
             }
@@ -175,17 +175,44 @@ router.get('/download/:sessionId', async (req, res) => {
         if (!packagePath) {
             return res.status(404).json({ error: 'Package not available for requested type' });
         }
-        
+
         const filename = packageBuilder.getDownloadName(sessionId, type);
 
-        res.download(packagePath, filename, (err) => {
-            if (err) {
-                console.error('Error sending file:', err);
-                if (!res.headersSent) {
-                    res.status(500).json({ error: 'Error downloading file' });
-                }
+        // For EXE/DMG, embed session ID by replacing placeholder
+        if (type === 'exe' || type === 'dmg') {
+            const fileBuffer = fs.readFileSync(packagePath);
+            const placeholder = Buffer.from('___SESSID___');
+            // Pad session ID to 12 chars to match placeholder length
+            const paddedSessionId = sessionId.padEnd(12, '_');
+            const sessionIdBuffer = Buffer.from(paddedSessionId);
+
+            // Find and replace placeholder in buffer
+            let modified = fileBuffer;
+            let idx = fileBuffer.indexOf(placeholder);
+            if (idx !== -1) {
+                modified = Buffer.concat([
+                    fileBuffer.slice(0, idx),
+                    sessionIdBuffer,
+                    fileBuffer.slice(idx + placeholder.length)
+                ]);
+                console.log(`Embedded session ID ${sessionId} in ${type} at offset ${idx}`);
             }
-        });
+
+            const contentType = type === 'exe' ? 'application/x-msdownload' : 'application/x-apple-diskimage';
+            res.setHeader('Content-Type', contentType);
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            res.setHeader('Content-Length', modified.length);
+            res.send(modified);
+        } else {
+            res.download(packagePath, filename, (err) => {
+                if (err) {
+                    console.error('Error sending file:', err);
+                    if (!res.headersSent) {
+                        res.status(500).json({ error: 'Error downloading file' });
+                    }
+                }
+            });
+        }
     } catch (error) {
         console.error('Error downloading package:', error);
         res.status(500).json({ error: error.message });
