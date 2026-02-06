@@ -19,19 +19,13 @@
       </div>
 
       <div class="session">
-        <label>Session ID</label>
-        <input type="text" id="sessionId" placeholder="ABC-123-XYZ" />
-        <label id="monitorLabel">Monitor</label>
-        <select id="monitorSelect" class="monitor-select">
-          <option value="">Loading…</option>
-        </select>
+        <input type="text" id="sessionId" placeholder="Session" readonly />
         <button id="startBtn">Start Support</button>
       </div>
 
-      <div class="files-section">
-        <div class="files-section-header">Files</div>
-        <div id="receivedFiles" class="received-files-list"></div>
-        <button type="button" id="sendFileBtn" class="send-file-btn">Send file to technician</button>
+      <div id="fileNotification" class="file-notification" style="display: none;">
+        <span id="fileNotificationText"></span>
+        <button type="button" id="fileDownloadBtn">Download</button>
       </div>
 
       <div class="log" id="log"></div>

@@ -64,76 +64,37 @@ h1 {
   background: #b91c1c;
 }
 
-.monitor-select {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  margin-bottom: 10px;
-  font-size: 14px;
+.session input {
+  font-size: 12px;
+  padding: 8px;
 }
 
-.files-section {
-  margin-top: 16px;
-  padding: 12px;
-  background: #f8fafc;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-}
-
-.files-section-header {
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: #334155;
-}
-
-.received-files-list {
-  font-size: 13px;
-  color: #475569;
-  min-height: 24px;
-}
-
-.received-file-item {
+.file-notification {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 0;
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  font-size: 13px;
 }
 
-.received-file-name {
+.file-notification span {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.download-file-btn {
+.file-notification button {
   padding: 4px 10px;
   background: #2563eb;
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
   font-size: 12px;
-}
-
-.send-file-btn {
-  margin-top: 10px;
-  padding: 8px 14px;
-  background: #0f172a;
-  color: #e2e8f0;
-  border: 1px solid #334155;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.send-file-btn:hover {
-  background: #1e293b;
-}
-
-.no-files {
-  font-style: italic;
-  color: #94a3b8;
 }
 
 .log {

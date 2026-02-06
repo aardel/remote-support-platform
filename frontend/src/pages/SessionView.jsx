@@ -175,14 +175,24 @@ function SessionView() {
   }
 
   const handleMouseEvent = (e) => {
-    if (!socket || !connected) return;
+    if (!socket || !connected || !videoRef.current) return;
 
-    const rect = videoRef.current.getBoundingClientRect();
     const video = videoRef.current;
+    const rect = video.getBoundingClientRect();
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    if (!vw || !vh) return;
 
-    // Calculate relative position (0-1 range)
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
+    // Map to video content space (0-1) so cursor matches remote screen with object-fit: contain
+    const scale = Math.min(rect.width / vw, rect.height / vh);
+    const contentW = vw * scale;
+    const contentH = vh * scale;
+    const contentLeft = rect.left + (rect.width - contentW) / 2;
+    const contentTop = rect.top + (rect.height - contentH) / 2;
+    let x = (e.clientX - contentLeft) / contentW;
+    let y = (e.clientY - contentTop) / contentH;
+    x = Math.max(0, Math.min(1, x));
+    y = Math.max(0, Math.min(1, y));
 
     socket.emit('remote-mouse', {
       sessionId,

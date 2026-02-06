@@ -2,8 +2,10 @@ const statusEl = document.getElementById('status');
 const sessionInput = document.getElementById('sessionId');
 const startBtn = document.getElementById('startBtn');
 const allowUnattended = document.getElementById('allowUnattended');
-const monitorSelect = document.getElementById('monitorSelect');
 const logEl = document.getElementById('log');
+const fileNotificationEl = document.getElementById('fileNotification');
+const fileNotificationText = document.getElementById('fileNotificationText');
+const fileDownloadBtn = document.getElementById('fileDownloadBtn');
 
 let peerConnection = null;
 let mediaStream = null;
@@ -21,30 +23,25 @@ function log(message) {
   console.log(message);
 }
 
-function renderReceivedFiles() {
-  const el = document.getElementById('receivedFiles');
-  if (!el) return;
-  el.innerHTML = receivedFiles.length === 0
-    ? '<span class="no-files">No files received</span>'
-    : receivedFiles.map((f) => `
-        <div class="received-file-item">
-          <span class="received-file-name">${escapeHtml(f.name)}</span>
-          <button type="button" class="download-file-btn" data-url="${escapeHtml(f.downloadUrl)}" data-name="${escapeHtml(f.name)}">Download</button>
-        </div>
-      `).join('');
-  el.querySelectorAll('.download-file-btn').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const result = await window.helperApi.fileDownload(btn.dataset.url, btn.dataset.name);
-      if (result?.error) log(`Download failed: ${result.error}`);
-      else if (!result?.canceled) log(`Saved: ${result.filePath}`);
-    });
-  });
+function showFileNotification() {
+  if (receivedFiles.length === 0) {
+    if (fileNotificationEl) fileNotificationEl.style.display = 'none';
+    return;
+  }
+  const f = receivedFiles[receivedFiles.length - 1];
+  if (fileNotificationText) fileNotificationText.textContent = `File: ${f.name}`;
+  if (fileNotificationEl) fileNotificationEl.style.display = 'flex';
 }
 
-function escapeHtml(s) {
-  const div = document.createElement('div');
-  div.textContent = s || '';
-  return div.innerHTML;
+function setupFileDownloadBtn() {
+  if (!fileDownloadBtn) return;
+  fileDownloadBtn.onclick = async () => {
+    if (receivedFiles.length === 0) return;
+    const f = receivedFiles[receivedFiles.length - 1];
+    const result = await window.helperApi.fileDownload(f.downloadUrl, f.name);
+    if (result?.error) log(`Download failed: ${result.error}`);
+    else if (!result?.canceled) log(`Saved`);
+  };
 }
 
 async function init() {
@@ -77,61 +74,22 @@ async function init() {
     sessionInput.placeholder = 'ABC-123-XYZ';
   }
 
-  await loadMonitorOptions();
-  renderReceivedFiles();
-  document.getElementById('sendFileBtn').addEventListener('click', async () => {
-    const sid = currentSessionId || sessionInput.value.trim();
-    if (!sid) {
-      log('Start a session first to send files.');
-      return;
-    }
-    const result = await window.helperApi.filePickAndUpload(sid, config?.server);
-    if (result?.error) log(`Upload failed: ${result.error}`);
-    else if (!result?.canceled && result?.success) log('File sent to technician.');
-  });
-}
-
-async function loadMonitorOptions() {
-  try {
-    const sources = await window.helperApi.getSources();
-    screenSources = sources.filter(s => s.name.includes('Screen') || s.name === 'Entire Screen');
-    const displays = await window.helperApi.getAllDisplays();
-    monitorSelect.innerHTML = '';
-    if (screenSources.length === 0) {
-      monitorSelect.innerHTML = '<option value="">No screen source</option>';
-      return;
-    }
-    screenSources.forEach((src, i) => {
-      const disp = displays[i];
-      const label = disp ? `${src.name} (${disp.width}×${disp.height})` : src.name;
-      const opt = document.createElement('option');
-      opt.value = String(i);
-      opt.textContent = label;
-      monitorSelect.appendChild(opt);
-    });
-    monitorSelect.value = '0';
-    if (screenSources.length === 1) {
-      document.getElementById('monitorLabel').style.display = 'none';
-      monitorSelect.style.display = 'none';
-    }
-  } catch (e) {
-    log(`Monitor list: ${e.message}`);
-    monitorSelect.innerHTML = '<option value="0">Screen</option>';
-    screenSources = await window.helperApi.getSources();
-    if (screenSources.length === 0) screenSources = await window.helperApi.getSources();
-  }
+  setupFileDownloadBtn();
 }
 
 async function startScreenCapture(overrideIndex) {
-  const selectedIndex = overrideIndex != null
-    ? overrideIndex
-    : parseInt(monitorSelect.value, 10);
+  if (screenSources.length === 0) {
+    const sources = await window.helperApi.getSources();
+    screenSources = sources.filter(s => s.name.includes('Screen') || s.name === 'Entire Screen');
+    if (screenSources.length === 0) screenSources = sources;
+  }
+  const selectedIndex = overrideIndex != null ? overrideIndex : 0;
   const screenSource = screenSources[selectedIndex] || screenSources[0];
   if (!screenSource) {
-    throw new Error('No screen source selected');
+    throw new Error('No screen source available');
   }
   try {
-    log(`Using source: ${screenSource.name}`);
+    log(`Using display ${selectedIndex + 1}`);
     const displayIndex = selectedIndex >= 0 ? selectedIndex : undefined;
     const displayInfo = await window.helperApi.getDisplayInfo(displayIndex);
     log(`Display: ${displayInfo.width}x${displayInfo.height}`);
@@ -174,8 +132,8 @@ async function connectSignaling(sessionId) {
           name: data.original_name || data.originalName,
           downloadUrl: data.downloadUrl
         });
-        renderReceivedFiles();
-        log(`File received: ${data.original_name || data.originalName}`);
+        showFileNotification();
+        log(`File received`);
       }
     });
 
@@ -283,7 +241,6 @@ async function createPeerConnection(sessionId) {
       startBtn.textContent = 'Disconnect';
       startBtn.classList.add('disconnect');
       startBtn.disabled = false;
-      monitorSelect.disabled = true;
     } else if (peerConnection.iceConnectionState === 'disconnected' || peerConnection.iceConnectionState === 'failed') {
       if (isConnected) {
         setDisconnected();
@@ -316,7 +273,6 @@ function setDisconnected() {
   startBtn.textContent = 'Start Support';
   startBtn.classList.remove('disconnect');
   startBtn.disabled = false;
-  if (monitorSelect) monitorSelect.disabled = false;
 }
 
 async function disconnect() {
