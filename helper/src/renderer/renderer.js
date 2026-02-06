@@ -150,9 +150,14 @@ async function createPeerConnection(sessionId) {
   peerConnection.onicecandidate = (event) => {
     if (event.candidate) {
       log('Sending ICE candidate');
+      // Explicitly serialize to plain object for IPC
       window.helperApi.socketSendIce({
         sessionId,
-        candidate: event.candidate,
+        candidate: {
+          candidate: event.candidate.candidate,
+          sdpMid: event.candidate.sdpMid,
+          sdpMLineIndex: event.candidate.sdpMLineIndex
+        },
         role: 'helper'
       });
     }
@@ -173,9 +178,13 @@ async function createPeerConnection(sessionId) {
   await peerConnection.setLocalDescription(offer);
 
   log('Sending offer to technician...');
+  // Explicitly serialize to plain object for IPC
   await window.helperApi.socketSendOffer({
     sessionId,
-    offer: peerConnection.localDescription,
+    offer: {
+      type: peerConnection.localDescription.type,
+      sdp: peerConnection.localDescription.sdp
+    },
     role: 'helper'
   });
 
