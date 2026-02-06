@@ -213,4 +213,44 @@ router.post('/:sessionId/approval', async (req, res) => {
     }
 });
 
+// List all sessions for technician
+router.get('/', requireAuth, async (req, res) => {
+    try {
+        const technicianId = req.user?.id || req.user?.nextcloudId;
+        const sessions = await Session.findByTechnician(technicianId);
+        res.json({ sessions });
+    } catch (error) {
+        // Fallback to in-memory sessions
+        const sessions = Array.from(SessionService.inMemorySessions.values())
+            .filter(s => s.technician_id === (req.user?.id || req.user?.nextcloudId));
+        res.json({ sessions });
+    }
+});
+
+// Delete session
+router.delete('/:sessionId', requireAuth, async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+
+        // Try database first
+        try {
+            await Session.delete(sessionId);
+        } catch (error) {
+            // Fallback to in-memory
+            SessionService.inMemorySessions.delete(sessionId);
+        }
+
+        // Notify via WebSocket
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`session-${sessionId}`).emit('session-ended', { sessionId });
+        }
+
+        res.json({ success: true, message: 'Session deleted' });
+    } catch (error) {
+        console.error('Error deleting session:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 module.exports = router;

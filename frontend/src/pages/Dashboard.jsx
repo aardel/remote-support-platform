@@ -41,12 +41,23 @@ function Dashboard({ user, onLogout }) {
 
   const loadSessions = async () => {
     try {
-      // For now, we'll create sessions on demand
-      // In production, fetch from API
+      const response = await axios.get('/api/sessions');
+      setSessions(response.data.sessions || []);
       setLoading(false);
     } catch (error) {
       console.error('Error loading sessions:', error);
       setLoading(false);
+    }
+  };
+
+  const deleteSession = async (sessionId) => {
+    if (!confirm(`Delete session ${sessionId}?`)) return;
+    try {
+      await axios.delete(`/api/sessions/${sessionId}`);
+      setSessions(prev => prev.filter(s => (s.session_id || s.sessionId) !== sessionId));
+    } catch (error) {
+      console.error('Error deleting session:', error);
+      alert('Error deleting session: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -395,8 +406,8 @@ function Dashboard({ user, onLogout }) {
                   
                   <div className="session-actions">
                     {session.status === 'connected' ? (
-                      <button 
-                        onClick={() => connectToSession(session.session_id)}
+                      <button
+                        onClick={() => connectToSession(session.session_id || session.sessionId)}
                         className="connect-btn"
                       >
                         Connect
@@ -404,6 +415,21 @@ function Dashboard({ user, onLogout }) {
                     ) : (
                       <span className="waiting-text">Waiting for user...</span>
                     )}
+                    <button
+                      onClick={() => deleteSession(session.session_id || session.sessionId)}
+                      className="delete-btn"
+                      style={{
+                        marginLeft: '10px',
+                        padding: '8px 16px',
+                        background: '#dc2626',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Delete
+                    </button>
                   </div>
                 </div>
               ))}
