@@ -1,6 +1,14 @@
 # Deployment Guide: Local Development → GitHub → Server
 
-## Development Workflow
+## Development workflow options
+
+**Same-machine (SSH):** Development and the running app are on the same server. You edit, commit, and push from that host; after backend changes, restart the process (e.g. `pm2 restart remote-support-backend`). No separate deploy or pull step. Helper builds (EXE/DMG) still run on GitHub Actions when you push to `main`.
+
+**Separate local + server:** Use the phases below (develop locally, then deploy to server).
+
+---
+
+## Development Workflow (separate local + server)
 
 ### Phase 1: Local Development
 1. ✅ Develop on your local machine

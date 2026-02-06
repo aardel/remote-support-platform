@@ -31,6 +31,10 @@ Server runs on `http://localhost:3000`
 
 See `QUICK_START.md` for detailed setup and testing instructions.
 
+### Same-machine development (SSH)
+
+This project can be developed and run on the **same server** over SSH: you edit, commit, push, and run the backend on one host. There is no separate “local” vs “deploy” step: after changing backend code, restart the process (e.g. `pm2 restart remote-support-backend`) to load it. Helper builds (EXE/DMG) are produced by GitHub Actions when you push to `main`.
+
 ### Production Deployment
 
 See `docs/DEPLOYMENT.md` for complete deployment guide.
