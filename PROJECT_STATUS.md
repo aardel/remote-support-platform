@@ -1,8 +1,8 @@
 # Project Status: Complete Implementation
 
-## ✅ Project Complete!
+## ✅ Phase 1 Complete
 
-All core components have been implemented. The project is ready for testing and deployment.
+Core platform plus Phase 1 enhancements are implemented. Ready for testing.
 
 ---
 
@@ -17,9 +17,10 @@ All core components have been implemented. The project is ready for testing and 
 - ✅ Health check endpoint
 
 **API Routes:**
-- ✅ `/api/auth` - Authentication (register, login)
-- ✅ `/api/sessions` - Session management (create, register, connect, approval)
-- ✅ `/api/packages` - Package generation and download
+- ✅ `/api/auth` - Nextcloud OAuth2 SSO + local auth
+- ✅ `/api/sessions` - Session management (create, register, connect, approval, settings)
+- ✅ `/api/packages` - Package generation, manifest, templates, download
+- ✅ `/api/devices` - Device registration + pending session requests
 - ✅ `/api/files` - File upload/download
 - ✅ `/api/monitors` - Monitor switching
 - ✅ `/api/websocket` - WebSocket info
@@ -27,6 +28,7 @@ All core components have been implemented. The project is ready for testing and 
 **Services:**
 - ✅ `SessionService` - Session management with database/in-memory fallback
 - ✅ `PackageBuilder` - Generates downloadable support packages
+- ✅ Template auto-copy for EXE/DMG
 - ✅ `VNCBridge` - WebSocket ↔ VNC protocol bridge
 - ✅ `ApprovalHandler` - Connection approval system
 - ✅ `WebSocketHandler` - Real-time communication
@@ -36,11 +38,13 @@ All core components have been implemented. The project is ready for testing and 
 - ✅ `Session` - Session storage
 - ✅ `Technician` - User authentication
 - ✅ `FileTransfer` - File management
+- ✅ `Device` - Device registration and pending requests
 - ✅ Migration scripts
 
 **Infrastructure:**
 - ✅ Database connection (PostgreSQL with in-memory fallback)
 - ✅ VNC bridge (ports 5500, 6080)
+- ✅ Websockify endpoint on 443 (`/websockify`)
 - ✅ WebSocket server
 - ✅ File upload handling
 - ✅ Session mapping utilities
@@ -50,9 +54,9 @@ All core components have been implemented. The project is ready for testing and 
 ### Frontend ✅
 
 **Customer UI (HTML/JS):**
-- ✅ Simple interface (2 checkboxes + Session ID)
-- ✅ Connection approval modal
-- ✅ Auto-connect functionality
+- ✅ OS-detect download page
+- ✅ Allow connection / allow unattended toggles
+- ✅ Auto-connect or approval
 - ✅ WebSocket integration
 - ✅ Status indicators
 
@@ -60,6 +64,7 @@ All core components have been implemented. The project is ready for testing and 
 - ✅ Login/Authentication page
 - ✅ Dashboard with session list
 - ✅ Package generation UI
+- ✅ Template upload + status UI
 - ✅ Session connection
 - ✅ noVNC integration for remote viewing
 - ✅ Real-time updates via Socket.io
@@ -85,15 +90,15 @@ All core components have been implemented. The project is ready for testing and 
 
 ### Core Features ✅
 1. ✅ Session creation and management
-2. ✅ Package generation (ZIP with scripts)
-3. ✅ Customer UI launcher
+2. ✅ Package generation (ZIP + EXE/DMG templates)
+3. ✅ OS-detect support page
 4. ✅ Connection approval system
 5. ✅ File transfer (upload/download)
 6. ✅ Monitor switching API
-7. ✅ Authentication system
-8. ✅ WebSocket real-time updates
-9. ✅ VNC bridge (WebSocket ↔ VNC)
-10. ✅ Database models and migrations
+7. ✅ Authentication (Nextcloud SSO + local)
+8. ✅ Device registration + pending session requests
+9. ✅ WebSocket real-time updates
+10. ✅ VNC bridge (WebSocket ↔ VNC)
 
 ### Security Features ✅
 1. ✅ JWT authentication
@@ -139,17 +144,16 @@ npm run dev
 
 ---
 
-## 📝 Next Steps for Production
+## 📝 Next Steps
 
 ### 1. Add TightVNC Portable
 - Download TightVNC Portable
 - Include in package generator
 - Update package builder to include TightVNC files
 
-### 2. Database Setup
-- Set up PostgreSQL on server
-- Run migrations: `npm run migrate`
-- Create initial technician account
+### 2. DMG Build Pipeline
+- Run GitHub Actions on macOS or build on a Mac
+- Upload DMG template in dashboard
 
 ### 3. Testing
 - Test session creation
