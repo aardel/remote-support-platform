@@ -9,7 +9,9 @@
     "build:win": "electron-builder --win nsis",
     "build:mac": "electron-builder --mac dmg"
   },
-  "dependencies": {},
+  "dependencies": {
+    "socket.io-client": "^4.7.5"
+  },
   "devDependencies": {
     "electron": "^30.0.0",
     "electron-builder": "^24.13.3"

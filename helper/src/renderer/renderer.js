@@ -4,10 +4,10 @@ const startBtn = document.getElementById('startBtn');
 const allowUnattended = document.getElementById('allowUnattended');
 const logEl = document.getElementById('log');
 
-let socket = null;
 let peerConnection = null;
 let mediaStream = null;
 let config = null;
+let currentSessionId = null;
 
 function log(message) {
   const line = document.createElement('div');
@@ -82,68 +82,50 @@ async function startScreenCapture() {
   }
 }
 
-function connectSignaling(sessionId) {
-  return new Promise((resolve, reject) => {
-    log('Connecting to signaling server...');
+async function connectSignaling(sessionId) {
+  log('Connecting to signaling server...');
 
-    // Load Socket.io from server
-    const script = document.createElement('script');
-    script.src = `${config.server}/socket.io/socket.io.js`;
-    script.onload = () => {
-      socket = io(config.server, {
-        transports: ['websocket', 'polling'],
-        rejectUnauthorized: false
-      });
+  try {
+    await window.helperApi.socketConnect(sessionId);
+    log('Connected to signaling server');
 
-      socket.on('connect', () => {
-        log('Connected to signaling server');
-        socket.emit('join-session', { sessionId, role: 'helper' });
-        resolve(socket);
-      });
+    // Set up event listeners for signaling
+    window.helperApi.onWebrtcAnswer(async (data) => {
+      log('Received WebRTC answer');
+      try {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+        log('Remote description set');
+      } catch (error) {
+        log(`Error setting remote description: ${error.message}`);
+      }
+    });
 
-      socket.on('connect_error', (error) => {
-        log(`Signaling connection error: ${error.message}`);
-        reject(error);
-      });
+    window.helperApi.onWebrtcIceCandidate(async (data) => {
+      log('Received ICE candidate');
+      try {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+      } catch (error) {
+        log(`Error adding ICE candidate: ${error.message}`);
+      }
+    });
 
-      // Handle WebRTC signaling
-      socket.on('webrtc-answer', async (data) => {
-        log('Received WebRTC answer');
-        try {
-          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-          log('Remote description set');
-        } catch (error) {
-          log(`Error setting remote description: ${error.message}`);
-        }
-      });
+    window.helperApi.onPeerJoined((data) => {
+      log(`Peer joined: ${data.role}`);
+    });
 
-      socket.on('webrtc-ice-candidate', async (data) => {
-        log('Received ICE candidate');
-        try {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } catch (error) {
-          log(`Error adding ICE candidate: ${error.message}`);
-        }
-      });
+    // Handle remote control events
+    window.helperApi.onMouseEvent((data) => {
+      console.log('Remote mouse event:', data);
+    });
 
-      // Handle remote control events
-      socket.on('remote-mouse', (data) => {
-        // Will be handled by robotjs in production
-        console.log('Remote mouse event:', data);
-      });
+    window.helperApi.onKeyboardEvent((data) => {
+      console.log('Remote keyboard event:', data);
+    });
 
-      socket.on('remote-keyboard', (data) => {
-        // Will be handled by robotjs in production
-        console.log('Remote keyboard event:', data);
-      });
-    };
-
-    script.onerror = () => {
-      reject(new Error('Failed to load Socket.io'));
-    };
-
-    document.head.appendChild(script);
-  });
+  } catch (error) {
+    log(`Signaling connection error: ${error.message}`);
+    throw error;
+  }
 }
 
 async function createPeerConnection(sessionId) {
@@ -168,7 +150,7 @@ async function createPeerConnection(sessionId) {
   peerConnection.onicecandidate = (event) => {
     if (event.candidate) {
       log('Sending ICE candidate');
-      socket.emit('webrtc-ice-candidate', {
+      window.helperApi.socketSendIce({
         sessionId,
         candidate: event.candidate,
         role: 'helper'
@@ -191,7 +173,7 @@ async function createPeerConnection(sessionId) {
   await peerConnection.setLocalDescription(offer);
 
   log('Sending offer to technician...');
-  socket.emit('webrtc-offer', {
+  await window.helperApi.socketSendOffer({
     sessionId,
     offer: peerConnection.localDescription,
     role: 'helper'
@@ -207,6 +189,7 @@ startBtn.addEventListener('click', async () => {
     return;
   }
 
+  currentSessionId = sessionId;
   startBtn.disabled = true;
   statusEl.textContent = 'Starting...';
 

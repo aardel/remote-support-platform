@@ -2,11 +2,13 @@ const { app, BrowserWindow, ipcMain, desktopCapturer, screen } = require('electr
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { io } = require('socket.io-client');
 
 // Allow self-signed SSL certificates (for development/testing)
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 let mainWindow;
+let socket = null;
 
 function getAppDataDir() {
   const base =
@@ -175,5 +177,91 @@ ipcMain.handle('helper:mouse-event', async (_event, data) => {
 ipcMain.handle('helper:keyboard-event', async (_event, data) => {
   // This requires robotjs or similar - placeholder for now
   console.log('Keyboard event:', data);
+  return { success: true };
+});
+
+// Socket.io signaling - connect to server
+ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
+  const config = readConfig();
+
+  return new Promise((resolve, reject) => {
+    socket = io(config.server, {
+      transports: ['websocket', 'polling'],
+      rejectUnauthorized: false
+    });
+
+    socket.on('connect', () => {
+      console.log('Connected to signaling server');
+      socket.emit('join-session', { sessionId, role: 'helper' });
+      resolve({ success: true });
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error.message);
+      reject(new Error(error.message));
+    });
+
+    // Forward WebRTC signaling events to renderer
+    socket.on('webrtc-answer', (data) => {
+      console.log('Received WebRTC answer');
+      if (mainWindow) {
+        mainWindow.webContents.send('signaling:webrtc-answer', data);
+      }
+    });
+
+    socket.on('webrtc-ice-candidate', (data) => {
+      console.log('Received ICE candidate');
+      if (mainWindow) {
+        mainWindow.webContents.send('signaling:webrtc-ice-candidate', data);
+      }
+    });
+
+    socket.on('peer-joined', (data) => {
+      console.log('Peer joined:', data.role);
+      if (mainWindow) {
+        mainWindow.webContents.send('signaling:peer-joined', data);
+      }
+    });
+
+    socket.on('remote-mouse', (data) => {
+      console.log('Remote mouse event');
+      if (mainWindow) {
+        mainWindow.webContents.send('signaling:remote-mouse', data);
+      }
+    });
+
+    socket.on('remote-keyboard', (data) => {
+      console.log('Remote keyboard event');
+      if (mainWindow) {
+        mainWindow.webContents.send('signaling:remote-keyboard', data);
+      }
+    });
+  });
+});
+
+// Send WebRTC offer
+ipcMain.handle('helper:socket-send-offer', async (_event, data) => {
+  if (socket) {
+    socket.emit('webrtc-offer', data);
+    return { success: true };
+  }
+  throw new Error('Socket not connected');
+});
+
+// Send ICE candidate
+ipcMain.handle('helper:socket-send-ice', async (_event, data) => {
+  if (socket) {
+    socket.emit('webrtc-ice-candidate', data);
+    return { success: true };
+  }
+  throw new Error('Socket not connected');
+});
+
+// Disconnect socket
+ipcMain.handle('helper:socket-disconnect', async () => {
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
   return { success: true };
 });
