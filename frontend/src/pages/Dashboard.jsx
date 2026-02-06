@@ -13,6 +13,7 @@ function Dashboard({ user, onLogout }) {
   const [templateType, setTemplateType] = useState('exe');
   const [templateFile, setTemplateFile] = useState(null);
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [templateStatus, setTemplateStatus] = useState(null);
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
@@ -122,16 +123,20 @@ function Dashboard({ user, onLogout }) {
     }
 
     setUploadingTemplate(true);
+    setUploadProgress(0);
     try {
       const formData = new FormData();
       formData.append('file', templateFile);
 
       const response = await axios.post(`/api/packages/templates?type=${templateType}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (progressEvent) => {
+          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setUploadProgress(percent);
+        }
       });
 
       if (response.data?.success) {
-        alert(`Template uploaded: ${templateType.toUpperCase()}`);
         setTemplateFile(null);
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
@@ -145,6 +150,7 @@ function Dashboard({ user, onLogout }) {
       alert('Error uploading template: ' + (error.response?.data?.error || error.message));
     } finally {
       setUploadingTemplate(false);
+      setUploadProgress(0);
     }
   };
 
@@ -318,12 +324,42 @@ function Dashboard({ user, onLogout }) {
               />
               <button
                 onClick={uploadTemplate}
-                disabled={uploadingTemplate}
+                disabled={uploadingTemplate || !templateFile}
                 className="template-upload-btn"
               >
-                {uploadingTemplate ? 'Uploading...' : 'Upload Template'}
+                {uploadingTemplate ? `Uploading... ${uploadProgress}%` : 'Upload Template'}
               </button>
             </div>
+            {uploadingTemplate && (
+              <div className="upload-progress" style={{ marginTop: '10px' }}>
+                <div style={{
+                  width: '100%',
+                  height: '20px',
+                  backgroundColor: '#e2e8f0',
+                  borderRadius: '10px',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    width: `${uploadProgress}%`,
+                    height: '100%',
+                    backgroundColor: uploadProgress === 100 ? '#10b981' : '#2563eb',
+                    borderRadius: '10px',
+                    transition: 'width 0.3s ease, background-color 0.3s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontSize: '12px',
+                    fontWeight: 'bold'
+                  }}>
+                    {uploadProgress > 10 && `${uploadProgress}%`}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center', marginTop: '5px', fontSize: '12px', color: '#64748b' }}>
+                  {uploadProgress === 100 ? 'Processing...' : `Uploading ${templateFile?.name || 'file'}...`}
+                </div>
+              </div>
+            )}
             <div className="template-hint">
               Upload a template once. New sessions will auto-copy it.
             </div>
