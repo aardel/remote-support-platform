@@ -2,12 +2,15 @@ const statusEl = document.getElementById('status');
 const sessionInput = document.getElementById('sessionId');
 const startBtn = document.getElementById('startBtn');
 const allowUnattended = document.getElementById('allowUnattended');
+const monitorSelect = document.getElementById('monitorSelect');
 const logEl = document.getElementById('log');
 
 let peerConnection = null;
 let mediaStream = null;
 let config = null;
 let currentSessionId = null;
+let isConnected = false;
+let screenSources = [];
 
 function log(message) {
   const line = document.createElement('div');
@@ -46,25 +49,53 @@ async function init() {
     sessionInput.readOnly = false;
     sessionInput.placeholder = 'ABC-123-XYZ';
   }
+
+  await loadMonitorOptions();
+}
+
+async function loadMonitorOptions() {
+  try {
+    const sources = await window.helperApi.getSources();
+    screenSources = sources.filter(s => s.name.includes('Screen') || s.name === 'Entire Screen');
+    const displays = await window.helperApi.getAllDisplays();
+    monitorSelect.innerHTML = '';
+    if (screenSources.length === 0) {
+      monitorSelect.innerHTML = '<option value="">No screen source</option>';
+      return;
+    }
+    screenSources.forEach((src, i) => {
+      const disp = displays[i];
+      const label = disp ? `${src.name} (${disp.width}×${disp.height})` : src.name;
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = label;
+      monitorSelect.appendChild(opt);
+    });
+    monitorSelect.value = '0';
+    if (screenSources.length === 1) {
+      document.getElementById('monitorLabel').style.display = 'none';
+      monitorSelect.style.display = 'none';
+    }
+  } catch (e) {
+    log(`Monitor list: ${e.message}`);
+    monitorSelect.innerHTML = '<option value="0">Screen</option>';
+    screenSources = await window.helperApi.getSources();
+    if (screenSources.length === 0) screenSources = await window.helperApi.getSources();
+  }
 }
 
 async function startScreenCapture() {
+  const selectedIndex = parseInt(monitorSelect.value, 10);
+  const screenSource = screenSources[selectedIndex] || screenSources[0];
+  if (!screenSource) {
+    throw new Error('No screen source selected');
+  }
   try {
-    log('Getting screen sources...');
-    const sources = await window.helperApi.getSources();
-
-    if (sources.length === 0) {
-      throw new Error('No screen sources available');
-    }
-
-    // Use the first screen source (primary display)
-    const screenSource = sources.find(s => s.name === 'Entire Screen' || s.name.includes('Screen')) || sources[0];
     log(`Using source: ${screenSource.name}`);
-
-    const displayInfo = await window.helperApi.getDisplayInfo();
+    const displayIndex = selectedIndex >= 0 ? selectedIndex : undefined;
+    const displayInfo = await window.helperApi.getDisplayInfo(displayIndex);
     log(`Display: ${displayInfo.width}x${displayInfo.height}`);
 
-    // Get screen stream using getUserMedia with chromeMediaSource
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
@@ -170,8 +201,15 @@ async function createPeerConnection(sessionId) {
   peerConnection.oniceconnectionstatechange = () => {
     log(`ICE connection state: ${peerConnection.iceConnectionState}`);
     if (peerConnection.iceConnectionState === 'connected') {
+      isConnected = true;
       statusEl.textContent = 'Connected - Technician viewing screen';
-    } else if (peerConnection.iceConnectionState === 'disconnected') {
+      startBtn.textContent = 'Disconnect';
+      startBtn.classList.add('disconnect');
+      monitorSelect.disabled = true;
+    } else if (peerConnection.iceConnectionState === 'disconnected' || peerConnection.iceConnectionState === 'failed') {
+      if (isConnected) {
+        setDisconnected();
+      }
       statusEl.textContent = 'Disconnected';
     }
   };
@@ -195,7 +233,36 @@ async function createPeerConnection(sessionId) {
   return peerConnection;
 }
 
+function setDisconnected() {
+  isConnected = false;
+  startBtn.textContent = 'Start Support';
+  startBtn.classList.remove('disconnect');
+  startBtn.disabled = false;
+  if (monitorSelect) monitorSelect.disabled = false;
+}
+
+async function disconnect() {
+  log('Disconnecting...');
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(t => t.stop());
+    mediaStream = null;
+  }
+  if (peerConnection) {
+    peerConnection.close();
+    peerConnection = null;
+  }
+  await window.helperApi.socketDisconnect();
+  setDisconnected();
+  statusEl.textContent = 'Session ready. Click Start Support.';
+  log('Disconnected');
+}
+
 startBtn.addEventListener('click', async () => {
+  if (isConnected) {
+    await disconnect();
+    return;
+  }
+
   const sessionId = (currentSessionId || sessionInput.value || '').trim();
   if (!sessionId) {
     log('Session ID required. Get one from the server or enter manually.');
@@ -207,7 +274,6 @@ startBtn.addEventListener('click', async () => {
   statusEl.textContent = 'Starting...';
 
   try {
-    // Register session with server
     statusEl.textContent = 'Registering session...';
     await window.helperApi.registerSession({
       sessionId,
@@ -215,15 +281,12 @@ startBtn.addEventListener('click', async () => {
     });
     log('Session registered.');
 
-    // Start screen capture
     statusEl.textContent = 'Starting screen capture...';
     await startScreenCapture();
 
-    // Connect to signaling server
     statusEl.textContent = 'Connecting to server...';
     await connectSignaling(sessionId);
 
-    // Create WebRTC peer connection and send offer
     statusEl.textContent = 'Waiting for technician...';
     await createPeerConnection(sessionId);
 

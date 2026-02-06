@@ -9,7 +9,8 @@ contextBridge.exposeInMainWorld('helperApi', {
 
   // Screen capture APIs
   getSources: () => ipcRenderer.invoke('helper:get-sources'),
-  getDisplayInfo: () => ipcRenderer.invoke('helper:get-display-info'),
+  getDisplayInfo: (displayIndex) => ipcRenderer.invoke('helper:get-display-info', displayIndex),
+  getAllDisplays: () => ipcRenderer.invoke('helper:get-all-displays'),
 
   // Socket.io signaling APIs
   socketConnect: (sessionId) => ipcRenderer.invoke('helper:socket-connect', sessionId),

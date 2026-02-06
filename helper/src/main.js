@@ -179,14 +179,30 @@ ipcMain.handle('helper:get-sources', async () => {
   }));
 });
 
-// Get primary display info
-ipcMain.handle('helper:get-display-info', () => {
-  const primaryDisplay = screen.getPrimaryDisplay();
+// Get display info (primary by default, or by index for multi-monitor)
+ipcMain.handle('helper:get-display-info', (_event, displayIndex) => {
+  const displays = screen.getAllDisplays();
+  const display = displayIndex != null && displays[displayIndex]
+    ? displays[displayIndex]
+    : screen.getPrimaryDisplay();
   return {
-    width: primaryDisplay.size.width,
-    height: primaryDisplay.size.height,
-    scaleFactor: primaryDisplay.scaleFactor
+    width: display.size.width,
+    height: display.size.height,
+    scaleFactor: display.scaleFactor
   };
+});
+
+// Get all displays for monitor selection (multi-monitor)
+ipcMain.handle('helper:get-all-displays', () => {
+  const displays = screen.getAllDisplays();
+  const primary = screen.getPrimaryDisplay();
+  return displays.map((d, index) => ({
+    index,
+    width: d.size.width,
+    height: d.size.height,
+    primary: d.id === primary.id,
+    label: d.label || `Display ${index + 1}`
+  }));
 });
 
 // Simulate mouse events (for remote control)

@@ -56,6 +56,23 @@ h1 {
   font-size: 14px;
 }
 
+.session button.disconnect {
+  background: #dc2626;
+}
+
+.session button.disconnect:hover {
+  background: #b91c1c;
+}
+
+.monitor-select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
 .log {
   margin-top: 16px;
   font-size: 12px;
