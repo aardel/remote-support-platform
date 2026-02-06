@@ -12,6 +12,9 @@ class WebSocketHandler {
         // Track connections by session
         this.sessionConnections = new Map(); // sessionId -> { helper: socketId, technician: socketId }
 
+        // Cache offers and ICE candidates for late-joining technicians
+        this.pendingOffers = new Map(); // sessionId -> { offer, from, iceCandidates }
+
         this.setupHandlers();
     }
 
@@ -41,6 +44,24 @@ class WebSocketHandler {
 
                 // Notify others in the session
                 socket.to(`session-${sessionId}`).emit('peer-joined', { role, sessionId });
+
+                // If technician joins and there's a pending offer, send it
+                if (role === 'technician' && this.pendingOffers.has(sessionId)) {
+                    const pending = this.pendingOffers.get(sessionId);
+                    console.log(`Sending cached offer to technician for session ${sessionId}`);
+                    socket.emit('webrtc-offer', {
+                        sessionId,
+                        offer: pending.offer,
+                        from: pending.from
+                    });
+                    // Also send any cached ICE candidates
+                    if (pending.iceCandidates && pending.iceCandidates.length > 0) {
+                        console.log(`Sending ${pending.iceCandidates.length} cached ICE candidates to technician`);
+                        pending.iceCandidates.forEach(ice => {
+                            socket.emit('webrtc-ice-candidate', ice);
+                        });
+                    }
+                }
             });
 
             // Leave session room
@@ -54,6 +75,14 @@ class WebSocketHandler {
             socket.on('webrtc-offer', (data) => {
                 const { sessionId, offer } = data;
                 console.log(`WebRTC offer received for session ${sessionId}`);
+
+                // Cache the offer for late-joining technicians
+                this.pendingOffers.set(sessionId, {
+                    offer,
+                    from: socket.id,
+                    iceCandidates: []
+                });
+
                 // Forward to technician(s) in the session
                 socket.to(`session-${sessionId}`).emit('webrtc-offer', {
                     sessionId,
@@ -78,6 +107,21 @@ class WebSocketHandler {
             socket.on('webrtc-ice-candidate', (data) => {
                 const { sessionId, candidate, role } = data;
                 console.log(`ICE candidate from ${role} for session ${sessionId}`);
+
+                // Cache ICE candidates from helper if technician hasn't joined yet
+                if (role === 'helper' && this.pendingOffers.has(sessionId)) {
+                    const pending = this.pendingOffers.get(sessionId);
+                    const conn = this.sessionConnections.get(sessionId);
+                    if (!conn || !conn.technician) {
+                        pending.iceCandidates.push({
+                            sessionId,
+                            candidate,
+                            from: socket.id,
+                            role
+                        });
+                    }
+                }
+
                 // Forward to other peer in the session
                 socket.to(`session-${sessionId}`).emit('webrtc-ice-candidate', {
                     sessionId,
@@ -116,6 +160,8 @@ class WebSocketHandler {
                     if (conn) {
                         if (conn.helper === socket.id) {
                             conn.helper = null;
+                            // Clear pending offer when helper disconnects
+                            this.pendingOffers.delete(socket.sessionId);
                             // Notify technician that helper disconnected
                             this.io.to(`session-${socket.sessionId}`).emit('peer-disconnected', {
                                 role: 'helper',
