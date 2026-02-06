@@ -18,29 +18,33 @@ function log(message) {
 }
 
 async function init() {
-  statusEl.textContent = 'Checking device registration...';
+  statusEl.textContent = 'Getting session from server...';
   const info = await window.helperApi.getInfo();
   config = info.config;
   log(`Device ID: ${info.deviceId}`);
   log(`Server: ${config.server}`);
 
   try {
-    await window.helperApi.registerDevice(allowUnattended.checked);
-    log('Device registered.');
+    const assign = await window.helperApi.assignSession(allowUnattended.checked);
+    currentSessionId = assign.sessionId;
+    sessionInput.value = assign.sessionId;
+    sessionInput.readOnly = true;
+    sessionInput.title = 'Assigned by server (same device always gets the same session)';
+    if (assign.existing) {
+      log(`Using existing session: ${assign.sessionId}`);
+      statusEl.textContent = 'Session ready (same device).';
+    } else if (assign.fromPending) {
+      log(`Using session from technician request: ${assign.sessionId}`);
+      statusEl.textContent = 'Session ready (technician requested).';
+    } else {
+      log(`New session assigned: ${assign.sessionId}`);
+      statusEl.textContent = 'Session ready. Click Start Support.';
+    }
   } catch (error) {
-    log(`Device registration failed: ${error.message}`);
-  }
-
-  const pending = await window.helperApi.checkPending();
-  if (pending.pending && pending.sessionId) {
-    sessionInput.value = pending.sessionId;
-    statusEl.textContent = 'Pending session detected.';
-    log(`Pending session: ${pending.sessionId}`);
-  } else if (config.sessionId) {
-    sessionInput.value = config.sessionId;
-    statusEl.textContent = 'Ready to start.';
-  } else {
-    statusEl.textContent = 'Enter session ID.';
+    log(`Could not get session: ${error.message}`);
+    statusEl.textContent = 'Enter session ID manually (offline?).';
+    sessionInput.readOnly = false;
+    sessionInput.placeholder = 'ABC-123-XYZ';
   }
 }
 
@@ -192,9 +196,9 @@ async function createPeerConnection(sessionId) {
 }
 
 startBtn.addEventListener('click', async () => {
-  const sessionId = sessionInput.value.trim();
+  const sessionId = (currentSessionId || sessionInput.value || '').trim();
   if (!sessionId) {
-    log('Session ID required.');
+    log('Session ID required. Get one from the server or enter manually.');
     return;
   }
 

@@ -5,6 +5,29 @@ const Session = require('../models/Session');
 const Device = require('../models/Device');
 const { requireAuth } = require('../middleware/sessionAuth');
 
+// Assign session for device (helper calls on launch – no auth)
+router.post('/assign', async (req, res) => {
+    try {
+        const { deviceId, deviceName, os, hostname, arch, allowUnattended } = req.body;
+        if (!deviceId) {
+            return res.status(400).json({ error: 'deviceId required' });
+        }
+        const result = await SessionService.assignSessionForDevice({
+            deviceId,
+            deviceName: deviceName || req.body.clientInfo?.hostname,
+            os: os || req.body.clientInfo?.os,
+            hostname: hostname || req.body.clientInfo?.hostname,
+            arch: arch || req.body.clientInfo?.arch,
+            allowUnattended: allowUnattended !== false,
+            lastIp: req.ip
+        });
+        res.json({ success: true, ...result });
+    } catch (error) {
+        console.error('Error assigning session:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Create new session
 router.post('/create', requireAuth, async (req, res) => {
     try {

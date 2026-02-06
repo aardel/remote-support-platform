@@ -121,6 +121,30 @@ ipcMain.handle('helper:check-pending', async () => {
   return res.json();
 });
 
+// Request a session from the server (same device → same session, new device → new session)
+ipcMain.handle('helper:assign-session', async (_event, allowUnattended) => {
+  const config = readConfig();
+  const deviceId = getDeviceId();
+  const base = config.server.replace(/\/$/, '');
+  const res = await fetch(`${base}/api/sessions/assign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      deviceId,
+      deviceName: os.hostname(),
+      os: `${os.platform()} ${os.release()}`,
+      hostname: os.hostname(),
+      arch: os.arch(),
+      allowUnattended: allowUnattended !== false
+    })
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Assign session failed (${res.status}): ${err}`);
+  }
+  return res.json();
+});
+
 ipcMain.handle('helper:register-device', async (allowUnattended) => {
   const config = readConfig();
   const deviceId = getDeviceId();

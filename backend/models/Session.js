@@ -1,18 +1,18 @@
 const pool = require('../config/database');
 
 class Session {
-    static async create({ technicianId, expiresIn = 3600 }) {
+    static async create({ technicianId, expiresIn = 3600, deviceId = null }) {
         const sessionId = this.generateSessionId();
         const now = new Date();
         const expiresAt = new Date(now.getTime() + expiresIn * 1000);
         
         const query = `
-            INSERT INTO sessions (session_id, technician_id, status, expires_at, created_at)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO sessions (session_id, technician_id, device_id, status, expires_at, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING *
         `;
         
-        const values = [sessionId, technicianId, 'waiting', expiresAt, now];
+        const values = [sessionId, technicianId, deviceId, 'waiting', expiresAt, now];
         const result = await pool.query(query, values);
         
         return result.rows[0];
@@ -72,6 +72,18 @@ class Session {
         `;
         const result = await pool.query(query, [technicianId]);
         return result.rows;
+    }
+    
+    /** Find an active (non-expired, waiting or connected) session for this device */
+    static async findActiveByDeviceId(deviceId) {
+        const query = `
+            SELECT * FROM sessions 
+            WHERE device_id = $1 AND expires_at > NOW() AND status IN ('waiting', 'connected')
+            ORDER BY created_at DESC
+            LIMIT 1
+        `;
+        const result = await pool.query(query, [deviceId]);
+        return result.rows[0] || null;
     }
     
     static generateSessionId() {
