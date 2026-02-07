@@ -15,7 +15,8 @@ const chatOpenBtn = document.getElementById('chatOpenBtn');
 const connectedTechniciansRow = document.getElementById('connectedTechniciansRow');
 const connectedTechniciansList = document.getElementById('connectedTechniciansList');
 
-let peerConnection = null;
+let peerConnection = null; // kept for switch-monitor/set-stream-quality (first PC or any)
+const peerConnectionsBySocketId = new Map(); // technicianSocketId -> RTCPeerConnection (multi-viewer)
 let mediaStream = null;
 let config = null;
 let currentSessionId = null;
@@ -228,7 +229,7 @@ async function connectSignaling(sessionId) {
 
     window.helperApi.onSwitchMonitor(async (data) => {
       const idx = data.monitorIndex;
-      if (typeof idx !== 'number' || idx < 0 || !peerConnection || !screenSources.length) return;
+      if (typeof idx !== 'number' || idx < 0 || !screenSources.length) return;
       if (idx >= screenSources.length) {
         log(`Monitor ${idx + 1} not available`);
         return;
@@ -238,11 +239,12 @@ async function connectSignaling(sessionId) {
         await startScreenCapture(idx);
         const videoTrack = mediaStream.getVideoTracks()[0];
         if (!videoTrack) return;
-        const sender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-        if (sender) {
-          await sender.replaceTrack(videoTrack);
-          log(`Switched to monitor ${idx + 1}`);
+        const pcs = peerConnectionsBySocketId.size ? Array.from(peerConnectionsBySocketId.values()) : (peerConnection ? [peerConnection] : []);
+        for (const pc of pcs) {
+          const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (sender) await sender.replaceTrack(videoTrack);
         }
+        log(`Switched to monitor ${idx + 1}`);
       } catch (e) {
         log(`Switch monitor failed: ${e.message}`);
       }
@@ -250,40 +252,44 @@ async function connectSignaling(sessionId) {
 
     window.helperApi.onSetStreamQuality(async (data) => {
       const quality = (data && data.quality) || 'balanced';
-      if (!peerConnection) return;
-      const sender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-      if (!sender) return;
-      try {
-        const params = await sender.getParameters();
-        if (!params.encodings || !params.encodings.length) {
-          params.encodings = [{}];
+      const pcs = peerConnectionsBySocketId.size ? Array.from(peerConnectionsBySocketId.values()) : (peerConnection ? [peerConnection] : []);
+      for (const pc of pcs) {
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (!sender) continue;
+        try {
+          const params = await sender.getParameters();
+          if (!params.encodings || !params.encodings.length) params.encodings = [{}];
+          const enc = params.encodings[0];
+          if (quality === 'speed') {
+            enc.scaleResolutionDownBy = 2;
+            enc.maxBitrate = 500000;
+            enc.maxFramerate = 15;
+          } else if (quality === 'quality') {
+            enc.scaleResolutionDownBy = 1;
+            enc.maxBitrate = 2500000;
+            enc.maxFramerate = 30;
+          } else {
+            enc.scaleResolutionDownBy = 1.25;
+            enc.maxBitrate = 1200000;
+            enc.maxFramerate = 24;
+          }
+          await sender.setParameters(params);
+        } catch (e) {
+          log(`Set quality failed: ${e.message}`);
         }
-        const enc = params.encodings[0];
-        if (quality === 'speed') {
-          enc.scaleResolutionDownBy = 2;
-          enc.maxBitrate = 500000;
-          enc.maxFramerate = 15;
-        } else if (quality === 'quality') {
-          enc.scaleResolutionDownBy = 1;
-          enc.maxBitrate = 2500000;
-          enc.maxFramerate = 30;
-        } else {
-          enc.scaleResolutionDownBy = 1.25;
-          enc.maxBitrate = 1200000;
-          enc.maxFramerate = 24;
-        }
-        await sender.setParameters(params);
-        log(`Stream: ${quality}`);
-      } catch (e) {
-        log(`Set quality failed: ${e.message}`);
       }
+      log(`Stream: ${quality}`);
     });
 
-    // Set up event listeners for signaling
+    // Set up event listeners for signaling (multi-viewer: route by data.from)
     window.helperApi.onWebrtcAnswer(async (data) => {
-      log('Received WebRTC answer');
+      const pc = data.from ? peerConnectionsBySocketId.get(data.from) : peerConnection;
+      if (!pc) {
+        log('Received WebRTC answer but no PC for this technician');
+        return;
+      }
       try {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
         log('Remote description set');
       } catch (error) {
         log(`Error setting remote description: ${error.message}`);
@@ -291,9 +297,10 @@ async function connectSignaling(sessionId) {
     });
 
     window.helperApi.onWebrtcIceCandidate(async (data) => {
-      log('Received ICE candidate');
+      const pc = (data.role === 'technician' && data.from) ? peerConnectionsBySocketId.get(data.from) : peerConnection;
+      if (!pc) return;
       try {
-        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
       } catch (error) {
         log(`Error adding ICE candidate: ${error.message}`);
       }
@@ -308,6 +315,11 @@ async function connectSignaling(sessionId) {
       if (data.technicians && Array.isArray(data.technicians)) {
         connectedTechnicians = data.technicians.slice();
         updateConnectedTechniciansUI();
+        data.technicians.forEach(t => {
+          if (t.technicianSocketId && !peerConnectionsBySocketId.has(t.technicianSocketId)) {
+            createPeerConnectionForTechnician(sessionId, t.technicianSocketId);
+          }
+        });
       }
     });
     window.helperApi.onTechnicianJoined((data) => {
@@ -316,12 +328,25 @@ async function connectSignaling(sessionId) {
         connectedTechnicians.push({ technicianId: id, technicianName: data.technicianName || 'Technician' });
         updateConnectedTechniciansUI();
       }
+      const socketId = data.technicianSocketId;
+      if (socketId && !peerConnectionsBySocketId.has(socketId)) {
+        createPeerConnectionForTechnician(sessionId, socketId);
+      }
     });
     window.helperApi.onTechnicianLeft((data) => {
       const id = data.technicianId;
       if (id) {
         connectedTechnicians = connectedTechnicians.filter(t => t.technicianId !== id);
         updateConnectedTechniciansUI();
+      }
+      const socketId = data.technicianSocketId;
+      if (socketId) {
+        const pc = peerConnectionsBySocketId.get(socketId);
+        if (pc) {
+          pc.close();
+          peerConnectionsBySocketId.delete(socketId);
+          if (peerConnection === pc) peerConnection = peerConnectionsBySocketId.values().next().value || null;
+        }
       }
     });
 
@@ -346,9 +371,70 @@ async function connectSignaling(sessionId) {
   }
 }
 
+async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
+  if (!mediaStream) return;
+  log(`Creating WebRTC peer connection for technician ${targetSocketId}...`);
+
+  const rtcConfig = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ]
+  };
+
+  const pc = new RTCPeerConnection(rtcConfig);
+  peerConnectionsBySocketId.set(targetSocketId, pc);
+  if (!peerConnection) peerConnection = pc;
+
+  mediaStream.getTracks().forEach(track => {
+    pc.addTrack(track, mediaStream);
+  });
+
+  pc.onicecandidate = (event) => {
+    if (event.candidate) {
+      window.helperApi.socketSendIce({
+        sessionId,
+        candidate: {
+          candidate: event.candidate.candidate,
+          sdpMid: event.candidate.sdpMid,
+          sdpMLineIndex: event.candidate.sdpMLineIndex
+        },
+        role: 'helper',
+        targetSocketId
+      });
+    }
+  };
+
+  pc.oniceconnectionstatechange = () => {
+    const anyConnected = Array.from(peerConnectionsBySocketId.values()).some(p => p.iceConnectionState === 'connected');
+    if (anyConnected) {
+      isConnected = true;
+      setStatusUI('Connected', 'dot-green');
+      startBtn.textContent = 'Disconnect';
+      startBtn.classList.add('disconnect');
+      startBtn.disabled = false;
+    } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+      const stillAny = Array.from(peerConnectionsBySocketId.values()).some(p => p.iceConnectionState === 'connected');
+      if (!stillAny && isConnected) setDisconnected();
+      if (!stillAny) setStatusUI('Disconnected', 'dot-red');
+    }
+  };
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  await window.helperApi.socketSendOffer({
+    sessionId,
+    offer: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
+    role: 'helper',
+    targetSocketId
+  });
+  log(`Offer sent to technician ${targetSocketId}`);
+  return pc;
+}
+
 async function createPeerConnection(sessionId) {
   log('Creating WebRTC peer connection...');
-
   const rtcConfig = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
@@ -358,17 +444,13 @@ async function createPeerConnection(sessionId) {
 
   peerConnection = new RTCPeerConnection(rtcConfig);
 
-  // Add screen stream tracks
   mediaStream.getTracks().forEach(track => {
     peerConnection.addTrack(track, mediaStream);
     log(`Added track: ${track.kind}`);
   });
 
-  // Handle ICE candidates
   peerConnection.onicecandidate = (event) => {
     if (event.candidate) {
-      log('Sending ICE candidate');
-      // Explicitly serialize to plain object for IPC
       window.helperApi.socketSendIce({
         sessionId,
         candidate: {
@@ -390,29 +472,19 @@ async function createPeerConnection(sessionId) {
       startBtn.classList.add('disconnect');
       startBtn.disabled = false;
     } else if (peerConnection.iceConnectionState === 'disconnected' || peerConnection.iceConnectionState === 'failed') {
-      if (isConnected) {
-        setDisconnected();
-      }
+      if (isConnected) setDisconnected();
       setStatusUI('Disconnected', 'dot-red');
     }
   };
 
-  // Create and send offer
-  log('Creating offer...');
   const offer = await peerConnection.createOffer();
   await peerConnection.setLocalDescription(offer);
 
-  log('Sending offer to technician...');
-  // Explicitly serialize to plain object for IPC
   await window.helperApi.socketSendOffer({
     sessionId,
-    offer: {
-      type: peerConnection.localDescription.type,
-      sdp: peerConnection.localDescription.sdp
-    },
+    offer: { type: peerConnection.localDescription.type, sdp: peerConnection.localDescription.sdp },
     role: 'helper'
   });
-
   return peerConnection;
 }
 
@@ -431,6 +503,8 @@ async function disconnect() {
     mediaStream.getTracks().forEach(t => t.stop());
     mediaStream = null;
   }
+  peerConnectionsBySocketId.forEach(pc => pc.close());
+  peerConnectionsBySocketId.clear();
   if (peerConnection) {
     peerConnection.close();
     peerConnection = null;
@@ -475,9 +549,8 @@ startBtn.addEventListener('click', async () => {
     await connectSignaling(sessionId);
 
     setStatusUI('Waiting for technician...', 'dot-amber');
-    await createPeerConnection(sessionId);
 
-    log('Ready - waiting for technician to connect');
+    log('Ready - when a technician connects they will receive the stream');
   } catch (error) {
     log(`Error: ${error.message}`);
     setStatusUI('Connection failed', 'dot-red');

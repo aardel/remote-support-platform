@@ -40,7 +40,7 @@ class WebSocketHandler {
                     if (conn.technicians.length > 0) {
                         socket.emit('technicians-present', {
                             sessionId,
-                            technicians: conn.technicians.map(t => ({ technicianId: t.technicianId, technicianName: t.technicianName }))
+                            technicians: conn.technicians.map(t => ({ technicianId: t.technicianId, technicianName: t.technicianName, technicianSocketId: t.socketId }))
                         });
                     }
                 } else if (role === 'technician') {
@@ -49,7 +49,7 @@ class WebSocketHandler {
                     conn.technicians.push({ socketId: socket.id, technicianId: techId, technicianName: techName });
                     console.log(`Socket ${socket.id} joined session ${sessionId} as technician "${techName}"`);
                     // Notify helper (and others) so they can show who is connected
-                    socket.to(`session-${sessionId}`).emit('technician-joined', { sessionId, technicianId: techId, technicianName: techName });
+                    socket.to(`session-${sessionId}`).emit('technician-joined', { sessionId, technicianId: techId, technicianName: techName, technicianSocketId: socket.id });
                 }
 
                 // Notify others in the session (legacy)
@@ -93,12 +93,13 @@ class WebSocketHandler {
                     iceCandidates: []
                 });
 
-                // Forward to technician(s) in the session
-                socket.to(`session-${sessionId}`).emit('webrtc-offer', {
-                    sessionId,
-                    offer,
-                    from: socket.id
-                });
+                // Forward to technician(s): if targetSocketId set, send only to that socket (multi-viewer); else broadcast to room
+                const payload = { sessionId, offer, from: socket.id };
+                if (data.targetSocketId) {
+                    this.io.to(data.targetSocketId).emit('webrtc-offer', payload);
+                } else {
+                    socket.to(`session-${sessionId}`).emit('webrtc-offer', payload);
+                }
             });
 
             // WebRTC Signaling: Answer from technician
@@ -132,13 +133,13 @@ class WebSocketHandler {
                     }
                 }
 
-                // Forward to other peer in the session
-                socket.to(`session-${sessionId}`).emit('webrtc-ice-candidate', {
-                    sessionId,
-                    candidate,
-                    from: socket.id,
-                    role
-                });
+                // Forward to other peer(s): if targetSocketId set (helper sending to one technician), send only to that socket
+                const icePayload = { sessionId, candidate, from: socket.id, role };
+                if (data.targetSocketId) {
+                    this.io.to(data.targetSocketId).emit('webrtc-ice-candidate', icePayload);
+                } else {
+                    socket.to(`session-${sessionId}`).emit('webrtc-ice-candidate', icePayload);
+                }
             });
 
             // Helper capabilities: forward to technician so they see control status
@@ -235,7 +236,8 @@ class WebSocketHandler {
                                 this.io.to(`session-${socket.sessionId}`).emit('technician-left', {
                                     sessionId: socket.sessionId,
                                     technicianId: tech.technicianId,
-                                    technicianName: tech.technicianName
+                                    technicianName: tech.technicianName,
+                                    technicianSocketId: tech.socketId
                                 });
                                 // Legacy: notify helper that a technician disconnected
                                 this.io.to(`session-${socket.sessionId}`).emit('peer-disconnected', {

@@ -51,6 +51,8 @@ function SessionView({ user }) {
   const panelListPathRef = useRef('');
   const sendSelectedToRemoteRef = useRef(null);
   const peerConnectionRef = useRef(null);
+  const userRef = useRef(user);
+  userRef.current = user;
 
   const openControlPanel = () => {
     if (controlPanelRef.current && !controlPanelRef.current.closed) {
@@ -118,8 +120,9 @@ function SessionView({ user }) {
     newSocket.on('connect', () => {
       console.log('Connected to signaling server');
       setStatus('Waiting for helper...');
-      const technicianName = user?.username || user?.displayName || 'Technician';
-      const technicianId = user?.id ?? user?.nextcloudId ?? 'technician';
+      const u = userRef.current;
+      const technicianName = (u?.username || u?.displayName || u?.email || (u?.id && String(u.id)) || 'Technician').trim() || 'Technician';
+      const technicianId = u?.id ?? u?.nextcloudId ?? 'technician';
       newSocket.emit('join-session', { sessionId, role: 'technician', technicianId, technicianName });
     });
 

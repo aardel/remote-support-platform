@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Helper: connected technicians list** — Helper window shows who is viewing: "Connected: Technician (Name)" with one chip per technician (e.g. Aaron Delia, Jane Smith). Multiple technicians can be connected; list updates on join/leave. See `docs/API_AND_EVENTS.md` (technician-joined, technician-left, technicians-present).
+- **Agents and automation** — CI workflow (build frontend + smoke test on push/PR to main). CLAUDE.md enforces auto-invoke of project agents when context matches. `docs/AGENTS_AUTOMATION.md` and README/CONTRIBUTING describe `.cursor/` (versioned) and what runs on push vs in Cursor chat.
+- **Session UI: fullscreen viewer + control panel** — Two-window session: viewer tab can go fullscreen (video only); control panel opens as popup with monitor, stream quality, split view, chat, files, minimize, exit fullscreen, disconnect. SessionView and panel communicate via BroadcastChannel (`session-control-{sessionId}`). Chat and file transfer moved into control panel; `chat.html` removed. See `docs/NEW_INTERFACE.md`.
+- **In-fullscreen fallback bar** — When in fullscreen, a bar at the bottom always shows Exit fullscreen, Open controls, Disconnect so the user is never stuck if the control panel popup is blocked or behind the fullscreen window.
 - Stream quality preset: Best quality / Balanced / Optimize for speed (technician dropdown; helper applies encoding).
 - Split view for vertical monitors: show top and bottom halves of remote screen side by side.
 - Remote file browser: list directories on user PC (helper), two-panel file transfer with Send → and ← Receive.
@@ -23,12 +27,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- Fullscreen flow: control panel opens before requesting fullscreen so the popup does not steal focus and cause immediate fullscreen exit; optional focus of popup after fullscreen to bring it to front.
+- Backend tracks multiple technicians per session (array of technicianId/technicianName) for helper display; join-session from technician now sends technicianId and technicianName (from logged-in user).
 - Helper UI minimized: session + Start/Disconnect + optional file notification; monitor and file controls moved to technician.
 - Mouse coordinate mapping fixed for object-fit contain so cursor matches remote video.
 - WebRTC offer/answer and ICE candidate handling fixed for Electron IPC and late-joining technicians.
 
 ### Fixed
 
+- **Black screen in session viewer** — ICE candidates from the helper were sometimes dropped because they arrived before React updated the peer connection state. SessionView now uses a ref for the peer connection so all ICE candidates are applied and the stream connects reliably.
 - WebRTC object serialization for IPC in helper.
 - Socket.io loading in Electron helper.
 - Real-time session status and session-ended handling in dashboard.
