@@ -35,6 +35,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Viewer: disable non-active monitors** — Monitor dropdown in SessionView and control panel now disables options beyond the customer’s display count (single or dual monitor). Helper sends `displayCount` in capabilities; viewer clamps selection and shows “(not available)” for extra options.
+- **Helper: single-monitor Mac captured one window** — Desktop capture now requests only `types: ['screen']`, so the full display is captured on single-monitor Macs instead of a random window.
+- **Helper: macOS “Could not start video source”** — On-screen hint on Mac about Screen Recording permission; clearer error and log message directing users to System Settings → Privacy & Security → Screen Recording. Troubleshooting section in `docs/HELPER_UPDATES.md`.
 - **Black screen in session viewer** — ICE candidates from the helper were sometimes dropped because they arrived before React updated the peer connection state. SessionView now uses a ref for the peer connection so all ICE candidates are applied and the stream connects reliably.
 - WebRTC object serialization for IPC in helper.
 - Socket.io loading in Electron helper.
