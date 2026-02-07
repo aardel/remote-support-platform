@@ -32,6 +32,8 @@ let receivedFiles = [];
 let capabilities = { robotjs: false, platform: 'unknown' };
 let logVisible = false;
 let connectedTechnicians = [];
+let connectedSince = null; // Date when first technician connected
+let connectedTimer = null; // interval for updating connected duration
 
 function updateConnectedTechniciansUI() {
   if (!connectedTechniciansRow || !connectedTechniciansList) return;
@@ -60,6 +62,30 @@ function log(message) {
 function setStatusUI(text, dotClass) {
   statusEl.textContent = text;
   statusDot.className = 'status-dot' + (dotClass ? ' ' + dotClass : '');
+}
+
+function formatDuration(ms) {
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function startConnectedTimer() {
+  connectedSince = Date.now();
+  stopConnectedTimer();
+  connectedTimer = setInterval(() => {
+    if (connectedSince && isConnected) {
+      setStatusUI(`Connected ${formatDuration(Date.now() - connectedSince)}`, 'dot-green');
+    }
+  }, 1000);
+}
+
+function stopConnectedTimer() {
+  if (connectedTimer) { clearInterval(connectedTimer); connectedTimer = null; }
+  connectedSince = null;
 }
 
 function showSessionId(id, editable) {
@@ -405,6 +431,10 @@ async function connectSignaling(sessionId) {
           if (peerConnection === pc) peerConnection = peerConnectionsBySocketId.values().next().value || null;
         }
       }
+      // If no technicians remain, handle gracefully (stay ready if unattended)
+      if (connectedTechnicians.length === 0 && peerConnectionsBySocketId.size === 0) {
+        handleAllTechniciansGone();
+      }
     });
 
     // Chat messages from technician — show notification, auto-open chat window
@@ -509,15 +539,14 @@ async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
   pc.oniceconnectionstatechange = () => {
     const anyConnected = Array.from(peerConnectionsBySocketId.values()).some(p => p.iceConnectionState === 'connected');
     if (anyConnected) {
+      if (!isConnected) startConnectedTimer();
       isConnected = true;
-      setStatusUI('Connected', 'dot-green');
       startBtn.textContent = 'Disconnect';
       startBtn.classList.add('disconnect');
       startBtn.disabled = false;
     } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
       const stillAny = Array.from(peerConnectionsBySocketId.values()).some(p => p.iceConnectionState === 'connected');
-      if (!stillAny && isConnected) setDisconnected();
-      if (!stillAny) setStatusUI('Disconnected', 'dot-red');
+      if (!stillAny) handleAllTechniciansGone();
     }
   };
 
@@ -570,14 +599,13 @@ async function createPeerConnection(sessionId) {
   peerConnection.oniceconnectionstatechange = () => {
     log(`ICE connection state: ${peerConnection.iceConnectionState}`);
     if (peerConnection.iceConnectionState === 'connected') {
+      if (!isConnected) startConnectedTimer();
       isConnected = true;
-      setStatusUI('Connected', 'dot-green');
       startBtn.textContent = 'Disconnect';
       startBtn.classList.add('disconnect');
       startBtn.disabled = false;
     } else if (peerConnection.iceConnectionState === 'disconnected' || peerConnection.iceConnectionState === 'failed') {
-      if (isConnected) setDisconnected();
-      setStatusUI('Disconnected', 'dot-red');
+      handleAllTechniciansGone();
     }
   };
 
@@ -594,6 +622,7 @@ async function createPeerConnection(sessionId) {
 
 function setDisconnected() {
   isConnected = false;
+  stopConnectedTimer();
   connectedTechnicians = [];
   updateConnectedTechniciansUI();
   startBtn.textContent = 'Start Support';
@@ -601,8 +630,30 @@ function setDisconnected() {
   startBtn.disabled = false;
 }
 
+// When all technicians leave but unattended mode is on: stay ready for the next connection
+function handleAllTechniciansGone() {
+  stopConnectedTimer();
+  isConnected = false;
+  connectedTechnicians = [];
+  updateConnectedTechniciansUI();
+  // Clean up dead peer connections but keep signaling + screen capture alive
+  peerConnectionsBySocketId.forEach(pc => pc.close());
+  peerConnectionsBySocketId.clear();
+  peerConnection = null;
+  if (allowUnattended.checked && mediaStream) {
+    setStatusUI('Waiting for technician...', 'dot-amber');
+    startBtn.textContent = 'Disconnect';
+    startBtn.classList.add('disconnect');
+    startBtn.disabled = false;
+    log('Technician disconnected. Waiting for next connection (unattended mode).');
+  } else {
+    setDisconnected();
+  }
+}
+
 async function disconnect() {
   log('Disconnecting...');
+  stopConnectedTimer();
   if (mediaStream) {
     mediaStream.getTracks().forEach(t => t.stop());
     mediaStream = null;
