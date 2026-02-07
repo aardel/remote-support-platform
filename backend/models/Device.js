@@ -17,6 +17,21 @@ class Device {
         return result.rows;
     }
 
+    static async listAll() {
+        const result = await pool.query(
+            'SELECT * FROM devices ORDER BY last_seen DESC NULLS LAST, created_at DESC'
+        );
+        return result.rows;
+    }
+
+    static async deleteByDeviceId(deviceId) {
+        const result = await pool.query(
+            'DELETE FROM devices WHERE device_id = $1 RETURNING *',
+            [deviceId]
+        );
+        return result.rows[0] || null;
+    }
+
     static async upsert(device) {
         const {
             deviceId,

@@ -63,14 +63,28 @@ router.get('/pending/:deviceId', async (req, res) => {
     }
 });
 
-// List devices (technician dashboard)
+// List devices (technician dashboard) — show all devices on this server
 router.get('/', requireAuth, async (req, res) => {
     try {
-        const technicianId = req.user?.id || req.user?.nextcloudId;
-        const devices = await Device.listByTechnician(technicianId);
+        const devices = await Device.listAll();
         res.json({ devices });
     } catch (error) {
         console.error('Error listing devices:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Delete (deregister) a device
+router.delete('/:deviceId', requireAuth, async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+        const deleted = await Device.deleteByDeviceId(deviceId);
+        if (!deleted) {
+            return res.status(404).json({ error: 'Device not found' });
+        }
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error deleting device:', error);
         res.status(500).json({ error: error.message });
     }
 });

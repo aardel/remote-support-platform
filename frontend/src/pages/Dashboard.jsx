@@ -136,6 +136,17 @@ function Dashboard({ user, onLogout }) {
     }
   };
 
+  const deregisterDevice = async (deviceId, label) => {
+    if (!confirm(`Deregister device "${label}"? It will be removed from the list. The device can re-register next time the helper runs.`)) return;
+    try {
+      await axios.delete(`/api/devices/${deviceId}`);
+      setDevices(prev => prev.filter(d => d.device_id !== deviceId));
+    } catch (error) {
+      console.error('Error deregistering device:', error);
+      alert('Error deregistering device: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
   const loadTemplateStatus = async () => {
     try {
       const response = await axios.get('/api/packages/templates');
@@ -356,6 +367,21 @@ function Dashboard({ user, onLogout }) {
                       disabled={requestingDevice === device.device_id}
                     >
                       {requestingDevice === device.device_id ? 'Requesting...' : 'Request Session'}
+                    </button>
+                    <button
+                      onClick={() => deregisterDevice(device.device_id, device.display_name || device.hostname || device.device_id)}
+                      className="delete-btn"
+                      style={{
+                        marginLeft: '10px',
+                        padding: '8px 16px',
+                        background: '#dc2626',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Deregister
                     </button>
                   </div>
                 </div>
