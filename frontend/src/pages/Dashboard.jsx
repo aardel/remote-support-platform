@@ -248,7 +248,10 @@ function Dashboard({ user, onLogout }) {
   return (
     <div className="dashboard">
       <header className="dashboard-header">
-        <h1>🔧 Remote Support Dashboard</h1>
+        <div className="dashboard-header-brand">
+          <img src="/logo.png" alt="Logo" className="dashboard-logo" />
+          <h1>Remote Support Dashboard</h1>
+        </div>
         <div className="header-actions">
           <span className="technician-name">Welcome, {technician.username}</span>
           <button onClick={logout} className="logout-btn">Logout</button>

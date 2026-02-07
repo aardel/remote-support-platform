@@ -3,32 +3,59 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Remote Support Helper</title>
+    <title>Remote Support</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div class="container">
-      <h1>Remote Support Helper</h1>
-      <p id="status">Preparing...</p>
+      <div class="logo-header">
+        <img src="logo.png" alt="Logo" class="logo" />
+      </div>
+
+      <div class="status-card">
+        <div class="status-indicator" id="statusIndicator">
+          <div class="status-dot" id="statusDot"></div>
+          <span class="status-text" id="status">Preparing...</span>
+        </div>
+      </div>
+
+      <div class="session-id-row" id="sessionIdRow">
+        <span class="session-id-label">Session:</span>
+        <span class="session-id-value" id="sessionIdDisplay"></span>
+        <input type="text" id="sessionId" class="session-id-input" placeholder="ABC-123-XYZ" style="display:none" />
+      </div>
 
       <div class="settings">
-        <label>
+        <label class="toggle-label">
           <input type="checkbox" id="allowUnattended" checked />
-          Allow unattended connections
+          <span class="toggle-text">Allow unattended connections</span>
         </label>
       </div>
 
-      <div class="session">
-        <input type="text" id="sessionId" placeholder="Session" readonly />
-        <button id="startBtn">Start Support</button>
-      </div>
+      <button id="startBtn" class="btn-primary">Start Support</button>
 
       <div id="fileNotification" class="file-notification" style="display: none;">
         <span id="fileNotificationText"></span>
         <button type="button" id="fileDownloadBtn">Download</button>
       </div>
 
-      <div class="log" id="log"></div>
+      <div id="chatSection" class="chat-section" style="display: none;">
+        <div class="chat-header">
+          <span class="chat-title">Chat with Technician</span>
+          <span class="chat-badge" id="chatBadge" style="display: none;"></span>
+        </div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="chat-input-area">
+          <input type="text" id="chatInput" class="chat-input" placeholder="Type a message..." />
+          <button type="button" id="chatSendBtn" class="chat-send-btn">Send</button>
+        </div>
+      </div>
+
+      <div class="details-toggle">
+        <button type="button" id="detailsToggle" class="details-toggle-btn">Show details</button>
+      </div>
+      <div class="log" id="log" style="display: none;"></div>
+
       <p class="helper-version" id="helperVersion"></p>
     </div>
     <script src="renderer.js"></script>

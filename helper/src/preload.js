@@ -36,6 +36,9 @@ contextBridge.exposeInMainWorld('helperApi', {
   // Stream quality preset (optimize for quality vs speed)
   onSetStreamQuality: (callback) => ipcRenderer.on('signaling:set-stream-quality', (_event, data) => callback(data)),
 
+  // Chat
+  onChatMessage: (callback) => ipcRenderer.on('signaling:chat-message', (_event, data) => callback(data)),
+
   // File transfer
   onFileAvailable: (callback) => ipcRenderer.on('signaling:file-available', (_event, data) => callback(data)),
   fileDownload: (url, defaultName) => ipcRenderer.invoke('helper:file-download', url, defaultName),

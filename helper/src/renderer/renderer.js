@@ -1,11 +1,19 @@
 const statusEl = document.getElementById('status');
+const statusDot = document.getElementById('statusDot');
 const sessionInput = document.getElementById('sessionId');
+const sessionIdDisplay = document.getElementById('sessionIdDisplay');
 const startBtn = document.getElementById('startBtn');
 const allowUnattended = document.getElementById('allowUnattended');
 const logEl = document.getElementById('log');
 const fileNotificationEl = document.getElementById('fileNotification');
 const fileNotificationText = document.getElementById('fileNotificationText');
 const fileDownloadBtn = document.getElementById('fileDownloadBtn');
+const detailsToggle = document.getElementById('detailsToggle');
+const chatSection = document.getElementById('chatSection');
+const chatMessagesEl = document.getElementById('chatMessages');
+const chatInput = document.getElementById('chatInput');
+const chatSendBtn = document.getElementById('chatSendBtn');
+const chatBadge = document.getElementById('chatBadge');
 
 let peerConnection = null;
 let mediaStream = null;
@@ -15,6 +23,7 @@ let isConnected = false;
 let screenSources = [];
 let receivedFiles = [];
 let capabilities = { robotjs: false, platform: 'unknown' };
+let logVisible = false;
 
 function log(message) {
   const line = document.createElement('div');
@@ -23,6 +32,68 @@ function log(message) {
   logEl.scrollTop = logEl.scrollHeight;
   console.log(message);
 }
+
+function setStatusUI(text, dotClass) {
+  statusEl.textContent = text;
+  statusDot.className = 'status-dot' + (dotClass ? ' ' + dotClass : '');
+}
+
+function showSessionId(id, editable) {
+  if (editable) {
+    sessionIdDisplay.style.display = 'none';
+    sessionInput.style.display = '';
+    sessionInput.readOnly = false;
+    sessionInput.placeholder = 'ABC-123-XYZ';
+  } else {
+    sessionIdDisplay.textContent = id;
+    sessionIdDisplay.style.display = '';
+    sessionInput.style.display = 'none';
+    sessionInput.value = id;
+    sessionInput.readOnly = true;
+  }
+}
+
+// Details toggle
+detailsToggle.addEventListener('click', () => {
+  logVisible = !logVisible;
+  logEl.style.display = logVisible ? 'block' : 'none';
+  detailsToggle.textContent = logVisible ? 'Hide details' : 'Show details';
+});
+
+// Chat
+function addChatMessage(msg) {
+  const div = document.createElement('div');
+  div.className = `chat-msg from-${msg.role === 'technician' ? 'technician' : 'user'}`;
+  const text = document.createElement('div');
+  text.textContent = msg.message;
+  div.appendChild(text);
+  const time = document.createElement('div');
+  time.className = 'chat-msg-time';
+  time.textContent = new Date(msg.timestamp || Date.now()).toLocaleTimeString();
+  div.appendChild(time);
+  chatMessagesEl.appendChild(div);
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+}
+
+function showChat() {
+  chatSection.style.display = '';
+}
+
+function sendChatMessage() {
+  const msg = chatInput.value.trim();
+  if (!msg || !currentSessionId) return;
+  window.helperApi.socketEmit('chat-message', {
+    sessionId: currentSessionId,
+    message: msg,
+    role: 'user'
+  });
+  chatInput.value = '';
+}
+
+chatSendBtn.addEventListener('click', sendChatMessage);
+chatInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') sendChatMessage();
+});
 
 function showFileNotification() {
   if (receivedFiles.length === 0) {
@@ -48,7 +119,7 @@ function setupFileDownloadBtn() {
 async function init() {
   const version = await window.helperApi.getVersion();
   const versionEl = document.getElementById('helperVersion');
-  if (versionEl) versionEl.textContent = `Helper v${version}`;
+  if (versionEl) versionEl.textContent = `v${version}`;
 
   // Fetch capabilities early
   try {
@@ -64,7 +135,7 @@ async function init() {
     log(`Could not get capabilities: ${e.message}`);
   }
 
-  statusEl.textContent = 'Getting session from server...';
+  setStatusUI('Getting session...', 'dot-amber');
   const info = await window.helperApi.getInfo();
   config = info.config;
   log(`Device ID: ${info.deviceId}`);
@@ -74,25 +145,20 @@ async function init() {
   try {
     const assign = await window.helperApi.assignSession(allowUnattended.checked);
     currentSessionId = assign.sessionId;
-    sessionInput.value = assign.sessionId;
-    sessionInput.readOnly = true;
-    sessionInput.title = 'Assigned by server (same device always gets the same session)';
+    showSessionId(assign.sessionId, false);
     sessionReady = true;
     if (assign.existing) {
       log(`Using existing session: ${assign.sessionId}`);
-      statusEl.textContent = 'Session ready (same device).';
     } else if (assign.fromPending) {
       log(`Using session from technician request: ${assign.sessionId}`);
-      statusEl.textContent = 'Session ready (technician requested).';
     } else {
       log(`New session assigned: ${assign.sessionId}`);
-      statusEl.textContent = 'Session ready. Click Start Support.';
     }
+    setStatusUI('Ready', '');
   } catch (error) {
     log(`Could not get session: ${error.message}`);
-    statusEl.textContent = 'Enter session ID manually (offline?).';
-    sessionInput.readOnly = false;
-    sessionInput.placeholder = 'ABC-123-XYZ';
+    setStatusUI('Offline — enter session ID', 'dot-red');
+    showSessionId('', true);
   }
 
   setupFileDownloadBtn();
@@ -244,6 +310,12 @@ async function connectSignaling(sessionId) {
       log(`Peer joined: ${data.role}`);
     });
 
+    // Chat messages from technician
+    window.helperApi.onChatMessage((data) => {
+      showChat();
+      addChatMessage(data);
+    });
+
     // Handle remote control events
     window.helperApi.onMouseEvent((data) => {
       console.log('Remote mouse event:', data);
@@ -298,7 +370,7 @@ async function createPeerConnection(sessionId) {
     log(`ICE connection state: ${peerConnection.iceConnectionState}`);
     if (peerConnection.iceConnectionState === 'connected') {
       isConnected = true;
-      statusEl.textContent = 'Connected - Technician viewing screen';
+      setStatusUI('Connected', 'dot-green');
       startBtn.textContent = 'Disconnect';
       startBtn.classList.add('disconnect');
       startBtn.disabled = false;
@@ -306,7 +378,7 @@ async function createPeerConnection(sessionId) {
       if (isConnected) {
         setDisconnected();
       }
-      statusEl.textContent = 'Disconnected';
+      setStatusUI('Disconnected', 'dot-red');
     }
   };
 
@@ -348,7 +420,7 @@ async function disconnect() {
   }
   await window.helperApi.socketDisconnect();
   setDisconnected();
-  statusEl.textContent = 'Session ready. Click Start Support.';
+  setStatusUI('Ready', '');
   log('Disconnected');
 }
 
@@ -366,10 +438,10 @@ startBtn.addEventListener('click', async () => {
 
   currentSessionId = sessionId;
   startBtn.disabled = true;
-  statusEl.textContent = 'Starting...';
+  setStatusUI('Starting...', 'dot-amber');
 
   try {
-    statusEl.textContent = 'Registering session...';
+    setStatusUI('Registering...', 'dot-amber');
     await window.helperApi.registerSession({
       sessionId,
       allowUnattended: allowUnattended.checked,
@@ -377,19 +449,19 @@ startBtn.addEventListener('click', async () => {
     });
     log('Session registered.');
 
-    statusEl.textContent = 'Starting screen capture...';
+    setStatusUI('Capturing screen...', 'dot-amber');
     await startScreenCapture();
 
-    statusEl.textContent = 'Connecting to server...';
+    setStatusUI('Connecting...', 'dot-amber');
     await connectSignaling(sessionId);
 
-    statusEl.textContent = 'Waiting for technician...';
+    setStatusUI('Waiting for technician...', 'dot-amber');
     await createPeerConnection(sessionId);
 
     log('Ready - waiting for technician to connect');
   } catch (error) {
     log(`Error: ${error.message}`);
-    statusEl.textContent = 'Connection failed';
+    setStatusUI('Connection failed', 'dot-red');
     startBtn.disabled = false;
   }
 });

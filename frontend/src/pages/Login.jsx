@@ -9,7 +9,10 @@ function Login() {
   return (
     <div className="login-container">
       <div className="login-box">
-        <h1>🔧 Remote Support</h1>
+        <div className="login-logo">
+          <img src="/logo.png" alt="Logo" className="login-logo-img" />
+        </div>
+        <h1>Remote Support</h1>
         <h2>Technician Login</h2>
 
         <p style={{ marginBottom: '20px', color: '#666' }}>

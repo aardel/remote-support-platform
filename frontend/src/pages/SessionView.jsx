@@ -39,10 +39,34 @@ function SessionView() {
   const [selectedRemotePaths, setSelectedRemotePaths] = useState(new Set());
   const [receiving, setReceiving] = useState(false);
   const [remoteRefreshKey, setRemoteRefreshKey] = useState(0);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatUnread, setChatUnread] = useState(0);
+  const chatMessagesRef = useRef(null);
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
   const remoteRequestIdRef = useRef(0);
   const pendingGetFilesRef = useRef(new Map());
+
+  const sendChatMessage = () => {
+    const msg = chatInput.trim();
+    if (!msg || !socket) return;
+    const data = { sessionId, message: msg, role: 'technician', timestamp: Date.now() };
+    socket.emit('chat-message', data);
+    setChatMessages(prev => [...prev, data]);
+    setChatInput('');
+  };
+
+  useEffect(() => {
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
+
+  useEffect(() => {
+    if (chatOpen) setChatUnread(0);
+  }, [chatOpen]);
 
   function buildFileTree(fileList) {
     const root = { name: '', children: {}, files: [] };
@@ -150,6 +174,11 @@ function SessionView() {
     newSocket.on('helper-capabilities', (data) => {
       console.log('Helper capabilities:', data.capabilities);
       setHelperCapabilities(data.capabilities);
+    });
+
+    newSocket.on('chat-message', (data) => {
+      setChatMessages(prev => [...prev, data]);
+      setChatUnread(prev => prev + 1);
     });
 
     newSocket.on('file-available', () => {
@@ -631,6 +660,14 @@ function SessionView() {
           )}
           <button
             type="button"
+            className={`chat-header-btn ${chatOpen ? 'open' : ''}`}
+            onClick={() => setChatOpen(!chatOpen)}
+            title="Chat with user"
+          >
+            💬 Chat {chatUnread > 0 && <span className="chat-unread-badge">{chatUnread}</span>}
+          </button>
+          <button
+            type="button"
             className={`files-header-btn ${filesOpen ? 'open' : ''}`}
             onClick={() => setFilesOpen(!filesOpen)}
             title="Send or download files"
@@ -748,6 +785,37 @@ function SessionView() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {chatOpen && (
+        <div className="chat-panel">
+          <div className="chat-panel-header">
+            <span className="chat-panel-title">Chat with User</span>
+            <button type="button" className="chat-panel-close" onClick={() => setChatOpen(false)}>×</button>
+          </div>
+          <div className="chat-panel-messages" ref={chatMessagesRef}>
+            {chatMessages.length === 0 && (
+              <div className="chat-panel-empty">No messages yet. Send a message to start chatting.</div>
+            )}
+            {chatMessages.map((msg, i) => (
+              <div key={i} className={`chat-panel-msg ${msg.role === 'technician' ? 'from-tech' : 'from-user'}`}>
+                <div className="chat-panel-msg-text">{msg.message}</div>
+                <div className="chat-panel-msg-time">{new Date(msg.timestamp || Date.now()).toLocaleTimeString()}</div>
+              </div>
+            ))}
+          </div>
+          <div className="chat-panel-input-area">
+            <input
+              type="text"
+              className="chat-panel-input"
+              placeholder="Type a message..."
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') sendChatMessage(); }}
+            />
+            <button type="button" className="chat-panel-send" onClick={sendChatMessage}>Send</button>
           </div>
         </div>
       )}

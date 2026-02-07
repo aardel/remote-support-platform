@@ -12,6 +12,17 @@
   align-items: center;
 }
 
+.dashboard-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.dashboard-logo {
+  height: 40px;
+  width: auto;
+}
+
 .dashboard-header h1 {
   color: #333;
   font-size: 24px;

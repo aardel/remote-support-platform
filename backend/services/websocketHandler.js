@@ -187,6 +187,13 @@ class WebSocketHandler {
                 socket.to(`session-${sessionId}`).emit('put-remote-file-result', data);
             });
 
+            // Chat messages: forward to session room with timestamp
+            socket.on('chat-message', (data) => {
+                const { sessionId } = data;
+                const msg = { ...data, timestamp: data.timestamp || Date.now() };
+                socket.to(`session-${sessionId}`).emit('chat-message', msg);
+            });
+
             // Handle approval responses
             socket.on('approval-response', (data) => {
                 const { sessionId, approved } = data;

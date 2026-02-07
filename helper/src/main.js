@@ -336,6 +336,12 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
       }
     });
 
+    socket.on('chat-message', (data) => {
+      if (mainWindow) {
+        mainWindow.webContents.send('signaling:chat-message', data);
+      }
+    });
+
     socket.on('file-available', (data) => {
       if (mainWindow && data) {
         const base = readConfig().server.replace(/\/$/, '');
