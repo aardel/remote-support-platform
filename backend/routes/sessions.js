@@ -260,16 +260,14 @@ router.post('/:sessionId/approval', async (req, res) => {
     }
 });
 
-// List all sessions for technician
+// List all active sessions (visible to all technicians)
 router.get('/', requireAuth, async (req, res) => {
     try {
-        const technicianId = req.user?.id || req.user?.nextcloudId;
-        const sessions = await Session.findByTechnician(technicianId);
+        const sessions = await Session.findAllActive();
         res.json({ sessions });
     } catch (error) {
         // Fallback to in-memory sessions
-        const sessions = Array.from(SessionService.inMemorySessions.values())
-            .filter(s => s.technician_id === (req.user?.id || req.user?.nextcloudId));
+        const sessions = Array.from(SessionService.inMemorySessions.values());
         res.json({ sessions });
     }
 });

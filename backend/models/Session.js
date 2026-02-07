@@ -66,11 +66,21 @@ class Session {
     
     static async findByTechnician(technicianId) {
         const query = `
-            SELECT * FROM sessions 
-            WHERE technician_id = $1 
+            SELECT * FROM sessions
+            WHERE technician_id = $1
             ORDER BY created_at DESC
         `;
         const result = await pool.query(query, [technicianId]);
+        return result.rows;
+    }
+
+    static async findAllActive() {
+        const query = `
+            SELECT * FROM sessions
+            WHERE expires_at > NOW()
+            ORDER BY created_at DESC
+        `;
+        const result = await pool.query(query);
         return result.rows;
     }
     

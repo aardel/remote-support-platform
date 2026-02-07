@@ -32,7 +32,7 @@ function Dashboard({ user, onLogout }) {
   const setupWebSocket = () => {
     const socket = io(window.location.origin);
 
-    // Listen for new sessions created via helper /assign
+    // Listen for new sessions (from helper /assign or technician /generate)
     socket.on('session-created', (data) => {
       setSessions(prev => {
         const exists = prev.some(s => (s.session_id || s.sessionId) === data.sessionId);
@@ -41,8 +41,11 @@ function Dashboard({ user, onLogout }) {
           session_id: data.sessionId,
           status: data.status || 'waiting',
           created_at: data.created_at || new Date().toISOString(),
+          technician_id: data.technician_id,
           device_id: data.device_id,
-          client_info: data.client_info
+          client_info: data.client_info,
+          link: data.link,
+          downloadUrl: data.downloadUrl
         }, ...prev];
       });
     });

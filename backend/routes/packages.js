@@ -122,11 +122,26 @@ router.post('/generate', requireAuth, async (req, res) => {
             technicianId
         );
         
+        const directLink = `${process.env.SERVER_URL || 'http://localhost:3000'}/support/${sessionId}`;
+
+        // Broadcast to all dashboards so other technicians see it
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('session-created', {
+                sessionId,
+                status: 'waiting',
+                technician_id: technicianId,
+                created_at: new Date().toISOString(),
+                link: directLink,
+                downloadUrl: `/api/packages/download/${sessionId}`
+            });
+        }
+
         res.json({
             success: true,
             sessionId: sessionId,
             downloadUrl: `/api/packages/download/${sessionId}`,
-            directLink: `${process.env.SERVER_URL || 'http://localhost:3000'}/support/${sessionId}`
+            directLink
         });
     } catch (error) {
         console.error('Error generating package:', error);
