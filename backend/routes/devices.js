@@ -3,6 +3,7 @@ const router = express.Router();
 const Device = require('../models/Device');
 const SessionService = require('../services/sessionService');
 const { requireAuth } = require('../middleware/sessionAuth');
+const { geolocate } = require('../services/geolocate');
 
 // Register or update device (called by helper)
 router.post('/register', async (req, res) => {
@@ -31,6 +32,14 @@ router.post('/register', async (req, res) => {
             allowUnattended,
             lastIp: req.ip
         });
+
+        // Async geolocation — don't block the response
+        const clientIp = req.ip || req.headers['x-forwarded-for'];
+        if (clientIp) {
+            geolocate(clientIp).then(geo => {
+                if (geo) Device.updateGeo(deviceId, geo).catch(() => {});
+            }).catch(() => {});
+        }
 
         res.json({ success: true, device });
     } catch (error) {
@@ -85,6 +94,22 @@ router.delete('/:deviceId', requireAuth, async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         console.error('Error deleting device:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Update device names (technician edits customer/machine name)
+router.patch('/:deviceId', requireAuth, async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+        const { customerName, machineName } = req.body;
+        const device = await Device.updateNames(deviceId, { customerName, machineName });
+        if (!device) {
+            return res.status(404).json({ error: 'Device not found' });
+        }
+        res.json({ success: true, device });
+    } catch (error) {
+        console.error('Error updating device:', error);
         res.status(500).json({ error: error.message });
     }
 });

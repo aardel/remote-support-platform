@@ -95,6 +95,32 @@ async function migrate() {
             )
         `);
         
+        // --- Dashboard redesign: new columns ---
+
+        // Devices: customer/machine name + geolocation
+        await client.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255)`);
+        await client.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS machine_name VARCHAR(255)`);
+        await client.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_country VARCHAR(100)`);
+        await client.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_region VARCHAR(100)`);
+        await client.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_city VARCHAR(100)`);
+
+        // Sessions: ended_at for duration + snapshot customer/machine at connect time
+        await client.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS ended_at TIMESTAMP`);
+        await client.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255)`);
+        await client.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS machine_name VARCHAR(255)`);
+
+        // Technician preferences (widget layout, retention)
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS technician_preferences (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                technician_id VARCHAR(255) UNIQUE NOT NULL,
+                dashboard_layout JSONB,
+                session_history_retention_days INTEGER,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+
         // Create indexes
         await client.query('CREATE INDEX IF NOT EXISTS idx_sessions_technician ON sessions(technician_id)');
         await client.query('CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)');

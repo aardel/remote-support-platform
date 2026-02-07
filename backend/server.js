@@ -65,6 +65,8 @@ app.use('/api/devices', devicesRouter);
 app.use('/api/version', require('./routes/version'));
 app.use('/api/helper', require('./routes/helper'));
 app.use('/api/websocket', require('./routes/websocket'));
+app.use('/api/preferences', require('./routes/preferences'));
+app.use('/api/statistics', require('./routes/statistics'));
 
 // Customer support page route (download page with instructions)
 app.get('/support/:sessionId', (req, res) => {

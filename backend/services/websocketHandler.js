@@ -223,8 +223,8 @@ class WebSocketHandler {
                             conn.helper = null;
                             // Clear pending offer when helper disconnects
                             this.pendingOffers.delete(socket.sessionId);
-                            // Update session status to 'waiting' in DB and broadcast
-                            Session.update(socket.sessionId, { status: 'waiting' }).catch(e => {
+                            // Update session status to 'waiting' and record ended_at
+                            Session.update(socket.sessionId, { status: 'waiting', ended_at: new Date() }).catch(e => {
                                 console.error('Failed to update session status on helper disconnect:', e.message);
                             });
                             this.io.emit('session-updated', {

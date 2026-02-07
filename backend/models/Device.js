@@ -88,6 +88,30 @@ class Device {
         return result.rows[0] || null;
     }
 
+    static async updateNames(deviceId, { customerName, machineName }) {
+        const fields = [];
+        const values = [];
+        let i = 1;
+        if (customerName !== undefined) { fields.push(`customer_name = $${i++}`); values.push(customerName || null); }
+        if (machineName !== undefined) { fields.push(`machine_name = $${i++}`); values.push(machineName || null); }
+        if (fields.length === 0) return this.findByDeviceId(deviceId);
+        fields.push(`updated_at = NOW()`);
+        values.push(deviceId);
+        const result = await pool.query(
+            `UPDATE devices SET ${fields.join(', ')} WHERE device_id = $${i} RETURNING *`,
+            values
+        );
+        return result.rows[0] || null;
+    }
+
+    static async updateGeo(deviceId, { country, region, city }) {
+        const result = await pool.query(
+            `UPDATE devices SET last_country = $2, last_region = $3, last_city = $4, updated_at = NOW() WHERE device_id = $1 RETURNING *`,
+            [deviceId, country || null, region || null, city || null]
+        );
+        return result.rows[0] || null;
+    }
+
     static async clearPendingSession(deviceId) {
         const result = await pool.query(
             `UPDATE devices
