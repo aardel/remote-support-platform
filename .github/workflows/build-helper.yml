@@ -86,7 +86,12 @@ jobs:
         run: |
           DEPLOY_PATH="${SERVER_PACKAGES_PATH:-packages}"
           mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          # Support raw PEM or base64-encoded key (avoids "error in libcrypto" when newlines are lost pasting into GitHub)
+          if echo "$SSH_PRIVATE_KEY" | grep -q "-----BEGIN"; then
+            printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          else
+            echo "$SSH_PRIVATE_KEY" | base64 -d > ~/.ssh/deploy_key
+          fi
           chmod 600 ~/.ssh/deploy_key
           SSH_OPTS="-o StrictHostKeyChecking=no -i ~/.ssh/deploy_key"
           ssh $SSH_OPTS ${SERVER_USER}@${SERVER_HOST} "mkdir -p $DEPLOY_PATH"
