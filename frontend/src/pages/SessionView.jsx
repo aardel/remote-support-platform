@@ -309,7 +309,14 @@ function SessionView({ user }) {
       if (!el || !el.tagName) return false;
       const tag = el.tagName.toLowerCase();
       const role = (el.getAttribute && el.getAttribute('role')) || '';
-      return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable || role === 'textbox';
+      if (tag === 'textarea' || el.isContentEditable || role === 'textbox') return true;
+      if (tag === 'select') return true;
+      if (tag === 'input') {
+        const type = (el.type || 'text').toLowerCase();
+        // Only block keys for text-entry inputs, NOT checkboxes/radio/range/etc.
+        return type === 'text' || type === 'password' || type === 'email' || type === 'search' || type === 'url' || type === 'tel' || type === 'number';
+      }
+      return false;
     };
 
     const onKey = (e) => {
@@ -337,18 +344,13 @@ function SessionView({ user }) {
     };
   }, [connected, socket, sessionId]);
 
-  // Track whether user clicked in video area (so we send keys to remote); clear when they click outside
+  // Track whether user clicked in video area (so we send keys to remote)
+  // Only deactivate when clicking inside the files modal (which has its own keyboard needs)
   useEffect(() => {
     if (!connected) return;
-    const container = splitContainerRef.current;
     const onDocMouseDown = (e) => {
       const t = e.target;
-      if (!container || !t || !container.contains(t)) {
-        videoAreaActiveRef.current = false;
-        return;
-      }
-      // Inside container: mark active only if not in files modal
-      const inFilesModal = t.closest && t.closest('.files-modal-overlay');
+      const inFilesModal = t && t.closest && t.closest('.files-modal-overlay');
       videoAreaActiveRef.current = !inFilesModal;
     };
     document.addEventListener('mousedown', onDocMouseDown, true);
