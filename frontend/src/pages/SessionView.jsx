@@ -40,22 +40,31 @@ function SessionView() {
   const [receiving, setReceiving] = useState(false);
   const [remoteRefreshKey, setRemoteRefreshKey] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const chatWindowRef = useRef(null);
+  const controlPanelRef = useRef(null);
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
   const remoteRequestIdRef = useRef(0);
   const pendingGetFilesRef = useRef(new Map());
+  const panelRequestIdRef = useRef(0);
+  const panelListPathRef = useRef('');
+  const sendSelectedToRemoteRef = useRef(null);
 
-  const openChatPopup = () => {
-    if (chatWindowRef.current && !chatWindowRef.current.closed) {
-      chatWindowRef.current.focus();
+  const openControlPanel = () => {
+    if (controlPanelRef.current && !controlPanelRef.current.closed) {
+      controlPanelRef.current.focus();
     } else {
-      chatWindowRef.current = window.open(
-        `/chat.html?sessionId=${encodeURIComponent(sessionId)}`,
-        `chat-${sessionId}`,
-        'width=420,height=520,menubar=no,toolbar=no,location=no,status=no'
+      controlPanelRef.current = window.open(
+        `/control-panel.html?sessionId=${encodeURIComponent(sessionId)}`,
+        `control-panel-${sessionId}`,
+        'width=280,height=340,menubar=no,toolbar=no,location=no,status=no,resizable=yes'
       );
     }
+  };
+
+  const openChatPopup = () => {
+    openControlPanel();
     setChatUnread(0);
   };
 
@@ -176,9 +185,12 @@ function SessionView() {
     });
 
     newSocket.on('list-remote-dir-result', (data) => {
-      setRemoteLoading(false);
-      if (data.error) setRemoteError(data.error);
-      else setRemoteEntries(data.list || []);
+      const isPanelRequest = typeof data.requestId === 'string' && data.requestId.startsWith('panel-');
+      if (!isPanelRequest) {
+        setRemoteLoading(false);
+        if (data.error) setRemoteError(data.error);
+        else setRemoteEntries(data.list || []);
+      }
     });
     newSocket.on('get-remote-file-result', (data) => {
       const pending = pendingGetFilesRef.current.get(data.requestId);
@@ -285,6 +297,83 @@ function SessionView() {
       socket.emit('set-stream-quality', { sessionId, quality: streamQuality });
     }
   }, [connected]);
+
+  // BroadcastChannel: sync state to control panel and handle commands from panel
+  useEffect(() => {
+    const channelName = 'session-control-' + sessionId;
+    const channel = new BroadcastChannel(channelName);
+
+    const postState = () => {
+      channel.postMessage({
+        type: 'state-update',
+        monitorIndex,
+        streamQuality,
+        splitView,
+        connected,
+        chatUnread
+      });
+    };
+    postState();
+
+    channel.onmessage = (e) => {
+      const msg = e.data;
+      if (msg.type === 'switch-monitor') {
+        switchMonitor(typeof msg.index === 'number' ? msg.index : 0);
+      }
+      if (msg.type === 'set-quality' && msg.quality) {
+        setStreamQuality(msg.quality);
+        if (socket && sessionId) socket.emit('set-stream-quality', { sessionId, quality: msg.quality });
+      }
+      if (msg.type === 'toggle-split') {
+        setSplitView(!!msg.enabled);
+      }
+      if (msg.type === 'exit-fullscreen') {
+        const el = document.fullscreenElement;
+        if (el && el.classList.contains('video-container')) el.exitFullscreen?.();
+      }
+      if (msg.type === 'disconnect') {
+        disconnect();
+      }
+      if (msg.type === 'files-list-remote') {
+        const path = (msg.path === 'Home' || msg.path === '') ? '' : (msg.path ?? '');
+        panelListPathRef.current = path;
+        const reqId = 'panel-' + (++panelRequestIdRef.current);
+        socket?.emit('list-remote-dir', { sessionId, path, requestId: reqId });
+      }
+      if (msg.type === 'open-file-picker') {
+        fileInputRef.current?.click();
+      }
+      if (msg.type === 'files-send') {
+        sendSelectedToRemoteRef.current?.();
+      }
+      if (msg.type === 'files-receive') {
+        setFilesOpen(true);
+        setRemoteRefreshKey((k) => k + 1);
+      }
+    };
+
+    return () => channel.close();
+  }, [sessionId, monitorIndex, streamQuality, splitView, connected, chatUnread]);
+
+  // Post files-remote-list to control panel when list-remote-dir-result is for panel request
+  useEffect(() => {
+    if (!socket || !sessionId) return;
+    const handler = (data) => {
+      const id = data.requestId;
+      if (typeof id !== 'string' || !id.startsWith('panel-')) return;
+      try {
+        const channel = new BroadcastChannel('session-control-' + sessionId);
+        channel.postMessage({
+          type: 'files-remote-list',
+          path: panelListPathRef.current,
+          list: data.error ? [] : (data.list || [])
+        });
+        channel.close();
+      } catch (_) {}
+    };
+    socket.on('list-remote-dir-result', handler);
+    return () => socket.off('list-remote-dir-result', handler);
+  }, [socket, sessionId]);
 
   // Request remote directory listing when file modal opens, path changes, or refresh
   useEffect(() => {
@@ -470,6 +559,33 @@ function SessionView() {
       setUploading(false);
     }
   };
+  sendSelectedToRemoteRef.current = sendSelectedToRemote;
+
+  const handleFullscreenToggle = async () => {
+    const container = splitContainerRef.current;
+    if (!container) return;
+    if (document.fullscreenElement) {
+      await document.exitFullscreen?.();
+      setIsFullscreen(false);
+    } else {
+      try {
+        await container.requestFullscreen?.();
+        setIsFullscreen(true);
+        openControlPanel();
+      } catch (err) {
+        console.error('Fullscreen failed', err);
+      }
+    }
+  };
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      const full = !!document.fullscreenElement && document.fullscreenElement.classList?.contains('video-container');
+      setIsFullscreen(full);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
 
   const downloadFile = (fileId, fileName) => {
     window.open(`${window.location.origin}/api/files/download/${fileId}`, '_blank');
@@ -645,6 +761,15 @@ function SessionView() {
                   title="Split vertical screen: show top and bottom halves side by side"
                 />
                 <span>Split view</span>
+              </label>
+              <label className="split-view-toggle">
+                <input
+                  type="checkbox"
+                  checked={isFullscreen}
+                  onChange={handleFullscreenToggle}
+                  title="Fullscreen viewer and open control panel"
+                />
+                <span>Fullscreen</span>
               </label>
             </>
           )}
