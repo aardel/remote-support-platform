@@ -3,7 +3,13 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import axios from 'axios';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
+import Layout from './components/Layout';
+import WidgetDashboard from './pages/WidgetDashboard';
+import ClassicDashboard from './pages/ClassicDashboard';
+import DevicesPage from './pages/DevicesPage';
+import SessionsPage from './pages/SessionsPage';
+import StatisticsPage from './pages/StatisticsPage';
+import HelperTemplatesPage from './pages/HelperTemplatesPage';
 import SessionView from './pages/SessionView';
 import './App.css';
 
@@ -11,6 +17,7 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [generateModalOpen, setGenerateModalOpen] = useState(false);
 
   useEffect(() => {
     const checkSession = async () => {
@@ -41,36 +48,40 @@ function App() {
   };
 
   if (loading) {
-    return <div>Loading...</div>;
+    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: '#64748b' }}>Loading...</div>;
   }
 
   return (
     <Router>
       <Routes>
-        <Route 
-          path="/login" 
-          element={
-            isAuthenticated ? <Navigate to="/dashboard" /> : <Login />
-          } 
+        <Route
+          path="/login"
+          element={isAuthenticated ? <Navigate to="/dashboard" /> : <Login />}
         />
-        <Route 
-          path="/register" 
-          element={
-            isAuthenticated ? <Navigate to="/dashboard" /> : <Register />
-          } 
+        <Route
+          path="/register"
+          element={isAuthenticated ? <Navigate to="/dashboard" /> : <Register />}
         />
-        <Route 
-          path="/dashboard" 
-          element={
-            isAuthenticated ? <Dashboard user={user} onLogout={handleLogout} /> : <Navigate to="/login" />
-          } 
+        {/* Session view: full screen, no layout */}
+        <Route
+          path="/session/:sessionId"
+          element={isAuthenticated ? <SessionView user={user} /> : <Navigate to="/login" />}
         />
-        <Route 
-          path="/session/:sessionId" 
+        {/* All other authenticated pages use the Layout shell */}
+        <Route
           element={
-            isAuthenticated ? <SessionView user={user} /> : <Navigate to="/login" />
-          } 
-        />
+            isAuthenticated
+              ? <Layout user={user} onLogout={handleLogout} onGenerateClick={() => setGenerateModalOpen(true)} />
+              : <Navigate to="/login" />
+          }
+        >
+          <Route path="/dashboard" element={<WidgetDashboard />} />
+          <Route path="/dashboard/classic" element={<ClassicDashboard user={user} onLogout={handleLogout} />} />
+          <Route path="/devices" element={<DevicesPage />} />
+          <Route path="/sessions" element={<SessionsPage />} />
+          <Route path="/statistics" element={<StatisticsPage />} />
+          <Route path="/helper-templates" element={<HelperTemplatesPage />} />
+        </Route>
         <Route path="/" element={<Navigate to="/dashboard" />} />
       </Routes>
     </Router>
