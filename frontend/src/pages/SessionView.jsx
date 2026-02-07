@@ -732,110 +732,109 @@ function SessionView({ user }) {
         </div>
       )}
 
-      {filesOpen && (
-        <div className="files-modal-overlay" onClick={() => setFilesOpen(false)} role="dialog" aria-modal="true" aria-label="File transfer">
-          <div className="files-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="files-modal-header">
-              <h3 className="files-modal-title">File transfer</h3>
-              <button type="button" className="files-modal-close" onClick={() => setFilesOpen(false)} aria-label="Close">×</button>
-            </div>
-            <div className="files-modal-body two-panel">
-              <div className="files-panel-left">
-                <div className="files-panel-title">Your computer</div>
-                <div className="files-toolbar">
-                  <input ref={fileInputRef} type="file" multiple onChange={addFilesToSend} style={{ display: 'none' }} />
-                  <input ref={folderInputRef} type="file" webkitDirectory multiple onChange={addFolderToSend} style={{ display: 'none' }} />
-                  <button type="button" className="files-add-btn" onClick={() => fileInputRef.current?.click()} disabled={uploading}>Add files</button>
-                  <button type="button" className="files-add-btn" onClick={() => folderInputRef.current?.click()} disabled={uploading}>Add folder</button>
-                  <button
-                    type="button"
-                    className="files-send-right-btn"
-                    onClick={sendSelectedToRemote}
-                    disabled={uploading || !filesToSend.length}
-                    title="Send to remote computer"
-                  >
-                    {uploading ? 'Sending…' : 'Send to remote →'}
-                  </button>
-                </div>
-                <div className="file-browser-tree">
-                  {filesToSend.length === 0 ? (
-                    <div className="files-empty">Add files or open a folder to browse</div>
-                  ) : (
-                    renderTree(buildFileTree(filesToSend))
-                  )}
-                </div>
+      <div className={`video-container ${splitView ? 'video-container-split' : ''}`} ref={splitContainerRef}>
+        {filesOpen && (
+          <div className="files-modal-overlay" onClick={() => setFilesOpen(false)} role="dialog" aria-modal="true" aria-label="File transfer">
+            <div className="files-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="files-modal-header">
+                <h3 className="files-modal-title">File transfer</h3>
+                <button type="button" className="files-modal-close" onClick={() => setFilesOpen(false)} aria-label="Close">×</button>
               </div>
-              <div className="files-panel-divider" />
-              <div className="files-panel-right">
-                <div className="files-panel-title">Remote computer</div>
-                <div className="files-toolbar files-remote-toolbar">
-                  <button type="button" className="files-up-btn" onClick={goRemoteUp} disabled={!remotePath} title="Up">↑ Up</button>
-                  <button type="button" className="files-refresh-btn" onClick={() => setRemoteRefreshKey((k) => k + 1)} title="Refresh">Refresh</button>
-                  <button
-                    type="button"
-                    className="files-receive-btn"
-                    onClick={receiveSelectedFromRemote}
-                    disabled={receiving || selectedRemotePaths.size === 0}
-                    title="Download selected from remote"
-                  >
-                    {receiving ? 'Receiving…' : '← Receive'}
-                  </button>
+              <div className="files-modal-body two-panel">
+                <div className="files-panel-left">
+                  <div className="files-panel-title">Your computer</div>
+                  <div className="files-toolbar">
+                    <input ref={fileInputRef} type="file" multiple onChange={addFilesToSend} style={{ display: 'none' }} />
+                    <input ref={folderInputRef} type="file" webkitDirectory multiple onChange={addFolderToSend} style={{ display: 'none' }} />
+                    <button type="button" className="files-add-btn" onClick={() => fileInputRef.current?.click()} disabled={uploading}>Add files</button>
+                    <button type="button" className="files-add-btn" onClick={() => folderInputRef.current?.click()} disabled={uploading}>Add folder</button>
+                    <button
+                      type="button"
+                      className="files-send-right-btn"
+                      onClick={sendSelectedToRemote}
+                      disabled={uploading || !filesToSend.length}
+                      title="Send to remote computer"
+                    >
+                      {uploading ? 'Sending…' : 'Send to remote →'}
+                    </button>
+                  </div>
+                  <div className="file-browser-tree">
+                    {filesToSend.length === 0 ? (
+                      <div className="files-empty">Add files or open a folder to browse</div>
+                    ) : (
+                      renderTree(buildFileTree(filesToSend))
+                    )}
+                  </div>
                 </div>
-                <div className="files-remote-path" title={remotePath || 'Home'}>{remotePath || 'Home'}</div>
-                {remoteError && <div className="files-remote-error">{remoteError}</div>}
-                <div className="file-browser-table-wrap">
-                  {remoteLoading ? (
-                    <div className="files-empty">Loading…</div>
-                  ) : (
-                    <table className="file-browser-table">
-                      <thead>
-                        <tr>
-                          <th className="col-select" />
-                          <th className="col-icon" />
-                          <th className="col-name">Name</th>
-                          <th className="col-size">Size</th>
-                          <th className="col-date">Date</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {remoteEntries.map((e) => (
-                          <tr
-                            key={e.path}
-                            className={e.isDirectory ? 'file-row-dir' : ''}
-                            onDoubleClick={() => goRemoteInto(e)}
-                          >
-                            <td className="col-select">
-                              {!e.isDirectory && (
-                                <input
-                                  type="checkbox"
-                                  checked={selectedRemotePaths.has(e.path)}
-                                  onChange={() => toggleRemoteSelection(e.path)}
-                                  onClick={(ev) => ev.stopPropagation()}
-                                />
-                              )}
-                            </td>
-                            <td className="col-icon">
-                              <span className="file-type-icon">{e.isDirectory ? '📁' : '📄'}</span>
-                            </td>
-                            <td className="col-name" title={e.name}>{e.name}</td>
-                            <td className="col-size">{e.isDirectory ? '—' : `${(e.size / 1024).toFixed(1)} KB`}</td>
-                            <td className="col-date">{e.mtime ? new Date(e.mtime).toLocaleString() : '—'}</td>
+                <div className="files-panel-divider" />
+                <div className="files-panel-right">
+                  <div className="files-panel-title">Remote computer</div>
+                  <div className="files-toolbar files-remote-toolbar">
+                    <button type="button" className="files-up-btn" onClick={goRemoteUp} disabled={!remotePath} title="Up">↑ Up</button>
+                    <button type="button" className="files-refresh-btn" onClick={() => setRemoteRefreshKey((k) => k + 1)} title="Refresh">Refresh</button>
+                    <button
+                      type="button"
+                      className="files-receive-btn"
+                      onClick={receiveSelectedFromRemote}
+                      disabled={receiving || selectedRemotePaths.size === 0}
+                      title="Download selected from remote"
+                    >
+                      {receiving ? 'Receiving…' : '← Receive'}
+                    </button>
+                  </div>
+                  <div className="files-remote-path" title={remotePath || 'Home'}>{remotePath || 'Home'}</div>
+                  {remoteError && <div className="files-remote-error">{remoteError}</div>}
+                  <div className="file-browser-table-wrap">
+                    {remoteLoading ? (
+                      <div className="files-empty">Loading…</div>
+                    ) : (
+                      <table className="file-browser-table">
+                        <thead>
+                          <tr>
+                            <th className="col-select" />
+                            <th className="col-icon" />
+                            <th className="col-name">Name</th>
+                            <th className="col-size">Size</th>
+                            <th className="col-date">Date</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                  {!remoteLoading && remoteEntries.length === 0 && !remoteError && (
-                    <div className="files-empty">No items. Use Up to go back or send files here.</div>
-                  )}
+                        </thead>
+                        <tbody>
+                          {remoteEntries.map((e) => (
+                            <tr
+                              key={e.path}
+                              className={e.isDirectory ? 'file-row-dir' : ''}
+                              onDoubleClick={() => goRemoteInto(e)}
+                            >
+                              <td className="col-select">
+                                {!e.isDirectory && (
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedRemotePaths.has(e.path)}
+                                    onChange={() => toggleRemoteSelection(e.path)}
+                                    onClick={(ev) => ev.stopPropagation()}
+                                  />
+                                )}
+                              </td>
+                              <td className="col-icon">
+                                <span className="file-type-icon">{e.isDirectory ? '📁' : '📄'}</span>
+                              </td>
+                              <td className="col-name" title={e.name}>{e.name}</td>
+                              <td className="col-size">{e.isDirectory ? '—' : `${(e.size / 1024).toFixed(1)} KB`}</td>
+                              <td className="col-date">{e.mtime ? new Date(e.mtime).toLocaleString() : '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                    {!remoteLoading && remoteEntries.length === 0 && !remoteError && (
+                      <div className="files-empty">No items. Use Up to go back or send files here.</div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
-
-      <div className={`video-container ${splitView ? 'video-container-split' : ''}`} ref={splitContainerRef}>
+        )}
         {splitView && remoteStream ? (
           <>
             <div
