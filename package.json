@@ -1,6 +1,6 @@
 {
   "name": "remote-support-platform",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Browser-based remote support: Electron helper + WebRTC screen share, mouse/keyboard control, file transfer. Self-hosted.",
   "main": "backend/server.js",
   "scripts": {
