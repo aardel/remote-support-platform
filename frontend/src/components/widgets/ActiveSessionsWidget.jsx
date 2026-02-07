@@ -1,0 +1,40 @@
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import WidgetCard from './WidgetCard';
+
+function ActiveSessionsWidget({ size }) {
+  const [sessions, setSessions] = useState([]);
+  const navigate = useNavigate();
+  const limit = size === 'large' ? 5 : size === 'medium' ? 3 : 0;
+
+  useEffect(() => {
+    axios.get('/api/sessions').then(r => setSessions(r.data.sessions || [])).catch(() => {});
+  }, []);
+
+  const connect = async (sid) => {
+    try {
+      const r = await axios.post(`/api/sessions/${sid}/connect`, {});
+      if (r.data.approved) navigate(`/session/${sid}`);
+    } catch (_) {}
+  };
+
+  return (
+    <WidgetCard title="Active Sessions" size={size}>
+      <div className="widget-stat">{sessions.length}</div>
+      {limit > 0 && sessions.slice(0, limit).map(s => {
+        const sid = s.session_id || s.sessionId;
+        return (
+          <div key={sid} className="widget-row">
+            <span className="widget-row-id">{sid}</span>
+            <span className={`widget-badge ${s.status === 'connected' ? 'wb-ok' : 'wb-warn'}`}>{s.status}</span>
+            {s.status === 'connected' && <button className="widget-link-btn" onClick={() => connect(sid)}>Connect</button>}
+          </div>
+        );
+      })}
+      <Link to="/sessions" className="widget-view-all">View all &rarr;</Link>
+    </WidgetCard>
+  );
+}
+
+export default ActiveSessionsWidget;

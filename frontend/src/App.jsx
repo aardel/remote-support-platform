@@ -20,6 +20,13 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
 
+  // Listen for custom event from WidgetDashboard's GeneratePackageWidget
+  useEffect(() => {
+    const handler = () => setGenerateModalOpen(true);
+    window.addEventListener('open-generate-modal', handler);
+    return () => window.removeEventListener('open-generate-modal', handler);
+  }, []);
+
   useEffect(() => {
     const checkSession = async () => {
       try {
