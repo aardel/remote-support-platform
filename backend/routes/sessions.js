@@ -85,10 +85,13 @@ router.get('/:sessionId', async (req, res) => {
 // Register session (when user connects)
 router.post('/register', async (req, res) => {
     try {
-        const { sessionId, clientInfo, allowUnattended, vncPort, deviceId, deviceName } = req.body;
-        
+        const { sessionId, clientInfo, allowUnattended, vncPort, deviceId, deviceName, capabilities } = req.body;
+
+        // Merge capabilities into clientInfo for storage
+        const enrichedClientInfo = { ...clientInfo, capabilities: capabilities || {} };
+
         const sessionUpdate = {
-            client_info: clientInfo,
+            client_info: enrichedClientInfo,
             vnc_port: vncPort || 5900,
             device_id: deviceId || null,
             status: 'connected',
@@ -141,13 +144,14 @@ router.post('/register', async (req, res) => {
             // Emit to specific session room
             io.to(`session-${sessionId}`).emit('session-connected', {
                 sessionId,
-                clientInfo,
+                clientInfo: enrichedClientInfo,
+                capabilities: capabilities || {},
                 status: 'connected'
             });
             // Also broadcast globally for dashboard updates
             io.emit('session-updated', {
                 sessionId,
-                clientInfo,
+                clientInfo: enrichedClientInfo,
                 status: 'connected'
             });
         }

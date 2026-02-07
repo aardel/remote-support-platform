@@ -207,6 +207,11 @@
   font-size: 12px;
 }
 
+.template-version {
+  color: #059669;
+  font-weight: 500;
+}
+
 .sessions-list h2 {
   color: #333;
   margin-bottom: 20px;

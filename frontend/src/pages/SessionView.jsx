@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
 import './SessionView.css';
@@ -22,6 +22,10 @@ function SessionView() {
   const [switchingMonitor, setSwitchingMonitor] = useState(false);
   const [streamQuality, setStreamQuality] = useState('balanced');
   const [splitView, setSplitView] = useState(false);
+  const [splitRatio, setSplitRatio] = useState(0.5);
+  const [draggingSplit, setDraggingSplit] = useState(false);
+  const splitContainerRef = useRef(null);
+  const [helperCapabilities, setHelperCapabilities] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const [files, setFiles] = useState([]);
   const [filesOpen, setFilesOpen] = useState(false);
@@ -143,6 +147,11 @@ function SessionView() {
       }
     });
 
+    newSocket.on('helper-capabilities', (data) => {
+      console.log('Helper capabilities:', data.capabilities);
+      setHelperCapabilities(data.capabilities);
+    });
+
     newSocket.on('file-available', () => {
       loadFiles();
     });
@@ -190,6 +199,26 @@ function SessionView() {
     };
   }, [sessionId]);
 
+  // Sync stream to whichever video element(s) are currently mounted
+  useLayoutEffect(() => {
+    if (!remoteStream) return;
+    if (splitView) {
+      if (videoTopRef.current) {
+        videoTopRef.current.srcObject = remoteStream;
+        videoTopRef.current.play().catch(() => {});
+      }
+      if (videoBottomRef.current) {
+        videoBottomRef.current.srcObject = remoteStream;
+        videoBottomRef.current.play().catch(() => {});
+      }
+    } else {
+      if (videoRef.current) {
+        videoRef.current.srcObject = remoteStream;
+        videoRef.current.play().catch(() => {});
+      }
+    }
+  }, [remoteStream, splitView]);
+
   // Update ICE candidate handler when peerConnection changes
   useEffect(() => {
     if (!socket || !peerConnection) return;
@@ -211,6 +240,25 @@ function SessionView() {
   useEffect(() => {
     if (sessionId) loadFiles();
   }, [sessionId]);
+
+  // Draggable split divider
+  useEffect(() => {
+    if (!draggingSplit) return;
+    const onMove = (e) => {
+      const container = splitContainerRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const ratio = (e.clientX - rect.left) / rect.width;
+      setSplitRatio(Math.max(0.2, Math.min(0.8, ratio)));
+    };
+    const onUp = () => setDraggingSplit(false);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [draggingSplit]);
 
   // Apply stream quality preset when connection is established
   useEffect(() => {
@@ -275,26 +323,26 @@ function SessionView() {
 
   // half: undefined = single view, 'top' = top half, 'bottom' = bottom half (for split view)
   const handleMouseEvent = (e, half) => {
-    if (!socket || !connected) return;
+    e.preventDefault();
+    if (!socket || !connected) {
+      if (e.type === 'mousedown') console.warn('[mouse] blocked: socket=', !!socket, 'connected=', connected);
+      return;
+    }
 
     const video = half === 'top' ? videoTopRef.current : half === 'bottom' ? videoBottomRef.current : videoRef.current;
-    if (!video) return;
+    if (!video) { if (e.type === 'mousedown') console.warn('[mouse] no video ref'); return; }
 
     const vw = video.videoWidth;
     const vh = video.videoHeight;
-    if (!vw || !vh) return;
+    if (!vw || !vh) { if (e.type === 'mousedown') console.warn('[mouse] no video dimensions:', vw, vh); return; }
 
-    // In split view use wrapper rect (visible area); in single view use video rect
-    const rect = half === 'top' && splitTopRef.current
-      ? splitTopRef.current.getBoundingClientRect()
-      : half === 'bottom' && splitBottomRef.current
-        ? splitBottomRef.current.getBoundingClientRect()
-        : video.getBoundingClientRect();
-
-    const contentHeight = half === 'top' || half === 'bottom' ? vh / 2 : vh;
-    const scale = Math.min(rect.width / vw, rect.height / contentHeight);
+    // With object-view-box, each split video renders only its cropped portion.
+    // The visible content aspect ratio changes based on the crop.
+    const cropH = half === 'top' ? vh * splitRatio : half === 'bottom' ? vh * (1 - splitRatio) : vh;
+    const rect = video.getBoundingClientRect();
+    const scale = Math.min(rect.width / vw, rect.height / cropH);
     const contentW = vw * scale;
-    const contentH = contentHeight * scale;
+    const contentH = cropH * scale;
     const contentLeft = rect.left + (rect.width - contentW) / 2;
     const contentTop = rect.top + (rect.height - contentH) / 2;
     let x = (e.clientX - contentLeft) / contentW;
@@ -302,9 +350,11 @@ function SessionView() {
     x = Math.max(0, Math.min(1, x));
     y = Math.max(0, Math.min(1, y));
 
-    if (half === 'top') y = y * 0.5;
-    else if (half === 'bottom') y = 0.5 + y * 0.5;
+    // Map local y back to full-screen y
+    if (half === 'top') y = y * splitRatio;
+    else if (half === 'bottom') y = splitRatio + y * (1 - splitRatio);
 
+    if (e.type === 'mousedown') console.log('[mouse] emit', e.type, 'x=', x.toFixed(3), 'y=', y.toFixed(3), 'btn=', e.button);
     socket.emit('remote-mouse', {
       sessionId,
       type: e.type,
@@ -521,6 +571,18 @@ function SessionView() {
           <span className={`status-indicator ${connected ? 'connected' : 'disconnected'}`}>
             {connected ? '🟢 ' : '⚪ '}{status}
           </span>
+          {connected && helperCapabilities && (
+            <span className={`capability-badge ${helperCapabilities.robotjs ? 'cap-ok' : 'cap-warn'}`}
+              title={helperCapabilities.robotjs
+                ? 'Remote mouse/keyboard control is available'
+                : helperCapabilities.platform === 'darwin'
+                  ? 'Remote control disabled — ask user to grant Accessibility permission in System Settings → Privacy & Security → Accessibility'
+                  : 'Remote control disabled — robotjs not available on helper'
+              }
+            >
+              {helperCapabilities.robotjs ? '🖱 Control: ON' : '🖱 Control: OFF'}
+            </span>
+          )}
         </div>
         <div className="session-controls">
           {connected && (
@@ -690,7 +752,7 @@ function SessionView() {
         </div>
       )}
 
-      <div className={`video-container ${splitView ? 'video-container-split' : ''}`}>
+      <div className={`video-container ${splitView ? 'video-container-split' : ''}`} ref={splitContainerRef}>
         {splitView && remoteStream ? (
           <>
             <div
@@ -700,6 +762,7 @@ function SessionView() {
               onMouseMove={(e) => handleMouseEvent(e, 'top')}
               onMouseDown={(e) => handleMouseEvent(e, 'top')}
               onMouseUp={(e) => handleMouseEvent(e, 'top')}
+              onContextMenu={(e) => handleMouseEvent(e, 'top')}
               onKeyDown={handleKeyEvent}
               onKeyUp={handleKeyEvent}
               tabIndex={0}
@@ -707,11 +770,22 @@ function SessionView() {
             >
               <video
                 ref={videoTopRef}
-                srcObject={remoteStream}
                 autoPlay
                 playsInline
-                style={{ width: '100%', height: '200%', objectFit: 'contain', position: 'absolute', top: 0, left: 0, right: 0 }}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  objectViewBox: `inset(0% 0% ${(1 - splitRatio) * 100}% 0%)`
+                }}
               />
+            </div>
+            <div
+              className="split-divider"
+              onMouseDown={(e) => { e.preventDefault(); setDraggingSplit(true); }}
+              title={`Split: ${Math.round(splitRatio * 100)}% / ${Math.round((1 - splitRatio) * 100)}%`}
+            >
+              <div className="split-divider-handle" />
             </div>
             <div
               ref={splitBottomRef}
@@ -720,33 +794,42 @@ function SessionView() {
               onMouseMove={(e) => handleMouseEvent(e, 'bottom')}
               onMouseDown={(e) => handleMouseEvent(e, 'bottom')}
               onMouseUp={(e) => handleMouseEvent(e, 'bottom')}
+              onContextMenu={(e) => handleMouseEvent(e, 'bottom')}
+              onKeyDown={handleKeyEvent}
+              onKeyUp={handleKeyEvent}
+              tabIndex={0}
               role="presentation"
             >
               <video
                 ref={videoBottomRef}
-                srcObject={remoteStream}
                 autoPlay
                 playsInline
-                style={{ width: '100%', height: '200%', objectFit: 'contain', position: 'absolute', top: '-100%', left: 0, right: 0 }}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  objectViewBox: `inset(${splitRatio * 100}% 0% 0% 0%)`
+                }}
               />
             </div>
           </>
         ) : (
           <video
             ref={videoRef}
-            srcObject={remoteStream || undefined}
             autoPlay
             playsInline
             onClick={(e) => handleMouseEvent(e)}
             onMouseMove={(e) => handleMouseEvent(e)}
             onMouseDown={(e) => handleMouseEvent(e)}
             onMouseUp={(e) => handleMouseEvent(e)}
+            onContextMenu={(e) => handleMouseEvent(e)}
             onKeyDown={handleKeyEvent}
             onKeyUp={handleKeyEvent}
             tabIndex={0}
             style={{
               width: '100%',
               height: '100%',
+              objectFit: 'contain',
               backgroundColor: '#000',
               cursor: connected ? 'crosshair' : 'default'
             }}

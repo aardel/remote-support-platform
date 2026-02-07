@@ -15,6 +15,12 @@ Principles and backlog for the technician dashboard and session view. Goal: **mi
 - **Dashboard**: Header (title, user, Logout) → **Search** (single input filtering both Devices and Sessions by session ID, hostname, device name) → Registered Devices (cards) → Generate Package + Helper Templates → Active Sessions (cards) → **Footer** (app version from `/api/version`). Single scroll; search implemented; no status filter or sort yet.
 - **SessionView**: Header (session, status, Monitor, Stream quality, Split view, Files, Disconnect) → video area (single or split) → file-transfer modal (two-panel, remote file browser).
 
+### Split view (intended behavior)
+
+- **Horizontal/landscape window**: Remote screen is split down the middle. **Left frame** = upper (top) half of the remote image; **Right frame** = lower (bottom) half. Implemented via two panels (`.split-view-top`, `.split-view-bottom`) with the same video stream; first panel shows `top: 0` (top 50%), second shows `top: -100%` (bottom 50%). Layout: `flex-direction: row`.
+- **Vertical/portrait window**: Same two halves stack vertically so each gets full width: **Top frame** = upper half, **Bottom frame** = lower half. Media query `(orientation: portrait), (max-aspect-ratio: 1/1)` switches to `flex-direction: column`.
+- Mouse coordinates in split view map correctly: clicks in the top panel send y in [0, 0.5], clicks in the bottom panel send y in [0.5, 1]. Refs: `SessionView.jsx` (handleMouseEvent, split view video styles), `SessionView.css` (`.video-container-split`, `.split-view-half`).
+
 ## Recent state (ui-steward review)
 
 - **Done**: Search box above Devices and Sessions; version in dashboard footer; clear sections (Devices, Actions, Templates, Sessions).
@@ -49,4 +55,4 @@ Principles and backlog for the technician dashboard and session view. Goal: **mi
 - Dashboard: `frontend/src/pages/Dashboard.jsx`, `Dashboard.css`
 - Session view: `frontend/src/pages/SessionView.jsx`, `SessionView.css`
 
-Last updated: 2025-02-06 (ui-steward pass)
+Last updated: 2025-02-07 (split-view behavior documented; ui-steward check)

@@ -131,9 +131,17 @@ class WebSocketHandler {
                 });
             });
 
+            // Helper capabilities: forward to technician so they see control status
+            socket.on('helper-capabilities', (data) => {
+                const { sessionId } = data;
+                console.log(`Helper capabilities for session ${sessionId}:`, JSON.stringify(data.capabilities));
+                socket.to(`session-${sessionId}`).emit('helper-capabilities', data);
+            });
+
             // Remote control: Mouse events from technician
             socket.on('remote-mouse', (data) => {
                 const { sessionId } = data;
+                if (data.type === 'mousedown') console.log(`[mouse] forwarding ${data.type} to session-${sessionId} x=${data.x?.toFixed(3)} y=${data.y?.toFixed(3)}`);
                 // Forward to helper
                 socket.to(`session-${sessionId}`).emit('remote-mouse', data);
             });

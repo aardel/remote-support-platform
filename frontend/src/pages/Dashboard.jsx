@@ -335,9 +335,11 @@ function Dashboard({ user, onLogout }) {
               <div className="template-status">
                 <div className={`template-status-item ${templateStatus?.exe?.available ? 'ready' : 'missing'}`}>
                   EXE: {templateStatus?.exe?.available ? 'Installed' : 'Missing'}
+                  {templateStatus?.exe?.version && <span className="template-version"> · v{templateStatus.exe.version}</span>}
                 </div>
                 <div className={`template-status-item ${templateStatus?.dmg?.available ? 'ready' : 'missing'}`}>
                   DMG: {templateStatus?.dmg?.available ? 'Installed' : 'Missing'}
+                  {templateStatus?.dmg?.version && <span className="template-version"> · v{templateStatus.dmg.version}</span>}
                 </div>
               </div>
               <div className="template-meta">
@@ -345,12 +347,14 @@ function Dashboard({ user, onLogout }) {
                   <span className="template-meta-label">EXE</span>
                   <span className="template-meta-value">
                     {formatBytes(templateStatus?.exe?.size)} · {formatDateTime(templateStatus?.exe?.updatedAt)}
+                    {templateStatus?.exe?.version && ` · v${templateStatus.exe.version}`}
                   </span>
                 </div>
                 <div className="template-meta-row">
                   <span className="template-meta-label">DMG</span>
                   <span className="template-meta-value">
                     {formatBytes(templateStatus?.dmg?.size)} · {formatDateTime(templateStatus?.dmg?.updatedAt)}
+                    {templateStatus?.dmg?.version && ` · v${templateStatus.dmg.version}`}
                   </span>
                 </div>
               </div>

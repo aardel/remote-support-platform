@@ -20,6 +20,13 @@ function getTemplateStatus() {
     const packagesDir = path.join(__dirname, '../../packages');
     const types = ['exe', 'dmg'];
     const templates = {};
+    let version = null;
+    const versionPath = path.join(packagesDir, 'support-template.version');
+    if (fs.existsSync(versionPath)) {
+        try {
+            version = fs.readFileSync(versionPath, 'utf8').trim();
+        } catch (e) { /* ignore */ }
+    }
 
     for (const type of types) {
         const filePath = path.join(packagesDir, `support-template.${type}`);
@@ -28,13 +35,15 @@ function getTemplateStatus() {
             templates[type] = {
                 available: true,
                 size: stats.size,
-                updatedAt: stats.mtime
+                updatedAt: stats.mtime,
+                version: version
             };
         } else {
             templates[type] = {
                 available: false,
                 size: null,
-                updatedAt: null
+                updatedAt: null,
+                version: version
             };
         }
     }

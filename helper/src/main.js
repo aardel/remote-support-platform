@@ -124,6 +124,11 @@ ipcMain.handle('helper:get-info', () => {
 
 ipcMain.handle('helper:get-version', () => app.getVersion());
 
+ipcMain.handle('helper:get-capabilities', () => ({
+  robotjs: !!robot,
+  platform: process.platform
+}));
+
 ipcMain.handle('helper:register-session', async (_event, payload) => {
   const deviceId = getDeviceId();
   const config = readConfig();
@@ -470,6 +475,15 @@ ipcMain.handle('helper:socket-send-offer', async (_event, data) => {
 ipcMain.handle('helper:socket-send-ice', async (_event, data) => {
   if (socket) {
     socket.emit('webrtc-ice-candidate', data);
+    return { success: true };
+  }
+  throw new Error('Socket not connected');
+});
+
+// Generic socket emit (for capability reporting, etc.)
+ipcMain.handle('helper:socket-emit', async (_event, eventName, data) => {
+  if (socket) {
+    socket.emit(eventName, data);
     return { success: true };
   }
   throw new Error('Socket not connected');

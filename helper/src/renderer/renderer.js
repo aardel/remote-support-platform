@@ -14,6 +14,7 @@ let currentSessionId = null;
 let isConnected = false;
 let screenSources = [];
 let receivedFiles = [];
+let capabilities = { robotjs: false, platform: 'unknown' };
 
 function log(message) {
   const line = document.createElement('div');
@@ -49,18 +50,34 @@ async function init() {
   const versionEl = document.getElementById('helperVersion');
   if (versionEl) versionEl.textContent = `Helper v${version}`;
 
+  // Fetch capabilities early
+  try {
+    capabilities = await window.helperApi.getCapabilities();
+    log(`Capabilities: robotjs=${capabilities.robotjs}, platform=${capabilities.platform}`);
+    if (!capabilities.robotjs) {
+      log('WARNING: Remote mouse/keyboard control is disabled (robotjs not loaded).');
+      if (capabilities.platform === 'darwin') {
+        log('Grant Accessibility permission: System Settings → Privacy & Security → Accessibility');
+      }
+    }
+  } catch (e) {
+    log(`Could not get capabilities: ${e.message}`);
+  }
+
   statusEl.textContent = 'Getting session from server...';
   const info = await window.helperApi.getInfo();
   config = info.config;
   log(`Device ID: ${info.deviceId}`);
   log(`Server: ${config.server}`);
 
+  let sessionReady = false;
   try {
     const assign = await window.helperApi.assignSession(allowUnattended.checked);
     currentSessionId = assign.sessionId;
     sessionInput.value = assign.sessionId;
     sessionInput.readOnly = true;
     sessionInput.title = 'Assigned by server (same device always gets the same session)';
+    sessionReady = true;
     if (assign.existing) {
       log(`Using existing session: ${assign.sessionId}`);
       statusEl.textContent = 'Session ready (same device).';
@@ -79,6 +96,12 @@ async function init() {
   }
 
   setupFileDownloadBtn();
+
+  // Auto-start support if unattended mode is enabled and session is ready
+  if (sessionReady && allowUnattended.checked) {
+    log('Auto-starting (unattended mode)...');
+    startBtn.click();
+  }
 }
 
 async function startScreenCapture(overrideIndex) {
@@ -128,6 +151,9 @@ async function connectSignaling(sessionId) {
   try {
     await window.helperApi.socketConnect(sessionId);
     log('Connected to signaling server');
+
+    // Emit capabilities so technician sees them immediately
+    window.helperApi.socketEmit('helper-capabilities', { sessionId, capabilities });
 
     window.helperApi.onFileAvailable((data) => {
       if (data.direction === 'technician-to-user' || !data.direction) {
@@ -346,7 +372,8 @@ startBtn.addEventListener('click', async () => {
     statusEl.textContent = 'Registering session...';
     await window.helperApi.registerSession({
       sessionId,
-      allowUnattended: allowUnattended.checked
+      allowUnattended: allowUnattended.checked,
+      capabilities
     });
     log('Session registered.');
 

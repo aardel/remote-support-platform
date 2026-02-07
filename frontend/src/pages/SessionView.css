@@ -43,6 +43,33 @@
   color: #9ca3af;
 }
 
+.capability-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: help;
+}
+
+.capability-badge.cap-ok {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.capability-badge.cap-warn {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  animation: pulse-warn 2s ease-in-out infinite;
+}
+
+@keyframes pulse-warn {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
 .session-controls {
   display: flex;
   align-items: center;
@@ -615,12 +642,17 @@
   align-items: stretch;
   justify-content: center;
   gap: 4px;
+  min-height: 0;
   padding: 4px;
 }
+
+/* Split view is always side-by-side (row) — the whole point is to show
+   top/bottom halves next to each other, especially on vertical monitors. */
 
 .split-view-half {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   position: relative;
   overflow: hidden;
   display: flex;
@@ -634,10 +666,42 @@
   pointer-events: none;
 }
 
-.video-container video {
+/* Draggable split divider */
+.split-divider {
+  width: 8px;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  z-index: 2;
+  position: relative;
+}
+
+.split-divider:hover .split-divider-handle,
+.split-divider:active .split-divider-handle {
+  background: #3b82f6;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+}
+
+.split-divider-handle {
+  width: 4px;
+  height: 48px;
+  background: #475569;
+  border-radius: 2px;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+/* Single-view video: contained, receives pointer events for mouse control.
+   Split-view videos are NOT direct children (they're inside .split-view-half),
+   so this rule won't cap their height at 100%. */
+.video-container > video {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+  pointer-events: auto;
+  position: relative;
+  z-index: 1;
 }
 
 .split-view-toggle {

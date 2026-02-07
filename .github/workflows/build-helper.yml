@@ -67,6 +67,10 @@ jobs:
     needs: [build-win, build-mac]
     if: ${{ vars.DEPLOY_ENABLED == 'true' }}
     steps:
+      - uses: actions/checkout@v4
+      - name: Get helper version
+        id: get_version
+        run: echo "version=$(node -p "require('./helper/package.json').version")" >> $GITHUB_OUTPUT
       - name: Download EXE
         uses: actions/download-artifact@v4
         with:
@@ -99,4 +103,5 @@ jobs:
           dmg=$(ls dmg/*.dmg 2>/dev/null | head -1)
           [ -n "$exe" ] && scp $SSH_OPTS "$exe" ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_PATH}/support-template.exe
           [ -n "$dmg" ] && scp $SSH_OPTS "$dmg" ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_PATH}/support-template.dmg
+          ssh $SSH_OPTS ${SERVER_USER}@${SERVER_HOST} "echo '${{ steps.get_version.outputs.version }}' > ${DEPLOY_PATH}/support-template.version"
           rm -f ~/.ssh/deploy_key

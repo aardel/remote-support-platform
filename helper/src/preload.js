@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('helperApi', {
   getVersion: () => ipcRenderer.invoke('helper:get-version'),
+  getCapabilities: () => ipcRenderer.invoke('helper:get-capabilities'),
   getInfo: () => ipcRenderer.invoke('helper:get-info'),
   checkPending: () => ipcRenderer.invoke('helper:check-pending'),
   assignSession: (allowUnattended) => ipcRenderer.invoke('helper:assign-session', allowUnattended),
@@ -17,6 +18,7 @@ contextBridge.exposeInMainWorld('helperApi', {
   socketConnect: (sessionId) => ipcRenderer.invoke('helper:socket-connect', sessionId),
   socketSendOffer: (data) => ipcRenderer.invoke('helper:socket-send-offer', data),
   socketSendIce: (data) => ipcRenderer.invoke('helper:socket-send-ice', data),
+  socketEmit: (event, data) => ipcRenderer.invoke('helper:socket-emit', event, data),
   socketDisconnect: () => ipcRenderer.invoke('helper:socket-disconnect'),
 
   // Signaling event listeners
