@@ -3,327 +3,302 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Remote Support - Download Helper</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>Remote Support</title>
     <style>
-        .support-container {
-            max-width: 800px;
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%);
+            min-height: 100vh;
+            color: #1e293b;
+        }
+
+        .container {
+            max-width: 520px;
             margin: 40px auto;
-            padding: 30px;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            background: #fff;
+            padding: 32px 28px 24px;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04);
         }
-        
-        .support-header {
+
+        .logo-header {
             text-align: center;
-            margin-bottom: 40px;
+            margin-bottom: 20px;
         }
-        
-        .support-header h1 {
-            color: #2563eb;
-            margin-bottom: 10px;
+
+        .logo-header img {
+            max-width: 200px;
+            width: 100%;
+            height: auto;
         }
-        
-        .support-header p {
-            color: #666;
-            font-size: 16px;
-        }
-        
-        .download-section {
-            background: #f0f9ff;
-            border: 2px dashed #2563eb;
-            border-radius: 8px;
-            padding: 30px;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        
-        .download-btn {
-            display: inline-block;
-            background: #2563eb;
-            color: white;
-            padding: 15px 40px;
-            border-radius: 8px;
-            text-decoration: none;
+
+        .logo-header h1 {
             font-size: 18px;
-            font-weight: bold;
-            margin: 15px 0;
-            transition: background 0.3s;
+            font-weight: 600;
+            color: #334155;
+            margin-top: 8px;
         }
-        
-        .download-btn:hover {
-            background: #1d4ed8;
-        }
-        
-        .download-btn:disabled {
-            background: #94a3b8;
-            cursor: not-allowed;
-        }
-        
-        .session-info {
-            background: #f8fafc;
-            border-left: 4px solid #2563eb;
-            padding: 20px;
-            margin: 20px 0;
-            border-radius: 4px;
-        }
-        
-        .session-info strong {
-            color: #1e293b;
-        }
-        
-        .instructions {
-            margin-top: 30px;
-        }
-        
-        .instructions h2 {
-            color: #1e293b;
-            margin-bottom: 20px;
-        }
-        
-        .instructions ol {
-            line-height: 2;
-            color: #475569;
-        }
-        
-        .instructions li {
-            margin-bottom: 15px;
-        }
-        
-        .instructions code {
-            background: #f1f5f9;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
-            color: #dc2626;
-        }
-        
-        .status-badge {
-            display: inline-block;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: 500;
-            margin-left: 10px;
-        }
-        
-        .status-waiting {
-            background: #fef3c7;
-            color: #92400e;
-        }
-        
-        .status-ready {
-            background: #d1fae5;
-            color: #065f46;
-        }
-        
-        .error-message {
-            background: #fee2e2;
-            color: #991b1b;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 20px 0;
-        }
-        
-        .loading {
+
+        /* Session ID — prominent */
+        .session-card {
             text-align: center;
-            padding: 40px;
-            color: #64748b;
+            margin-bottom: 20px;
+            padding: 16px;
+            background: #f8fafc;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
         }
 
-        .settings-section {
-            background: #f8fafc;
-            border-radius: 8px;
-            padding: 20px;
+        .session-label {
+            font-size: 12px;
+            font-weight: 500;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+
+        .session-id {
+            font-size: 28px;
+            font-weight: 700;
+            font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+            color: #1e293b;
+            letter-spacing: 2px;
+        }
+
+        /* Download */
+        .download-section {
             margin-bottom: 20px;
         }
 
-        .toggle-row {
+        .download-btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            border: none;
+            color: white;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            text-align: center;
+            text-decoration: none;
+            transition: transform 0.1s, box-shadow 0.2s;
+            box-shadow: 0 2px 8px rgba(37,99,235,0.25);
+        }
+
+        .download-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(37,99,235,0.35);
+        }
+
+        .download-btn:active { transform: translateY(0); }
+        .download-btn:disabled, .download-btn.disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            pointer-events: none;
+        }
+
+        .download-btn.success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            box-shadow: 0 2px 8px rgba(16,185,129,0.25);
+        }
+
+        .os-row {
             display: flex;
+            gap: 8px;
+            margin-top: 10px;
             align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-
-        .toggle-row input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-        }
-
-        .os-selector {
-            margin-top: 15px;
-            display: flex;
-            gap: 10px;
             justify-content: center;
-            align-items: center;
             flex-wrap: wrap;
         }
 
-        .os-selector select {
-            padding: 8px 10px;
+        .os-row label {
+            font-size: 12px;
+            color: #64748b;
+            font-weight: 500;
+        }
+
+        .os-row select {
+            padding: 6px 10px;
             border-radius: 6px;
             border: 1px solid #cbd5e1;
+            font-size: 13px;
             background: #fff;
+            color: #334155;
+        }
+
+        /* Steps */
+        .steps {
+            margin-bottom: 16px;
+        }
+
+        .steps-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #334155;
+            margin-bottom: 10px;
+        }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-bottom: 10px;
+            font-size: 13px;
+            color: #475569;
+            line-height: 1.5;
+        }
+
+        .step-num {
+            flex-shrink: 0;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #2563eb;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .step-text { flex: 1; }
+        .step-text strong { color: #1e293b; }
+
+        /* Security note */
+        .security-note {
+            background: #fef3c7;
+            border: 1px solid #fde68a;
+            border-radius: 8px;
+            padding: 12px 14px;
+            font-size: 12px;
+            color: #92400e;
+            line-height: 1.5;
+        }
+
+        .security-note strong { color: #78350f; }
+
+        /* Error / loading */
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        .error-box {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 16px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        @media (max-width: 560px) {
+            .container { margin: 16px; padding: 20px 16px 16px; }
+            .session-id { font-size: 22px; }
         }
     </style>
 </head>
 <body>
-    <div class="support-container">
-        <div class="support-header">
-            <h1>🔧 Remote Support Session</h1>
-            <p>Your technician has created a support session for you</p>
+    <div class="container">
+        <div class="logo-header">
+            <img src="/logo.png" alt="Logo" onerror="this.style.display='none'" />
+            <h1>Remote Support</h1>
         </div>
-        
-        <div id="loading" class="loading">
-            <p>Loading session information...</p>
-        </div>
-        
+
+        <div id="loading" class="loading">Loading session...</div>
+
         <div id="content" style="display: none;">
-            <!-- Session Info -->
-            <div class="session-info">
-                <div style="margin-bottom: 10px;">
-                    <strong>Session ID:</strong> 
-                    <span id="sessionIdDisplay">-</span>
-                    <span id="statusBadge" class="status-badge status-waiting">Waiting</span>
-                </div>
-                <div>
-                    <strong>Status:</strong> <span id="sessionStatus">Preparing support package...</span>
+            <!-- Session ID — prominent -->
+            <div class="session-card">
+                <div class="session-label">Session ID</div>
+                <div class="session-id" id="sessionIdDisplay">—</div>
+            </div>
+
+            <!-- Download -->
+            <div class="download-section">
+                <a id="downloadBtn" href="#" class="download-btn" onclick="downloadPackage(event)">
+                    Download Support Helper
+                </a>
+                <div class="os-row">
+                    <label for="osSelect">OS:</label>
+                    <select id="osSelect"></select>
+                    <label for="packageSelect">Package:</label>
+                    <select id="packageSelect"></select>
                 </div>
             </div>
 
-            <!-- Session Settings -->
-            <div class="settings-section">
-                <div class="toggle-row">
-                    <input type="checkbox" id="allowConnection" checked />
-                    <label for="allowConnection"><strong>Allow remote connection</strong></label>
+            <!-- Steps -->
+            <div class="steps">
+                <div class="steps-title">How it works</div>
+                <div class="step">
+                    <span class="step-num">1</span>
+                    <span class="step-text"><strong>Download</strong> the support helper above.</span>
                 </div>
-                <div class="toggle-row">
-                    <input type="checkbox" id="allowUnattended" checked />
-                    <label for="allowUnattended"><strong>Allow unattended connections</strong> (uncheck to require approval)</label>
+                <div class="step">
+                    <span class="step-num">2</span>
+                    <span class="step-text" id="instructionsRun"><strong>Run</strong> the file you downloaded.</span>
                 </div>
-                <small style="color:#64748b;">You can change this anytime. If unchecked, the technician must request approval each time.</small>
-            </div>
-            
-            <!-- Download Section -->
-            <div class="download-section">
-                <h2 style="margin-top: 0; color: #1e293b;">📦 Download Support Helper</h2>
-                <p style="color: #475569; margin-bottom: 20px;">
-                    Download and run the support helper to allow your technician to connect to your computer.
-                </p>
-                <a id="downloadBtn" href="#" class="download-btn" onclick="downloadPackage(event)">
-                    ⬇️ Download Support Helper
-                </a>
-                <div class="os-selector">
-                    <label for="osSelect"><strong>Detected OS:</strong></label>
-                    <select id="osSelect"></select>
-                    <label for="packageSelect"><strong>Package:</strong></label>
-                    <select id="packageSelect"></select>
-                </div>
-                <p style="color: #64748b; font-size: 14px; margin-top: 15px;">
-                    File size: ~5-15 MB | Windows EXE, macOS DMG, and ZIP fallback
-                </p>
-            </div>
-            
-            <!-- Instructions -->
-            <div class="instructions">
-                <h2>📋 Instructions</h2>
-                <ol>
-                    <li>
-                        <strong>Download</strong> the support helper package using the button above
-                    </li>
-                    <li>
-                        <strong>Run</strong> the file you downloaded:
-                        <span id="instructionsRun">If you received a ZIP, extract it first.</span>
-                    </li>
-                    <li>
-                        <strong>Follow the on-screen helper</strong> and keep it open while support is active
-                    </li>
-                    <li>
-                        The support helper will automatically connect to your technician
-                    </li>
-                    <li>
-                        <strong>Keep the window/terminal open</strong> while receiving support
-                    </li>
-                    <li>
-                        <strong>Wait</strong> for your technician to connect - you'll see a notification when they do
-                    </li>
-                </ol>
-                
-                <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin-top: 20px;">
-                    <strong>⚠️ Security Note:</strong> Only download and run this if you trust the person who sent you this link. 
-                    The support helper allows remote access to your computer.
+                <div class="step">
+                    <span class="step-num">3</span>
+                    <span class="step-text"><strong>Keep the window open</strong> — your technician will connect automatically.</span>
                 </div>
             </div>
-            
-            <!-- Connection Status (shown after download/connection) -->
-            <div id="connectionSection" style="display: none; margin-top: 30px;">
-                <h2>🔌 Connection Status</h2>
-                <div class="session-info">
-                    <div id="connectionStatus">Not connected yet</div>
-                </div>
+
+            <!-- Security -->
+            <div class="security-note">
+                <strong>Security:</strong> Only download and run this if you trust the person who sent you this link. The helper allows remote access to your computer.
             </div>
-            
-            <!-- Error Message -->
-            <div id="errorMessage" class="error-message" style="display: none;"></div>
         </div>
+
+        <div id="errorBox" class="error-box" style="display:none;"></div>
     </div>
-    
+
     <script>
-        // Get session ID from URL
         function getSessionIdFromURL() {
-            const path = window.location.pathname;
-            const match = path.match(/\/support\/([A-Z0-9-]+)/);
+            const match = window.location.pathname.match(/\/support\/([A-Z0-9-]+)/i);
             return match ? match[1] : null;
         }
-        
+
         const sessionId = getSessionIdFromURL();
         let packageManifest = [];
         let selectedPackageType = 'zip';
-        
+
         if (!sessionId) {
-            document.getElementById('loading').innerHTML = 
-                '<div class="error-message">Invalid session link. Please check the URL.</div>';
+            showError('Invalid session link. Please check the URL.');
         } else {
-            // Load session info
             loadSessionInfo();
         }
-        
+
+        function showError(msg) {
+            document.getElementById('loading').style.display = 'none';
+            const box = document.getElementById('errorBox');
+            box.textContent = msg;
+            box.style.display = 'block';
+        }
+
         async function loadSessionInfo() {
             try {
-                const response = await fetch(`/api/sessions/${sessionId}`);
-                
-                if (!response.ok) {
-                    throw new Error('Session not found');
-                }
-                
+                const response = await fetch('/api/sessions/' + sessionId);
+                if (!response.ok) throw new Error('Session not found or expired.');
                 const session = await response.json();
-                
-                // Display session info
-                document.getElementById('sessionIdDisplay').textContent = session.sessionId;
-                document.getElementById('sessionStatus').textContent = 
-                    session.status === 'connected' ? 'Connected - Ready for support' : 
-                    session.status === 'waiting' ? 'Waiting for connection...' : 
-                    'Session active';
-                
-                // Update status badge
-                const statusBadge = document.getElementById('statusBadge');
-                if (session.status === 'connected') {
-                    statusBadge.className = 'status-badge status-ready';
-                    statusBadge.textContent = 'Connected';
-                }
-                
-                // Set download URL
+
+                document.getElementById('sessionIdDisplay').textContent = session.sessionId || sessionId;
+
                 await loadPackageManifest();
-                setupSettingsControls();
-                
-                // Show content
+
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('content').style.display = 'block';
-                
             } catch (error) {
-                document.getElementById('loading').innerHTML = 
-                    `<div class="error-message">Error loading session: ${error.message}</div>`;
+                showError(error.message);
             }
         }
 
@@ -332,139 +307,95 @@
             if (ua.includes('windows')) return 'windows';
             if (ua.includes('mac')) return 'mac';
             if (ua.includes('linux')) return 'linux';
-            return 'unknown';
+            return 'other';
         }
 
         async function loadPackageManifest() {
             const os = detectOS();
-            const response = await fetch(`/api/packages/manifest/${sessionId}`);
+            const response = await fetch('/api/packages/manifest/' + sessionId);
             const data = await response.json();
             packageManifest = data.packages || [];
 
             const osSelect = document.getElementById('osSelect');
             osSelect.innerHTML = '';
-            ['windows', 'mac', 'linux', 'other'].forEach((value) => {
+            ['windows', 'mac', 'linux', 'other'].forEach(function (value) {
                 const opt = document.createElement('option');
                 opt.value = value;
                 opt.textContent = value === 'mac' ? 'macOS' : value.charAt(0).toUpperCase() + value.slice(1);
                 osSelect.appendChild(opt);
             });
-            osSelect.value = os === 'unknown' ? 'other' : os;
+            osSelect.value = os;
 
             const packageSelect = document.getElementById('packageSelect');
             packageSelect.innerHTML = '';
-            packageManifest.forEach((pkg) => {
+            packageManifest.forEach(function (pkg) {
                 const opt = document.createElement('option');
                 opt.value = pkg.type;
-                opt.textContent = pkg.available ? pkg.label : `${pkg.label} (Not Ready)`;
+                opt.textContent = pkg.available ? pkg.label : pkg.label + ' (Not Ready)';
                 opt.disabled = !pkg.available;
                 packageSelect.appendChild(opt);
             });
 
-            // Auto-select best package
-            if (osSelect.value === 'windows') {
-                selectedPackageType = packageManifest.find(p => p.type === 'exe' && p.available)?.type || 'zip';
-            } else if (osSelect.value === 'mac') {
-                selectedPackageType = packageManifest.find(p => p.type === 'dmg' && p.available)?.type || 'zip';
-            } else {
-                selectedPackageType = 'zip';
-            }
-            packageSelect.value = selectedPackageType;
-            updateDownloadLink();
+            autoSelectPackage(os);
 
-            osSelect.addEventListener('change', () => {
-                if (osSelect.value === 'windows') {
-                    selectedPackageType = packageManifest.find(p => p.type === 'exe' && p.available)?.type || 'zip';
-                } else if (osSelect.value === 'mac') {
-                    selectedPackageType = packageManifest.find(p => p.type === 'dmg' && p.available)?.type || 'zip';
-                } else {
-                    selectedPackageType = 'zip';
-                }
-                packageSelect.value = selectedPackageType;
-                updateDownloadLink();
+            osSelect.addEventListener('change', function () {
+                autoSelectPackage(osSelect.value);
             });
-
-            packageSelect.addEventListener('change', () => {
+            packageSelect.addEventListener('change', function () {
                 selectedPackageType = packageSelect.value;
                 updateDownloadLink();
             });
         }
 
-        function updateDownloadLink() {
-            const downloadBtn = document.getElementById('downloadBtn');
-            downloadBtn.href = `/api/packages/download/${sessionId}?type=${selectedPackageType}`;
-            downloadBtn.onclick = (e) => {
-                downloadPackage(e);
-            };
-
-            const instructionsRun = document.getElementById('instructionsRun');
-            if (selectedPackageType === 'exe') {
-                instructionsRun.textContent = 'Double-click the EXE and follow the helper.';
-            } else if (selectedPackageType === 'dmg') {
-                instructionsRun.textContent = 'Open the DMG and run the Remote Support Helper app.';
+        function autoSelectPackage(os) {
+            if (os === 'windows') {
+                selectedPackageType = (packageManifest.find(function (p) { return p.type === 'exe' && p.available; }) || {}).type || 'zip';
+            } else if (os === 'mac') {
+                selectedPackageType = (packageManifest.find(function (p) { return p.type === 'dmg' && p.available; }) || {}).type || 'zip';
             } else {
-                instructionsRun.textContent = 'Extract the ZIP and run the launcher inside.';
+                selectedPackageType = 'zip';
+            }
+            document.getElementById('packageSelect').value = selectedPackageType;
+            updateDownloadLink();
+        }
+
+        function updateDownloadLink() {
+            var btn = document.getElementById('downloadBtn');
+            btn.href = '/api/packages/download/' + sessionId + '?type=' + selectedPackageType;
+
+            var run = document.getElementById('instructionsRun');
+            if (selectedPackageType === 'exe') {
+                run.innerHTML = '<strong>Run</strong> the EXE — follow the on-screen helper.';
+            } else if (selectedPackageType === 'dmg') {
+                run.innerHTML = '<strong>Open</strong> the DMG and run the Remote Support app inside.';
+            } else {
+                run.innerHTML = '<strong>Extract</strong> the ZIP and run the launcher inside.';
             }
         }
 
-        function setupSettingsControls() {
-            const allowConnection = document.getElementById('allowConnection');
-            const allowUnattended = document.getElementById('allowUnattended');
-            const downloadBtn = document.getElementById('downloadBtn');
-
-            allowConnection.addEventListener('change', () => {
-                if (!allowConnection.checked) {
-                    downloadBtn.disabled = true;
-                    downloadBtn.textContent = 'Connection Disabled';
-                } else {
-                    downloadBtn.disabled = false;
-                    downloadBtn.textContent = '⬇️ Download Support Helper';
-                }
-            });
-
-            allowUnattended.addEventListener('change', async () => {
-                try {
-                    await fetch(`/api/sessions/${sessionId}/settings`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ allowUnattended: allowUnattended.checked })
-                    });
-                } catch (error) {
-                    console.warn('Failed to update session settings:', error);
-                }
-            });
-        }
-        
         function downloadPackage(event) {
-            const downloadBtn = document.getElementById('downloadBtn');
-            const originalText = downloadBtn.textContent;
-            
-            downloadBtn.textContent = '⬇️ Downloading...';
-            downloadBtn.disabled = true;
-            
-            // Create a temporary link to trigger download
-            const link = document.createElement('a');
-            link.href = `/api/packages/download/${sessionId}?type=${selectedPackageType}`;
-            link.download = `support-helper-${sessionId}.${selectedPackageType === 'dmg' ? 'dmg' : selectedPackageType === 'exe' ? 'exe' : 'zip'}`;
+            if (event) event.preventDefault();
+            var btn = document.getElementById('downloadBtn');
+            var href = btn.href;
+            btn.textContent = 'Downloading...';
+            btn.classList.add('disabled');
+
+            var link = document.createElement('a');
+            link.href = href;
+            link.download = '';
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            
-            // Reset button after a delay
-            setTimeout(() => {
-                downloadBtn.textContent = '✅ Download Complete';
-                downloadBtn.style.background = '#10b981';
-                setTimeout(() => {
-                    downloadBtn.textContent = originalText;
-                    downloadBtn.style.background = '';
-                    downloadBtn.disabled = false;
+
+            setTimeout(function () {
+                btn.textContent = 'Downloaded';
+                btn.classList.remove('disabled');
+                btn.classList.add('success');
+                setTimeout(function () {
+                    btn.textContent = 'Download Support Helper';
+                    btn.classList.remove('success');
                 }, 3000);
-            }, 2000);
-            
-            // Prevent default if event provided
-            if (event) {
-                event.preventDefault();
-            }
+            }, 1500);
         }
     </script>
 </body>
