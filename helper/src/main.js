@@ -105,14 +105,32 @@ function readConfig() {
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 520,
-    height: 520,
-    resizable: false,
+    height: 680,
+    minWidth: 400,
+    minHeight: 500,
+    resizable: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js')
     }
   });
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+
+  // Auto-fit window height to content after the page loads
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow.webContents.executeJavaScript(`
+      (function() {
+        const body = document.body;
+        const html = document.documentElement;
+        const h = Math.max(body.scrollHeight, html.scrollHeight) + 40;
+        return { width: 520, height: Math.min(Math.max(h, 500), 900) };
+      })()
+    `).then(size => {
+      if (size && size.height) {
+        mainWindow.setSize(size.width, size.height);
+      }
+    }).catch(() => {});
+  });
 }
 
 app.whenReady().then(createWindow);
