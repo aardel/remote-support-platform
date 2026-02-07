@@ -50,6 +50,9 @@ Single source of truth for REST routes and Socket.io events. Keep this in sync w
 | POST | /api/devices/:deviceId/request | Yes | Request session for device |
 | **Websocket** | | | |
 | GET | /api/websocket/info | No | Socket.io connection info |
+| **Helper update** | | | |
+| GET | /api/helper/update-info | No | Query: platform=win\|darwin, currentVersion=X.Y.Z. Returns updateAvailable, latestVersion, downloadUrl. Used by helper to prompt "Upgrade now or next session". |
+| GET | /api/helper/download/:platform | No | Serves latest helper installer (win → .exe, darwin → .dmg). No auth. |
 
 ---
 

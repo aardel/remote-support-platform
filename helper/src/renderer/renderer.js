@@ -14,8 +14,14 @@ const chatNotificationText = document.getElementById('chatNotificationText');
 const chatOpenBtn = document.getElementById('chatOpenBtn');
 const connectedTechniciansRow = document.getElementById('connectedTechniciansRow');
 const connectedTechniciansList = document.getElementById('connectedTechniciansList');
+const updateBanner = document.getElementById('updateBanner');
+const updateLatestVersion = document.getElementById('updateLatestVersion');
+const updateNowBtn = document.getElementById('updateNowBtn');
+const updateNextSessionBtn = document.getElementById('updateNextSessionBtn');
+const updateProgress = document.getElementById('updateProgress');
 
-let peerConnection = null; // kept for switch-monitor/set-stream-quality (first PC or any)
+let peerConnection = null;
+let updateInfo = null; // { updateAvailable, latestVersion, downloadUrl } // kept for switch-monitor/set-stream-quality (first PC or any)
 const peerConnectionsBySocketId = new Map(); // technicianSocketId -> RTCPeerConnection (multi-viewer)
 let mediaStream = null;
 let config = null;
@@ -157,10 +163,47 @@ async function init() {
 
   setupFileDownloadBtn();
 
+  // Check for helper update (after we have config)
+  checkForUpdateAndShowBanner();
+
   // Auto-start support if unattended mode is enabled and session is ready
   if (sessionReady && allowUnattended.checked) {
     log('Auto-starting (unattended mode)...');
     startBtn.click();
+  }
+}
+
+async function checkForUpdateAndShowBanner() {
+  if (!updateBanner || !config?.server) return;
+  try {
+    const result = await window.helperApi.checkForUpdate();
+    if (result?.updateAvailable && result?.latestVersion && result?.downloadUrl) {
+      updateInfo = result;
+      if (updateLatestVersion) updateLatestVersion.textContent = result.latestVersion;
+      updateBanner.style.display = 'block';
+      if (updateNowBtn) updateNowBtn.onclick = handleUpgradeNow;
+      if (updateNextSessionBtn) updateNextSessionBtn.onclick = () => { updateBanner.style.display = 'none'; };
+    }
+  } catch (e) {
+    log(`Update check: ${e.message}`);
+  }
+}
+
+async function handleUpgradeNow() {
+  if (!updateInfo?.downloadUrl || !updateNowBtn || !updateProgress) return;
+  updateNowBtn.disabled = true;
+  if (updateNextSessionBtn) updateNextSessionBtn.disabled = true;
+  updateProgress.style.display = 'block';
+  updateProgress.textContent = 'Downloading...';
+  try {
+    const installerPath = await window.helperApi.downloadUpdate(updateInfo.downloadUrl);
+    updateProgress.textContent = 'Opening installer...';
+    await window.helperApi.installUpdateAndQuit(installerPath);
+  } catch (e) {
+    log(`Update failed: ${e.message}`);
+    updateProgress.textContent = `Failed: ${e.message}`;
+    updateNowBtn.disabled = false;
+    if (updateNextSessionBtn) updateNextSessionBtn.disabled = false;
   }
 }
 

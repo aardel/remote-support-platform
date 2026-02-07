@@ -39,6 +39,17 @@
 
       <button id="startBtn" class="btn-primary">Start Support</button>
 
+      <div id="updateBanner" class="update-banner" style="display: none;">
+        <div class="update-banner-text">
+          <strong>Update available:</strong> Version <span id="updateLatestVersion"></span> is available. You can upgrade now or at your next session.
+        </div>
+        <div class="update-banner-actions">
+          <button type="button" id="updateNowBtn" class="update-btn update-btn-primary">Upgrade now</button>
+          <button type="button" id="updateNextSessionBtn" class="update-btn update-btn-secondary">Next session</button>
+        </div>
+        <div id="updateProgress" class="update-progress" style="display: none;">Downloading...</div>
+      </div>
+
       <div id="fileNotification" class="file-notification" style="display: none;">
         <span id="fileNotificationText"></span>
         <button type="button" id="fileDownloadBtn">Download</button>

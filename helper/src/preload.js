@@ -46,5 +46,10 @@ contextBridge.exposeInMainWorld('helperApi', {
   // File transfer
   onFileAvailable: (callback) => ipcRenderer.on('signaling:file-available', (_event, data) => callback(data)),
   fileDownload: (url, defaultName) => ipcRenderer.invoke('helper:file-download', url, defaultName),
-  filePickAndUpload: (sessionId, serverUrl) => ipcRenderer.invoke('helper:file-pick-upload', sessionId, serverUrl)
+  filePickAndUpload: (sessionId, serverUrl) => ipcRenderer.invoke('helper:file-pick-upload', sessionId, serverUrl),
+
+  // Update
+  checkForUpdate: () => ipcRenderer.invoke('helper:check-for-update'),
+  downloadUpdate: (downloadUrl) => ipcRenderer.invoke('helper:download-update', downloadUrl),
+  installUpdateAndQuit: (installerPath) => ipcRenderer.invoke('helper:install-update-and-quit', installerPath)
 });

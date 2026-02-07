@@ -152,6 +152,61 @@ body {
   font-weight: 500;
 }
 
+/* Update available banner */
+.update-banner {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  background: #eff6ff;
+  border: 1px solid #93c5fd;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.update-banner-text {
+  color: #1e40af;
+  margin-bottom: 10px;
+}
+
+.update-banner-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.update-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.update-btn-primary {
+  background: #2563eb;
+  color: #fff;
+}
+
+.update-btn-primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.update-btn-secondary {
+  background: #fff;
+  color: #475569;
+  border-color: #94a3b8;
+}
+
+.update-btn-secondary:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+.update-progress {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+
 /* Settings */
 .settings {
   margin-bottom: 14px;

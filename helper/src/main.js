@@ -1,7 +1,9 @@
-const { app, BrowserWindow, ipcMain, desktopCapturer, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer, screen, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const https = require('https');
+const http = require('http');
 const { io } = require('socket.io-client');
 
 let robot = null;
@@ -126,6 +128,66 @@ ipcMain.handle('helper:get-info', () => {
 });
 
 ipcMain.handle('helper:get-version', () => app.getVersion());
+
+ipcMain.handle('helper:check-for-update', async () => {
+  try {
+    const config = readConfig();
+    const base = (config.server || '').replace(/\/$/, '');
+    if (!base) return { updateAvailable: false };
+    const platform = process.platform === 'darwin' ? 'darwin' : 'win';
+    const currentVersion = app.getVersion();
+    const url = `${base}/api/helper/update-info?platform=${platform}&currentVersion=${encodeURIComponent(currentVersion)}`;
+    const lib = url.startsWith('https') ? https : http;
+    const data = await new Promise((resolve, reject) => {
+      lib.get(url, { rejectUnauthorized: false }, (res) => {
+        let body = '';
+        res.on('data', (ch) => { body += ch; });
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(body));
+          } catch (e) {
+            reject(e);
+          }
+        });
+      }).on('error', reject);
+    });
+    return data;
+  } catch (e) {
+    console.warn('Update check failed:', e.message);
+    return { updateAvailable: false };
+  }
+});
+
+ipcMain.handle('helper:download-update', async (_event, downloadUrl) => {
+  if (!downloadUrl || typeof downloadUrl !== 'string') throw new Error('Invalid download URL');
+  const ext = process.platform === 'darwin' ? 'dmg' : 'exe';
+  const filename = `RemoteSupport-update.${ext}`;
+  const destPath = path.join(app.getPath('temp'), filename);
+  const lib = downloadUrl.startsWith('https') ? https : http;
+  const data = await new Promise((resolve, reject) => {
+    const req = lib.get(downloadUrl, { rejectUnauthorized: false }, (res) => {
+      if (res.statusCode !== 200) {
+        reject(new Error(`Download failed: ${res.statusCode}`));
+        return;
+      }
+      const file = fs.createWriteStream(destPath);
+      res.pipe(file);
+      file.on('finish', () => {
+        file.close();
+        resolve(destPath);
+      });
+      file.on('error', reject);
+    });
+    req.on('error', reject);
+  });
+  return data;
+});
+
+ipcMain.handle('helper:install-update-and-quit', async (_event, installerPath) => {
+  if (!installerPath || !fs.existsSync(installerPath)) return;
+  shell.openPath(installerPath);
+  setTimeout(() => app.quit(), 1000);
+});
 
 ipcMain.handle('helper:get-capabilities', () => ({
   robotjs: !!robot,

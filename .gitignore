@@ -57,3 +57,6 @@ coverage/
 
 # Deploy key for GitHub Actions (never commit)
 .deploy-keys/
+
+# Logo assets (keep local; repo is public)
+Logo/

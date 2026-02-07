@@ -134,6 +134,7 @@
 
 - **API and Socket.io contract**: `docs/API_AND_EVENTS.md` — REST routes and Socket.io events (single source of truth).
 - **Deployment**: `docs/DEPLOYMENT.md` — Production deploy, PM2, nginx.
+- **Helper updates**: `docs/HELPER_UPDATES.md` — Customer prompt (Upgrade now / Next session), server requirements, API.
 - **UI guidelines**: `docs/UI_GUIDELINES.md` — Dashboard/session UI principles and backlog (minimalistic, scale-friendly).
 - **Roadmap**: `docs/ROADMAP.md` — Future feature ideas (search, chat, recording, etc.).
 - **Security**: `docs/SECURITY.md` — npm audit and security practices.
