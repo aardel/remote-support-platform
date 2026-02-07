@@ -88,9 +88,10 @@ jobs:
           mkdir -p ~/.ssh
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_HOST} "mkdir -p $DEPLOY_PATH"
+          SSH_OPTS="-o StrictHostKeyChecking=no -i ~/.ssh/deploy_key"
+          ssh $SSH_OPTS ${SERVER_USER}@${SERVER_HOST} "mkdir -p $DEPLOY_PATH"
           exe=$(ls exe/*.exe 2>/dev/null | head -1)
           dmg=$(ls dmg/*.dmg 2>/dev/null | head -1)
-          [ -n "$exe" ] && scp -o StrictHostKeyChecking=no "$exe" ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_PATH}/support-template.exe
-          [ -n "$dmg" ] && scp -o StrictHostKeyChecking=no "$dmg" ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_PATH}/support-template.dmg
+          [ -n "$exe" ] && scp $SSH_OPTS "$exe" ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_PATH}/support-template.exe
+          [ -n "$dmg" ] && scp $SSH_OPTS "$dmg" ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_PATH}/support-template.dmg
           rm -f ~/.ssh/deploy_key
