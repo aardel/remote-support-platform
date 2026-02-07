@@ -1,10 +1,126 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import io from 'socket.io-client';
+import './PageStyles.css';
 
 function SessionsPage() {
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    loadSessions();
+    const socket = io(window.location.origin);
+    socket.on('session-created', (data) => {
+      setSessions(prev => {
+        if (prev.some(s => (s.session_id || s.sessionId) === data.sessionId)) return prev;
+        return [{ session_id: data.sessionId, status: data.status || 'waiting', created_at: data.created_at || new Date().toISOString(), client_info: data.client_info, link: data.link }, ...prev];
+      });
+    });
+    socket.on('session-updated', (data) => {
+      setSessions(prev => prev.map(s => (s.session_id || s.sessionId) === data.sessionId ? { ...s, status: data.status, client_info: data.clientInfo || s.client_info } : s));
+    });
+    socket.on('session-connected', (data) => {
+      setSessions(prev => prev.map(s => (s.session_id || s.sessionId) === data.sessionId ? { ...s, status: 'connected', client_info: data.clientInfo || s.client_info } : s));
+    });
+    socket.on('session-ended', (data) => {
+      setSessions(prev => prev.filter(s => (s.session_id || s.sessionId) !== data.sessionId));
+    });
+    return () => socket.disconnect();
+  }, []);
+
+  const loadSessions = async () => {
+    try {
+      const res = await axios.get('/api/sessions');
+      setSessions(res.data.sessions || []);
+    } catch (e) {
+      console.error('Error loading sessions:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const connectToSession = async (sessionId) => {
+    try {
+      const res = await axios.post(`/api/sessions/${sessionId}/connect`, {});
+      if (res.data.approved) navigate(`/session/${sessionId}`);
+      else alert('Connection denied: ' + (res.data.reason || 'User denied'));
+    } catch (e) {
+      alert('Error connecting: ' + (e.response?.data?.error || e.message));
+    }
+  };
+
+  const deleteSession = async (sessionId) => {
+    if (!confirm(`Delete session ${sessionId}?`)) return;
+    try {
+      await axios.delete(`/api/sessions/${sessionId}`);
+      setSessions(prev => prev.filter(s => (s.session_id || s.sessionId) !== sessionId));
+    } catch (e) {
+      alert('Error: ' + (e.response?.data?.error || e.message));
+    }
+  };
+
+  const filtered = sessions.filter(s => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    const sid = s.session_id || s.sessionId || '';
+    const host = (s.client_info && s.client_info.hostname) || '';
+    return sid.toLowerCase().includes(q) || host.toLowerCase().includes(q) || (s.status || '').toLowerCase().includes(q);
+  });
+
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-      <h2 style={{ marginBottom: 16, color: '#1e293b' }}>Active Sessions</h2>
-      <p style={{ color: '#64748b' }}>Loading...</p>
+    <div className="page-container">
+      <div className="page-header">
+        <h2>Active Sessions</h2>
+        <span className="page-count">{sessions.length} session{sessions.length !== 1 ? 's' : ''}</span>
+      </div>
+      <div className="page-toolbar">
+        <input type="text" placeholder="Search sessions..." value={search} onChange={e => setSearch(e.target.value)} className="page-search" />
+      </div>
+      {loading ? (
+        <div className="page-empty">Loading...</div>
+      ) : filtered.length === 0 ? (
+        <div className="page-empty">{search ? 'No sessions match.' : 'No active sessions. Generate a support package to start one.'}</div>
+      ) : (
+        <div className="page-cards">
+          {filtered.map(s => {
+            const sid = s.session_id || s.sessionId;
+            return (
+              <div key={sid} className="page-card">
+                <div className="card-top">
+                  <span className="card-id mono">{sid}</span>
+                  <span className={`badge ${s.status === 'connected' ? 'badge-ok' : 'badge-warn'}`}>{s.status}</span>
+                </div>
+                {s.client_info && (
+                  <div className="card-meta">
+                    <span>OS: {s.client_info.os || '—'}</span>
+                    <span>Host: {s.client_info.hostname || '—'}</span>
+                  </div>
+                )}
+                <div className="card-meta">
+                  <span>Created: {new Date(s.created_at).toLocaleString()}</span>
+                </div>
+                {s.link && (
+                  <div className="card-link">
+                    <input type="text" value={s.link} readOnly onClick={e => e.target.select()} className="link-input" />
+                    <button className="btn-sm btn-secondary" onClick={() => { navigator.clipboard.writeText(s.link); }}>Copy</button>
+                  </div>
+                )}
+                <div className="card-actions">
+                  {s.status === 'connected' ? (
+                    <button className="btn-sm btn-primary" onClick={() => connectToSession(sid)}>Connect</button>
+                  ) : (
+                    <span className="muted" style={{ fontSize: 13 }}>Waiting for user...</span>
+                  )}
+                  <button className="btn-sm btn-danger" onClick={() => deleteSession(sid)}>Delete</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
