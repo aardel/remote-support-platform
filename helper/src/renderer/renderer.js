@@ -589,8 +589,8 @@ async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
     if (anyConnected) {
       if (!isConnected) startConnectedTimer();
       isConnected = true;
-      startBtn.textContent = 'Disconnect';
-      startBtn.classList.add('disconnect');
+      startBtn.textContent = 'Stop Support';
+      startBtn.className = 'btn-primary btn-stop';
       startBtn.disabled = false;
     } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
       const stillAny = Array.from(peerConnectionsBySocketId.values()).some(p => p.iceConnectionState === 'connected');
@@ -654,8 +654,8 @@ async function createPeerConnection(sessionId) {
     if (peerConnection.iceConnectionState === 'connected') {
       if (!isConnected) startConnectedTimer();
       isConnected = true;
-      startBtn.textContent = 'Disconnect';
-      startBtn.classList.add('disconnect');
+      startBtn.textContent = 'Stop Support';
+      startBtn.className = 'btn-primary btn-stop';
       startBtn.disabled = false;
     } else if (peerConnection.iceConnectionState === 'disconnected' || peerConnection.iceConnectionState === 'failed') {
       handleAllTechniciansGone();
@@ -682,8 +682,8 @@ function setDisconnected() {
   stopConnectedTimer();
   connectedTechnicians = [];
   updateConnectedTechniciansUI();
-  startBtn.textContent = 'Start Support';
-  startBtn.classList.remove('disconnect');
+  startBtn.textContent = 'Request Support';
+  startBtn.className = 'btn-primary btn-request';
   startBtn.disabled = false;
 }
 
@@ -699,8 +699,8 @@ function handleAllTechniciansGone() {
   peerConnection = null;
   if (allowUnattended.checked && mediaStream) {
     setStatusUI('Waiting for technician...', 'dot-amber');
-    startBtn.textContent = 'Disconnect';
-    startBtn.classList.add('disconnect');
+    startBtn.textContent = 'Support Requested';
+    startBtn.className = 'btn-primary btn-waiting';
     startBtn.disabled = false;
     log('Technician disconnected. Waiting for next connection (unattended mode).');
   } else {
@@ -725,12 +725,13 @@ async function disconnect() {
   connectedTechnicians = [];
   updateConnectedTechniciansUI();
   setDisconnected();
-  setStatusUI('Ready', '');
+  setStatusUI('Ready', 'dot-green');
   log('Disconnected');
 }
 
 startBtn.addEventListener('click', async () => {
-  if (isConnected) {
+  // If connected or waiting — stop support
+  if (isConnected || startBtn.classList.contains('btn-waiting') || startBtn.classList.contains('btn-stop')) {
     await disconnect();
     return;
   }
@@ -761,6 +762,9 @@ startBtn.addEventListener('click', async () => {
     await connectSignaling(sessionId);
 
     setStatusUI('Waiting for technician...', 'dot-amber');
+    startBtn.textContent = 'Support Requested';
+    startBtn.className = 'btn-primary btn-waiting';
+    startBtn.disabled = false;
 
     log('Ready - when a technician connects they will receive the stream');
   } catch (error) {
@@ -771,6 +775,8 @@ startBtn.addEventListener('click', async () => {
       : 'Connection failed';
     setStatusUI(statusMsg, 'dot-red');
     startBtn.disabled = false;
+    startBtn.textContent = 'Request Support';
+    startBtn.className = 'btn-primary btn-request';
   }
 });
 

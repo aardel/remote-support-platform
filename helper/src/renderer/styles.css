@@ -241,24 +241,21 @@ body {
   flex: 1;
 }
 
-/* Primary button */
+/* Primary button — base */
 .btn-primary {
   width: 100%;
   padding: 12px;
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
   border: none;
   color: white;
   border-radius: 10px;
   cursor: pointer;
   font-size: 15px;
   font-weight: 600;
-  transition: transform 0.1s, box-shadow 0.2s;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+  transition: transform 0.1s, box-shadow 0.2s, background 0.3s;
 }
 
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
 }
 
 .btn-primary:active {
@@ -271,13 +268,35 @@ body {
   transform: none;
 }
 
-.btn-primary.disconnect {
-  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
-  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.25);
+/* Traffic-light button states */
+/* Green — Request Support (default / idle) */
+.btn-primary.btn-request {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
 }
 
-.btn-primary.disconnect:hover {
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.35);
+.btn-primary.btn-request:hover {
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.45);
+}
+
+/* Orange — Support Requested (waiting for technician) */
+.btn-primary.btn-waiting {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.btn-primary.btn-waiting:hover {
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.45);
+}
+
+/* Red — Stop Support (connected / active) */
+.btn-primary.btn-stop {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+}
+
+.btn-primary.btn-stop:hover {
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.45);
 }
 
 /* File notification */

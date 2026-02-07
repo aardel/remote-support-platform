@@ -61,6 +61,9 @@ function SessionView({ user }) {
   const [chatUnread, setChatUnread] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [overlayOpen, setOverlayOpen] = useState(false);
+  const [connectedDuration, setConnectedDuration] = useState(null);
+  const connectedSinceRef = useRef(null);
+  const connectedTimerRef = useRef(null);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
@@ -290,6 +293,32 @@ function SessionView({ user }) {
       if (el) el.focus();
     }
   }, [connected, splitView]);
+
+  // Connected duration timer
+  useEffect(() => {
+    if (connected) {
+      connectedSinceRef.current = Date.now();
+      const tick = () => {
+        const elapsed = Date.now() - connectedSinceRef.current;
+        const totalSec = Math.floor(elapsed / 1000);
+        const h = Math.floor(totalSec / 3600);
+        const m = Math.floor((totalSec % 3600) / 60);
+        const s = totalSec % 60;
+        setConnectedDuration(
+          h > 0
+            ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+            : `${m}:${String(s).padStart(2, '0')}`
+        );
+      };
+      tick();
+      connectedTimerRef.current = setInterval(tick, 1000);
+      return () => { clearInterval(connectedTimerRef.current); connectedTimerRef.current = null; };
+    } else {
+      setConnectedDuration(null);
+      connectedSinceRef.current = null;
+      if (connectedTimerRef.current) { clearInterval(connectedTimerRef.current); connectedTimerRef.current = null; }
+    }
+  }, [connected]);
 
   useEffect(() => {
     if (sessionId) loadFiles();
@@ -676,6 +705,9 @@ function SessionView({ user }) {
           <h2>Session: {sessionId}</h2>
           <span className={`status-indicator ${connected ? 'connected' : 'disconnected'}`}>
             {connected ? '🟢 ' : '⚪ '}{status}
+            {connected && connectedDuration && (
+              <span className="connected-timer" title="Connected duration"> {connectedDuration}</span>
+            )}
           </span>
           {connected && helperCapabilities && (
             <span className={`capability-badge ${helperCapabilities.robotjs ? 'cap-ok' : 'cap-warn'}`}
