@@ -57,9 +57,8 @@ const BROWSER_TO_ROBOTJS = {
 };
 
 function injectKeyboard(data) {
-  if (!robot) return;
+  if (!robot) { console.log('[kbd-inject] no robot'); return; }
   try {
-    // Skip bare modifier keys (they are handled via ctrlKey/shiftKey/altKey/metaKey flags)
     const keyLower = (data.key || '').toLowerCase();
     if (['control', 'shift', 'alt', 'meta'].includes(keyLower)) return;
 
@@ -71,34 +70,32 @@ function injectKeyboard(data) {
 
     let key = null;
 
-    // 1. Try data.key — most reliable for special keys
     if (data.key) {
       if (data.key.length === 1) {
-        // Single character: letter, number, symbol — use as-is (lowercased)
         key = data.key.toLowerCase();
       } else if (BROWSER_TO_ROBOTJS[keyLower]) {
         key = BROWSER_TO_ROBOTJS[keyLower];
       }
     }
 
-    // 2. Fallback to data.code if key not resolved
     if (!key && data.code) {
       const code = data.code;
       if (code.startsWith('Key') && code.length === 4) {
-        key = code.charAt(3).toLowerCase(); // KeyA -> a
+        key = code.charAt(3).toLowerCase();
       } else if (code.startsWith('Digit') && code.length === 6) {
-        key = code.charAt(5); // Digit1 -> 1
+        key = code.charAt(5);
       } else if (BROWSER_TO_ROBOTJS[code.toLowerCase()]) {
         key = BROWSER_TO_ROBOTJS[code.toLowerCase()];
       }
     }
 
-    if (!key) return;
+    if (!key) { console.log('[kbd-inject] unmapped key:', data.key, data.code); return; }
 
     const down = data.type === 'keydown' ? 'down' : 'up';
+    if (data.type === 'keydown') console.log('[kbd-inject] keyToggle:', key, down, mods);
     robot.keyToggle(key, down, mods.length ? mods : undefined);
   } catch (e) {
-    console.warn('Keyboard injection error:', e.message, data.key, data.code);
+    console.warn('[kbd-inject] ERROR:', e.message, data.key, data.code);
   }
 }
 
@@ -490,6 +487,10 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
     });
 
     socket.on('remote-keyboard', (data) => {
+      // Forward to renderer for visible logging
+      if (mainWindow) {
+        mainWindow.webContents.send('signaling:remote-keyboard', data);
+      }
       injectKeyboard(data);
     });
 

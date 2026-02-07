@@ -459,7 +459,7 @@ async function connectSignaling(sessionId) {
     });
 
     window.helperApi.onKeyboardEvent((data) => {
-      console.log('Remote keyboard event:', data);
+      if (data.type === 'keydown') log(`[keyboard] received: ${data.key} (${data.code})`);
     });
 
   } catch (error) {
