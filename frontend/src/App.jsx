@@ -11,6 +11,7 @@ import SessionsPage from './pages/SessionsPage';
 import StatisticsPage from './pages/StatisticsPage';
 import HelperTemplatesPage from './pages/HelperTemplatesPage';
 import SessionView from './pages/SessionView';
+import GenerateModal from './components/GenerateModal';
 import './App.css';
 
 function App() {
@@ -53,6 +54,7 @@ function App() {
 
   return (
     <Router>
+      <GenerateModal open={generateModalOpen} onClose={() => setGenerateModalOpen(false)} />
       <Routes>
         <Route
           path="/login"
