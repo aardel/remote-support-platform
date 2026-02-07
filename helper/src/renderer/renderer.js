@@ -233,6 +233,8 @@ async function startScreenCapture(overrideIndex) {
         mandatory: {
           chromeMediaSource: 'desktop',
           chromeMediaSourceId: screenSource.id,
+          minWidth: displayInfo.width,
+          minHeight: displayInfo.height,
           maxWidth: displayInfo.width,
           maxHeight: displayInfo.height,
           maxFrameRate: 30
@@ -243,6 +245,12 @@ async function startScreenCapture(overrideIndex) {
       mediaStream.getTracks().forEach(t => t.stop());
     }
     mediaStream = newStream;
+    // Tell WebRTC encoder this is screen content — prioritize sharpness over smooth motion
+    mediaStream.getVideoTracks().forEach(track => {
+      if ('contentHint' in track) {
+        track.contentHint = 'detail';
+      }
+    });
     log('Screen capture started');
     return mediaStream;
   } catch (error) {
@@ -311,15 +319,15 @@ async function connectSignaling(sessionId) {
           const enc = params.encodings[0];
           if (quality === 'speed') {
             enc.scaleResolutionDownBy = 2;
-            enc.maxBitrate = 500000;
+            enc.maxBitrate = 1500000;
             enc.maxFramerate = 15;
           } else if (quality === 'quality') {
             enc.scaleResolutionDownBy = 1;
-            enc.maxBitrate = 2500000;
+            enc.maxBitrate = 8000000;
             enc.maxFramerate = 30;
           } else {
-            enc.scaleResolutionDownBy = 1.25;
-            enc.maxBitrate = 1200000;
+            enc.scaleResolutionDownBy = 1;
+            enc.maxBitrate = 3500000;
             enc.maxFramerate = 24;
           }
           await sender.setParameters(params);
@@ -420,6 +428,47 @@ async function connectSignaling(sessionId) {
   }
 }
 
+// Prefer VP9 (sharper for screen) over VP8; fall back to H264 if available
+function preferScreenCodecs(pc) {
+  try {
+    const transceivers = pc.getTransceivers();
+    for (const t of transceivers) {
+      if (t.sender && t.sender.track && t.sender.track.kind === 'video') {
+        if (typeof RTCRtpSender.getCapabilities === 'function') {
+          const caps = RTCRtpSender.getCapabilities('video');
+          if (caps && caps.codecs) {
+            const vp9 = caps.codecs.filter(c => c.mimeType === 'video/VP9');
+            const h264 = caps.codecs.filter(c => c.mimeType === 'video/H264');
+            const vp8 = caps.codecs.filter(c => c.mimeType === 'video/VP8');
+            const rest = caps.codecs.filter(c => c.mimeType !== 'video/VP9' && c.mimeType !== 'video/H264' && c.mimeType !== 'video/VP8');
+            const ordered = [...vp9, ...h264, ...vp8, ...rest];
+            if (typeof t.setCodecPreferences === 'function') {
+              t.setCodecPreferences(ordered);
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    // setCodecPreferences not supported in all Electron versions; SDP fallback is fine
+  }
+}
+
+// Apply initial encoding params so stream starts sharp (not waiting for technician to set quality)
+async function applyInitialQuality(pc) {
+  const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+  if (!sender) return;
+  try {
+    const params = await sender.getParameters();
+    if (!params.encodings || !params.encodings.length) params.encodings = [{}];
+    const enc = params.encodings[0];
+    enc.scaleResolutionDownBy = 1;
+    enc.maxBitrate = 8000000;
+    enc.maxFramerate = 30;
+    await sender.setParameters(params);
+  } catch (_) { /* some implementations reject before connection */ }
+}
+
 async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
   if (!mediaStream) return;
   log(`Creating WebRTC peer connection for technician ${targetSocketId}...`);
@@ -438,6 +487,9 @@ async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
   mediaStream.getTracks().forEach(track => {
     pc.addTrack(track, mediaStream);
   });
+
+  preferScreenCodecs(pc);
+  applyInitialQuality(pc);
 
   pc.onicecandidate = (event) => {
     if (event.candidate) {
@@ -497,6 +549,9 @@ async function createPeerConnection(sessionId) {
     peerConnection.addTrack(track, mediaStream);
     log(`Added track: ${track.kind}`);
   });
+
+  preferScreenCodecs(peerConnection);
+  applyInitialQuality(peerConnection);
 
   peerConnection.onicecandidate = (event) => {
     if (event.candidate) {

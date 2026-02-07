@@ -126,6 +126,10 @@
 - Compatibility: `docs/COMPATIBILITY.md`
 - Feasibility: `docs/FEASIBILITY_ASSESSMENT.md`
 
+### Dashboard redesign (planned)
+
+- **Dashboard redesign plan**: `docs/DASHBOARD_REDESIGN_PLAN.md` — Widget dashboard as landing, hamburger + dedicated pages (Statistics, Devices, Sessions, Helper Templates), Classic dashboard kept, Generate modal in header, device customer/machine name and per-technician layout.
+
 ### Session UI (fullscreen viewer + control panel)
 
 - **New interface spec**: `docs/NEW_INTERFACE.md` — Two-window session UI: fullscreen viewer + floating control panel (BroadcastChannel, chat, files, minimize).
