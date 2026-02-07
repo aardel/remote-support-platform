@@ -1,6 +1,6 @@
 {
   "name": "remote-support-helper",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Customer helper app for Remote Support",
   "author": "ServiceLC",
   "main": "src/main.js",

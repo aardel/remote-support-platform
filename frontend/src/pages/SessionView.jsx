@@ -30,6 +30,7 @@ function SessionView({ user }) {
   const videoRef = useRef(null);
   const videoTopRef = useRef(null);
   const videoBottomRef = useRef(null);
+  const videoWrapperRef = useRef(null); // focusable wrapper for single-view so keys work
   const splitTopRef = useRef(null);
   const splitBottomRef = useRef(null);
   const [socket, setSocket] = useState(null);
@@ -44,6 +45,7 @@ function SessionView({ user }) {
   const [splitRatio, setSplitRatio] = useState(0.5);
   const [draggingSplit, setDraggingSplit] = useState(false);
   const splitContainerRef = useRef(null);
+  const videoAreaActiveRef = useRef(false); // true after user clicked video area → send keys to remote even if focus didn't move
   const [helperCapabilities, setHelperCapabilities] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const [files, setFiles] = useState([]);
@@ -286,13 +288,72 @@ function SessionView({ user }) {
     }
   }, [remoteStream, splitView]);
 
-  // Auto-focus video element when connected so keyboard events work immediately
+  // Auto-focus the focusable area when connected; also mark video area active so document key handler can send keys
   useEffect(() => {
     if (connected) {
-      const el = splitView ? videoTopRef.current : videoRef.current;
-      if (el) el.focus();
+      const el = splitView ? splitTopRef.current : videoWrapperRef.current;
+      if (el) {
+        el.focus({ preventScroll: true });
+      }
+      videoAreaActiveRef.current = true;
+    } else {
+      videoAreaActiveRef.current = false;
     }
   }, [connected, splitView]);
+
+  // Document-level key capture: when "video area" is active, send keys to remote (works even if div didn't get focus)
+  useEffect(() => {
+    if (!connected || !socket || !sessionId) return;
+
+    const isEditable = (el) => {
+      if (!el || !el.tagName) return false;
+      const tag = el.tagName.toLowerCase();
+      const role = (el.getAttribute && el.getAttribute('role')) || '';
+      return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable || role === 'textbox';
+    };
+
+    const onKey = (e) => {
+      if (!videoAreaActiveRef.current) return;
+      if (isEditable(e.target)) return; // don't steal keys from chat input, etc.
+      e.preventDefault();
+      e.stopPropagation();
+      socket.emit('remote-keyboard', {
+        sessionId,
+        type: e.type,
+        key: e.key,
+        code: e.code,
+        ctrlKey: e.ctrlKey,
+        shiftKey: e.shiftKey,
+        altKey: e.altKey,
+        metaKey: e.metaKey
+      });
+    };
+
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('keyup', onKey, true);
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('keyup', onKey, true);
+    };
+  }, [connected, socket, sessionId]);
+
+  // Track whether user clicked in video area (so we send keys to remote); clear when they click outside
+  useEffect(() => {
+    if (!connected) return;
+    const container = splitContainerRef.current;
+    const onDocMouseDown = (e) => {
+      const t = e.target;
+      if (!container || !t || !container.contains(t)) {
+        videoAreaActiveRef.current = false;
+        return;
+      }
+      // Inside container: mark active only if not in files modal
+      const inFilesModal = t.closest && t.closest('.files-modal-overlay');
+      videoAreaActiveRef.current = !inFilesModal;
+    };
+    document.addEventListener('mousedown', onDocMouseDown, true);
+    return () => document.removeEventListener('mousedown', onDocMouseDown, true);
+  }, [connected]);
 
   // Connected duration timer
   useEffect(() => {
@@ -915,7 +976,7 @@ function SessionView({ user }) {
             <div
               ref={splitTopRef}
               className="split-view-half split-view-top"
-              onClick={(e) => handleMouseEvent(e, 'top')}
+              onClick={(e) => { handleMouseEvent(e, 'top'); splitTopRef.current?.focus({ preventScroll: true }); }}
               onMouseMove={(e) => handleMouseEvent(e, 'top')}
               onMouseDown={(e) => handleMouseEvent(e, 'top')}
               onMouseUp={(e) => handleMouseEvent(e, 'top')}
@@ -947,7 +1008,7 @@ function SessionView({ user }) {
             <div
               ref={splitBottomRef}
               className="split-view-half split-view-bottom"
-              onClick={(e) => handleMouseEvent(e, 'bottom')}
+              onClick={(e) => { handleMouseEvent(e, 'bottom'); splitBottomRef.current?.focus({ preventScroll: true }); }}
               onMouseMove={(e) => handleMouseEvent(e, 'bottom')}
               onMouseDown={(e) => handleMouseEvent(e, 'bottom')}
               onMouseUp={(e) => handleMouseEvent(e, 'bottom')}
@@ -971,26 +1032,34 @@ function SessionView({ user }) {
             </div>
           </>
         ) : (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            onClick={(e) => handleMouseEvent(e)}
+          <div
+            ref={videoWrapperRef}
+            className="video-focus-wrapper"
+            tabIndex={0}
+            role="application"
+            aria-label="Remote screen"
+            onClick={(e) => { handleMouseEvent(e); videoWrapperRef.current?.focus({ preventScroll: true }); }}
             onMouseMove={(e) => handleMouseEvent(e)}
             onMouseDown={(e) => handleMouseEvent(e)}
             onMouseUp={(e) => handleMouseEvent(e)}
             onContextMenu={(e) => handleMouseEvent(e)}
             onKeyDown={handleKeyEvent}
             onKeyUp={handleKeyEvent}
-            tabIndex={0}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'contain',
-              backgroundColor: '#000',
-              cursor: connected ? 'crosshair' : 'default'
-            }}
-          />
+            style={{ cursor: connected ? 'crosshair' : 'default' }}
+          >
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                backgroundColor: '#000',
+                pointerEvents: 'none'
+              }}
+            />
+          </div>
         )}
         {!connected && (
           <div className="connecting-overlay">
