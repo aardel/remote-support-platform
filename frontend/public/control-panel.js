@@ -134,9 +134,24 @@
     channel.postMessage({ type: 'exit-fullscreen' });
   });
 
+  function applyDisplayCount(displayCount) {
+    const opts = monitorSelect.options;
+    for (let i = 0; i < opts.length; i++) {
+      const value = parseInt(opts[i].value, 10);
+      const active = displayCount == null || value < displayCount;
+      opts[i].disabled = !active;
+      opts[i].textContent = 'Monitor ' + (value + 1) + (active ? '' : ' (not available)');
+    }
+    const cur = parseInt(monitorSelect.value, 10);
+    if (typeof displayCount === 'number' && displayCount > 0 && cur >= displayCount) {
+      monitorSelect.value = String(Math.max(0, displayCount - 1));
+    }
+  }
+
   channel.onmessage = (e) => {
     const msg = e.data;
     if (msg.type === 'state-update') {
+      if (msg.displayCount !== undefined) applyDisplayCount(msg.displayCount);
       if (msg.monitorIndex !== undefined) monitorSelect.value = String(msg.monitorIndex);
       if (msg.streamQuality !== undefined) qualitySelect.value = msg.streamQuality;
       if (msg.splitView !== undefined) splitViewToggle.checked = msg.splitView;

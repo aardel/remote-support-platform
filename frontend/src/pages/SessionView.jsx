@@ -289,6 +289,14 @@ function SessionView({ user }) {
     }
   }, [connected]);
 
+  // Clamp monitor selection when helper has fewer displays (e.g. single monitor)
+  useEffect(() => {
+    const displayCount = helperCapabilities?.displayCount;
+    if (typeof displayCount === 'number' && displayCount > 0 && monitorIndex >= displayCount) {
+      setMonitorIndex(Math.max(0, displayCount - 1));
+    }
+  }, [helperCapabilities?.displayCount, monitorIndex]);
+
   // BroadcastChannel: sync state to control panel and handle commands from panel
   useEffect(() => {
     const channelName = 'session-control-' + sessionId;
@@ -301,7 +309,8 @@ function SessionView({ user }) {
         streamQuality,
         splitView,
         connected,
-        chatUnread
+        chatUnread,
+        displayCount: helperCapabilities?.displayCount
       });
     };
     postState();
@@ -344,7 +353,7 @@ function SessionView({ user }) {
     };
 
     return () => channel.close();
-  }, [sessionId, monitorIndex, streamQuality, splitView, connected, chatUnread]);
+  }, [sessionId, monitorIndex, streamQuality, splitView, connected, chatUnread, helperCapabilities?.displayCount]);
 
   // Post files-remote-list to control panel when list-remote-dir-result is for panel request
   useEffect(() => {
@@ -731,9 +740,16 @@ function SessionView({ user }) {
                   disabled={switchingMonitor}
                   title="Switch which display the user is sharing"
                 >
-                  {MONITOR_OPTIONS.map((n) => (
-                    <option key={n} value={n - 1}>Monitor {n}</option>
-                  ))}
+                  {MONITOR_OPTIONS.map((n) => {
+                    const value = n - 1;
+                    const displayCount = helperCapabilities?.displayCount;
+                    const isActive = displayCount == null || value < displayCount;
+                    return (
+                      <option key={n} value={value} disabled={!isActive}>
+                        Monitor {n}{!isActive ? ' (not available)' : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
               <div className="stream-quality-switch">

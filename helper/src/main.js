@@ -189,10 +189,14 @@ ipcMain.handle('helper:install-update-and-quit', async (_event, installerPath) =
   setTimeout(() => app.quit(), 1000);
 });
 
-ipcMain.handle('helper:get-capabilities', () => ({
-  robotjs: !!robot,
-  platform: process.platform
-}));
+ipcMain.handle('helper:get-capabilities', () => {
+  const displays = screen.getAllDisplays();
+  return {
+    robotjs: !!robot,
+    platform: process.platform,
+    displayCount: displays.length
+  };
+});
 
 ipcMain.handle('helper:register-session', async (_event, payload) => {
   const deviceId = getDeviceId();
@@ -286,7 +290,7 @@ ipcMain.handle('helper:register-device', async (allowUnattended) => {
 // Get available screen sources for capture
 ipcMain.handle('helper:get-sources', async () => {
   const sources = await desktopCapturer.getSources({
-    types: ['screen', 'window'],
+    types: ['screen'],
     thumbnailSize: { width: 150, height: 150 }
   });
   return sources.map(source => ({

@@ -125,6 +125,10 @@ async function init() {
   try {
     capabilities = await window.helperApi.getCapabilities();
     log(`Capabilities: robotjs=${capabilities.robotjs}, platform=${capabilities.platform}`);
+    if (capabilities.platform === 'darwin') {
+      const macHint = document.getElementById('helperMacHint');
+      if (macHint) { macHint.style.display = ''; }
+    }
     if (!capabilities.robotjs) {
       log('WARNING: Remote mouse/keyboard control is disabled (robotjs not loaded).');
       if (capabilities.platform === 'darwin') {
@@ -210,8 +214,7 @@ async function handleUpgradeNow() {
 async function startScreenCapture(overrideIndex) {
   if (screenSources.length === 0) {
     const sources = await window.helperApi.getSources();
-    screenSources = sources.filter(s => s.name.includes('Screen') || s.name === 'Entire Screen');
-    if (screenSources.length === 0) screenSources = sources;
+    screenSources = sources;
   }
   const selectedIndex = overrideIndex != null ? overrideIndex : 0;
   const screenSource = screenSources[selectedIndex] || screenSources[0];
@@ -244,6 +247,9 @@ async function startScreenCapture(overrideIndex) {
     return mediaStream;
   } catch (error) {
     log(`Screen capture error: ${error.message}`);
+    if (capabilities.platform === 'darwin') {
+      log('On macOS: grant Screen Recording permission — System Settings → Privacy & Security → Screen Recording → enable for this app, then try again.');
+    }
     throw error;
   }
 }
@@ -596,7 +602,11 @@ startBtn.addEventListener('click', async () => {
     log('Ready - when a technician connects they will receive the stream');
   } catch (error) {
     log(`Error: ${error.message}`);
-    setStatusUI('Connection failed', 'dot-red');
+    const isMacCapture = capabilities.platform === 'darwin' && (error.message || '').toLowerCase().includes('video source');
+    const statusMsg = isMacCapture
+      ? 'Connection failed — grant Screen Recording in System Settings → Privacy & Security → Screen Recording'
+      : 'Connection failed';
+    setStatusUI(statusMsg, 'dot-red');
     startBtn.disabled = false;
   }
 });
