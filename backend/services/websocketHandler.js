@@ -1,4 +1,5 @@
 const { Server } = require('socket.io');
+const Session = require('../models/Session');
 
 class WebSocketHandler {
     constructor(server) {
@@ -222,6 +223,14 @@ class WebSocketHandler {
                             conn.helper = null;
                             // Clear pending offer when helper disconnects
                             this.pendingOffers.delete(socket.sessionId);
+                            // Update session status to 'waiting' in DB and broadcast
+                            Session.update(socket.sessionId, { status: 'waiting' }).catch(e => {
+                                console.error('Failed to update session status on helper disconnect:', e.message);
+                            });
+                            this.io.emit('session-updated', {
+                                sessionId: socket.sessionId,
+                                status: 'waiting'
+                            });
                             // Notify technicians that helper disconnected
                             this.io.to(`session-${socket.sessionId}`).emit('peer-disconnected', {
                                 role: 'helper',
