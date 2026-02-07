@@ -345,16 +345,21 @@ async function connectSignaling(sessionId) {
           const enc = params.encodings[0];
           if (quality === 'speed') {
             enc.scaleResolutionDownBy = 2;
-            enc.maxBitrate = 1500000;
+            enc.maxBitrate = 2000000;
             enc.maxFramerate = 15;
+            params.degradationPreference = 'balanced';
           } else if (quality === 'quality') {
             enc.scaleResolutionDownBy = 1;
-            enc.maxBitrate = 8000000;
-            enc.maxFramerate = 30;
+            enc.maxBitrate = 16000000;
+            enc.maxFramerate = 24;
+            enc.priority = 'high';
+            enc.networkPriority = 'high';
+            params.degradationPreference = 'maintain-resolution';
           } else {
             enc.scaleResolutionDownBy = 1;
-            enc.maxBitrate = 3500000;
+            enc.maxBitrate = 6000000;
             enc.maxFramerate = 24;
+            params.degradationPreference = 'maintain-resolution';
           }
           await sender.setParameters(params);
         } catch (e) {
@@ -458,6 +463,41 @@ async function connectSignaling(sessionId) {
   }
 }
 
+// Boost SDP bitrate so the encoder starts high and doesn't ramp up slowly
+function boostSdpBitrate(sdp) {
+  // Set b=AS (application-specific) bitrate for video to 16 Mbps
+  // Also inject x-google-min/start-bitrate so Chrome/Electron doesn't start at 300kbps
+  const lines = sdp.split('\r\n');
+  const out = [];
+  let inVideo = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith('m=video')) {
+      inVideo = true;
+      out.push(line);
+      continue;
+    }
+    if (line.startsWith('m=') && !line.startsWith('m=video')) {
+      inVideo = false;
+    }
+    // Remove existing b=AS for video (we'll add our own)
+    if (inVideo && line.startsWith('b=AS:')) continue;
+    out.push(line);
+    // After c= line in video section, insert our bitrate
+    if (inVideo && line.startsWith('c=')) {
+      out.push('b=AS:16000');
+    }
+    // After each a=fmtp line in video, add google bitrate hints
+    if (inVideo && line.startsWith('a=fmtp:') && !line.includes('x-google-min-bitrate')) {
+      const idx = line.indexOf(' ');
+      if (idx > 0) {
+        out[out.length - 1] = line + ';x-google-min-bitrate=4000;x-google-start-bitrate=8000;x-google-max-bitrate=16000';
+      }
+    }
+  }
+  return out.join('\r\n');
+}
+
 // Prefer VP9 (sharper for screen) over VP8; fall back to H264 if available
 function preferScreenCodecs(pc) {
   try {
@@ -493,8 +533,12 @@ async function applyInitialQuality(pc) {
     if (!params.encodings || !params.encodings.length) params.encodings = [{}];
     const enc = params.encodings[0];
     enc.scaleResolutionDownBy = 1;
-    enc.maxBitrate = 8000000;
-    enc.maxFramerate = 30;
+    enc.maxBitrate = 16000000;
+    enc.maxFramerate = 24;
+    enc.priority = 'high';
+    enc.networkPriority = 'high';
+    // CRITICAL: never reduce resolution under pressure — drop frames instead
+    params.degradationPreference = 'maintain-resolution';
     await sender.setParameters(params);
   } catch (_) { /* some implementations reject before connection */ }
 }
@@ -551,7 +595,12 @@ async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
   };
 
   const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
+  // Boost SDP bitrate before setting local description
+  const boostedOffer = new RTCSessionDescription({
+    type: offer.type,
+    sdp: boostSdpBitrate(offer.sdp)
+  });
+  await pc.setLocalDescription(boostedOffer);
 
   await window.helperApi.socketSendOffer({
     sessionId,
@@ -610,7 +659,11 @@ async function createPeerConnection(sessionId) {
   };
 
   const offer = await peerConnection.createOffer();
-  await peerConnection.setLocalDescription(offer);
+  const boostedOffer = new RTCSessionDescription({
+    type: offer.type,
+    sdp: boostSdpBitrate(offer.sdp)
+  });
+  await peerConnection.setLocalDescription(boostedOffer);
 
   await window.helperApi.socketSendOffer({
     sessionId,
