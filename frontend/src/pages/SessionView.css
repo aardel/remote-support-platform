@@ -800,41 +800,219 @@
   height: 100%;
 }
 
-/* In-fullscreen floating control bar (always visible when fullscreen; popup may be blocked or behind) */
-.fullscreen-controls-bar {
+/* ── Overlay toggle button (gear icon, top-right) ── */
+.overlay-toggle-btn {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  top: 12px;
+  right: 12px;
+  z-index: 20;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(15, 23, 42, 0.7);
+  color: #e2e8f0;
+  font-size: 18px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 10px 16px;
-  background: rgba(15, 23, 42, 0.92);
-  border-top: 1px solid #334155;
-  z-index: 10;
 }
 
-.fullscreen-controls-btn {
-  padding: 8px 16px;
-  font-size: 14px;
+.video-container:hover .overlay-toggle-btn,
+.overlay-toggle-btn.always-visible,
+.overlay-toggle-btn.open {
+  opacity: 1;
+}
+
+.overlay-toggle-btn:hover {
+  background: rgba(15, 23, 42, 0.9);
+}
+
+/* ── Overlay panel ── */
+.overlay-panel {
+  position: absolute;
+  top: 56px;
+  right: 12px;
+  z-index: 20;
+  width: 240px;
+  max-height: calc(100% - 72px);
+  overflow-y: auto;
+  background: rgba(15, 23, 42, 0.94);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(71, 85, 105, 0.5);
+  border-radius: 12px;
+  padding: 12px;
   color: #e2e8f0;
+  font-size: 13px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+.overlay-section {
+  margin-bottom: 8px;
+}
+
+.overlay-section label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.overlay-section select {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #475569;
+  background: #1e293b;
+  color: #e2e8f0;
+  font-size: 13px;
+}
+
+.overlay-row {
+  display: flex;
+  align-items: center;
+}
+
+.overlay-check {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  color: #e2e8f0 !important;
+}
+
+.overlay-check input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: #2563eb;
+}
+
+.overlay-divider {
+  height: 1px;
   background: #334155;
+  margin: 8px 0;
+}
+
+.overlay-chat-toggle {
+  width: 100%;
+  padding: 6px 10px;
   border: 1px solid #475569;
   border-radius: 6px;
+  background: #1e293b;
+  color: #e2e8f0;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+
+.overlay-chat-toggle.open {
+  background: #334155;
+}
+
+.overlay-badge {
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-left: 6px;
+}
+
+/* Chat inside overlay */
+.overlay-chat {
+  margin-bottom: 8px;
+}
+
+.overlay-chat-messages {
+  max-height: 160px;
+  overflow-y: auto;
+  margin-bottom: 6px;
+  padding: 4px;
+  background: #0f172a;
+  border-radius: 6px;
+}
+
+.overlay-chat-empty {
+  color: #64748b;
+  font-size: 12px;
+  text-align: center;
+  padding: 12px 0;
+}
+
+.overlay-chat-msg {
+  margin-bottom: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.overlay-chat-msg.from-tech .overlay-chat-sender { color: #60a5fa; }
+.overlay-chat-msg.from-user .overlay-chat-sender { color: #34d399; }
+.overlay-chat-sender { font-weight: 600; margin-right: 4px; }
+.overlay-chat-text { color: #cbd5e1; }
+
+.overlay-chat-input {
+  display: flex;
+  gap: 4px;
+}
+
+.overlay-chat-input input {
+  flex: 1;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid #475569;
+  background: #1e293b;
+  color: #e2e8f0;
+  font-size: 12px;
+}
+
+.overlay-chat-input button {
+  padding: 5px 10px;
+  border: none;
+  border-radius: 6px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 12px;
   cursor: pointer;
 }
 
-.fullscreen-controls-btn:hover {
-  background: #475569;
+.overlay-chat-input button:hover {
+  background: #1d4ed8;
 }
 
-.fullscreen-controls-btn-danger {
-  background: #7f1d1d;
-  border-color: #991b1b;
+.overlay-btn-files {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  background: #1e293b;
+  color: #e2e8f0;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
 }
 
-.fullscreen-controls-btn-danger:hover {
-  background: #991b1b;
+.overlay-btn-files:hover {
+  background: #334155;
+}
+
+.overlay-btn-disconnect {
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
 }

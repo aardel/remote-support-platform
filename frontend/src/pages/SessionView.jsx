@@ -41,8 +41,13 @@ function SessionView({ user }) {
   const [remoteRefreshKey, setRemoteRefreshKey] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [overlayOpen, setOverlayOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatOpen, setChatOpen] = useState(false);
   const chatWindowRef = useRef(null);
   const controlPanelRef = useRef(null);
+  const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
   const remoteRequestIdRef = useRef(0);
@@ -54,23 +59,15 @@ function SessionView({ user }) {
   const userRef = useRef(user);
   userRef.current = user;
 
-  const openControlPanel = () => {
-    if (controlPanelRef.current && !controlPanelRef.current.closed) {
-      controlPanelRef.current.focus();
-      return true;
-    }
-    const w = window.open(
-      `/control-panel.html?sessionId=${encodeURIComponent(sessionId)}`,
-      `control-panel-${sessionId}`,
-      'width=280,height=340,menubar=no,toolbar=no,location=no,status=no,resizable=yes'
-    );
-    controlPanelRef.current = w;
-    return !!(w && !w.closed);
-  };
+  const toggleOverlay = () => setOverlayOpen(prev => !prev);
 
-  const openChatPopup = () => {
-    openControlPanel();
-    setChatUnread(0);
+  const sendChatMessage = () => {
+    const msg = chatInput.trim();
+    if (!msg || !socket || !sessionId) return;
+    const data = { sessionId, message: msg, role: 'technician', sender: userRef.current?.username || 'Technician' };
+    socket.emit('chat-message', data);
+    setChatMessages(prev => [...prev, { ...data, time: new Date() }]);
+    setChatInput('');
   };
 
   function buildFileTree(fileList) {
@@ -184,8 +181,11 @@ function SessionView({ user }) {
       setHelperCapabilities(data.capabilities);
     });
 
-    newSocket.on('chat-message', () => {
-      setChatUnread(prev => prev + 1);
+    newSocket.on('chat-message', (data) => {
+      if (data.role !== 'technician') {
+        setChatMessages(prev => [...prev, { ...data, time: new Date() }]);
+        setChatUnread(prev => prev + 1);
+      }
     });
 
     newSocket.on('file-available', () => {
@@ -297,83 +297,15 @@ function SessionView({ user }) {
     }
   }, [helperCapabilities?.displayCount, monitorIndex]);
 
-  // BroadcastChannel: sync state to control panel and handle commands from panel
+  // Auto-scroll chat to bottom
   useEffect(() => {
-    const channelName = 'session-control-' + sessionId;
-    const channel = new BroadcastChannel(channelName);
+    if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
 
-    const postState = () => {
-      channel.postMessage({
-        type: 'state-update',
-        monitorIndex,
-        streamQuality,
-        splitView,
-        connected,
-        chatUnread,
-        displayCount: helperCapabilities?.displayCount
-      });
-    };
-    postState();
-
-    channel.onmessage = (e) => {
-      const msg = e.data;
-      if (msg.type === 'switch-monitor') {
-        switchMonitor(typeof msg.index === 'number' ? msg.index : 0);
-      }
-      if (msg.type === 'set-quality' && msg.quality) {
-        setStreamQuality(msg.quality);
-        if (socket && sessionId) socket.emit('set-stream-quality', { sessionId, quality: msg.quality });
-      }
-      if (msg.type === 'toggle-split') {
-        setSplitView(!!msg.enabled);
-      }
-      if (msg.type === 'exit-fullscreen') {
-        const el = document.fullscreenElement;
-        if (el && el.classList.contains('video-container')) el.exitFullscreen?.();
-      }
-      if (msg.type === 'disconnect') {
-        disconnect();
-      }
-      if (msg.type === 'files-list-remote') {
-        const path = (msg.path === 'Home' || msg.path === '') ? '' : (msg.path ?? '');
-        panelListPathRef.current = path;
-        const reqId = 'panel-' + (++panelRequestIdRef.current);
-        socket?.emit('list-remote-dir', { sessionId, path, requestId: reqId });
-      }
-      if (msg.type === 'open-file-picker') {
-        fileInputRef.current?.click();
-      }
-      if (msg.type === 'files-send') {
-        sendSelectedToRemoteRef.current?.();
-      }
-      if (msg.type === 'files-receive') {
-        setFilesOpen(true);
-        setRemoteRefreshKey((k) => k + 1);
-      }
-    };
-
-    return () => channel.close();
-  }, [sessionId, monitorIndex, streamQuality, splitView, connected, chatUnread, helperCapabilities?.displayCount]);
-
-  // Post files-remote-list to control panel when list-remote-dir-result is for panel request
+  // Reset chat unread when opening chat
   useEffect(() => {
-    if (!socket || !sessionId) return;
-    const handler = (data) => {
-      const id = data.requestId;
-      if (typeof id !== 'string' || !id.startsWith('panel-')) return;
-      try {
-        const channel = new BroadcastChannel('session-control-' + sessionId);
-        channel.postMessage({
-          type: 'files-remote-list',
-          path: panelListPathRef.current,
-          list: data.error ? [] : (data.list || [])
-        });
-        channel.close();
-      } catch (_) {}
-    };
-    socket.on('list-remote-dir-result', handler);
-    return () => socket.off('list-remote-dir-result', handler);
-  }, [socket, sessionId]);
+    if (chatOpen) setChatUnread(0);
+  }, [chatOpen]);
 
   // Request remote directory listing when file modal opens, path changes, or refresh
   useEffect(() => {
@@ -570,17 +502,8 @@ function SessionView({ user }) {
       setIsFullscreen(false);
     } else {
       try {
-        // Open control panel *before* fullscreen so the popup doesn't steal focus
-        // and trigger the browser to exit fullscreen immediately.
-        openControlPanel();
         await container.requestFullscreen?.();
         setIsFullscreen(true);
-        // Bring popup to front after fullscreen; it often opens behind the fullscreen window.
-        setTimeout(() => {
-          if (controlPanelRef.current && !controlPanelRef.current.closed) {
-            controlPanelRef.current.focus();
-          }
-        }, 150);
       } catch (err) {
         console.error('Fullscreen failed', err);
       }
@@ -789,14 +712,6 @@ function SessionView({ user }) {
               </label>
             </>
           )}
-          <button
-            type="button"
-            className="chat-header-btn"
-            onClick={openChatPopup}
-            title="Chat with user"
-          >
-            💬 Chat {chatUnread > 0 && <span className="chat-unread-badge">{chatUnread}</span>}
-          </button>
           <button
             type="button"
             className={`files-header-btn ${filesOpen ? 'open' : ''}`}
@@ -1009,36 +924,108 @@ function SessionView({ user }) {
             <p>{status}</p>
           </div>
         )}
-        {isFullscreen && (
-          <div className="fullscreen-controls-bar" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              className="fullscreen-controls-btn"
-              onClick={() => {
-                const el = document.fullscreenElement;
-                if (el?.classList?.contains('video-container')) el.exitFullscreen?.();
-                setIsFullscreen(false);
-              }}
-              title="Exit fullscreen"
-            >
-              Exit fullscreen
-            </button>
-            <button
-              type="button"
-              className="fullscreen-controls-btn"
-              onClick={() => openControlPanel()}
-              title="Open control panel in a separate window"
-            >
-              Open controls
-            </button>
-            <button
-              type="button"
-              className="fullscreen-controls-btn fullscreen-controls-btn-danger"
-              onClick={disconnect}
-              title="Disconnect session"
-            >
-              Disconnect
-            </button>
+        {/* Overlay toggle arrow — always visible in fullscreen, hover-visible otherwise */}
+        {connected && (
+          <button
+            type="button"
+            className={`overlay-toggle-btn ${isFullscreen ? 'always-visible' : ''} ${overlayOpen ? 'open' : ''}`}
+            onClick={(e) => { e.stopPropagation(); toggleOverlay(); }}
+            title={overlayOpen ? 'Close controls' : 'Open controls'}
+          >
+            {overlayOpen ? '✕' : '⚙'}
+          </button>
+        )}
+
+        {/* In-page overlay panel */}
+        {connected && overlayOpen && (
+          <div className="overlay-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="overlay-section">
+              <label>Monitor</label>
+              <select
+                value={monitorIndex}
+                onChange={(e) => switchMonitor(Number(e.target.value))}
+                disabled={switchingMonitor}
+              >
+                {MONITOR_OPTIONS.map((n) => {
+                  const value = n - 1;
+                  const displayCount = helperCapabilities?.displayCount;
+                  const isActive = displayCount == null || value < displayCount;
+                  return (
+                    <option key={n} value={value} disabled={!isActive}>
+                      Monitor {n}{!isActive ? ' (n/a)' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+            <div className="overlay-section">
+              <label>Stream</label>
+              <select
+                value={streamQuality}
+                onChange={(e) => {
+                  const q = e.target.value;
+                  setStreamQuality(q);
+                  if (socket && sessionId) socket.emit('set-stream-quality', { sessionId, quality: q });
+                }}
+              >
+                <option value="quality">Best quality</option>
+                <option value="balanced">Balanced</option>
+                <option value="speed">Speed</option>
+              </select>
+            </div>
+            <div className="overlay-section overlay-row">
+              <label className="overlay-check">
+                <input type="checkbox" checked={splitView} onChange={(e) => setSplitView(e.target.checked)} />
+                <span>Split view</span>
+              </label>
+            </div>
+            <div className="overlay-section overlay-row">
+              <label className="overlay-check">
+                <input type="checkbox" checked={isFullscreen} onChange={handleFullscreenToggle} />
+                <span>Fullscreen</span>
+              </label>
+            </div>
+            <div className="overlay-divider" />
+            <div className="overlay-section">
+              <button type="button" className={`overlay-chat-toggle ${chatOpen ? 'open' : ''}`} onClick={() => setChatOpen(!chatOpen)}>
+                💬 Chat {chatUnread > 0 && <span className="overlay-badge">{chatUnread}</span>}
+              </button>
+            </div>
+            {chatOpen && (
+              <div className="overlay-chat">
+                <div className="overlay-chat-messages">
+                  {chatMessages.length === 0 && <div className="overlay-chat-empty">No messages yet.</div>}
+                  {chatMessages.map((m, i) => (
+                    <div key={i} className={`overlay-chat-msg ${m.role === 'technician' ? 'from-tech' : 'from-user'}`}>
+                      <span className="overlay-chat-sender">{m.sender || m.role}</span>
+                      <span className="overlay-chat-text">{m.message}</span>
+                    </div>
+                  ))}
+                  <div ref={chatEndRef} />
+                </div>
+                <div className="overlay-chat-input">
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') sendChatMessage(); }}
+                    placeholder="Type a message..."
+                  />
+                  <button type="button" onClick={sendChatMessage}>Send</button>
+                </div>
+              </div>
+            )}
+            <div className="overlay-divider" />
+            <div className="overlay-section">
+              <button type="button" className="overlay-btn-files" onClick={() => { setFilesOpen(!filesOpen); setOverlayOpen(false); }}>
+                📁 Files
+              </button>
+            </div>
+            <div className="overlay-section">
+              <button type="button" className="overlay-btn-disconnect" onClick={disconnect}>
+                Disconnect
+              </button>
+            </div>
           </div>
         )}
       </div>
