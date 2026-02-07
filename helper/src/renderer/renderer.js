@@ -12,6 +12,8 @@ const detailsToggle = document.getElementById('detailsToggle');
 const chatNotificationEl = document.getElementById('chatNotification');
 const chatNotificationText = document.getElementById('chatNotificationText');
 const chatOpenBtn = document.getElementById('chatOpenBtn');
+const connectedTechniciansRow = document.getElementById('connectedTechniciansRow');
+const connectedTechniciansList = document.getElementById('connectedTechniciansList');
 
 let peerConnection = null;
 let mediaStream = null;
@@ -22,6 +24,23 @@ let screenSources = [];
 let receivedFiles = [];
 let capabilities = { robotjs: false, platform: 'unknown' };
 let logVisible = false;
+let connectedTechnicians = [];
+
+function updateConnectedTechniciansUI() {
+  if (!connectedTechniciansRow || !connectedTechniciansList) return;
+  if (connectedTechnicians.length === 0) {
+    connectedTechniciansRow.style.display = 'none';
+    connectedTechniciansList.innerHTML = '';
+    return;
+  }
+  connectedTechniciansRow.style.display = 'flex';
+  connectedTechniciansList.innerHTML = connectedTechnicians
+    .map(t => {
+      const name = (t.technicianName || 'Technician').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return `<span class="connected-technician-chip">${name}</span>`;
+    })
+    .join('');
+}
 
 function log(message) {
   const line = document.createElement('div');
@@ -284,6 +303,28 @@ async function connectSignaling(sessionId) {
       log(`Peer joined: ${data.role}`);
     });
 
+    connectedTechnicians = [];
+    window.helperApi.onTechniciansPresent((data) => {
+      if (data.technicians && Array.isArray(data.technicians)) {
+        connectedTechnicians = data.technicians.slice();
+        updateConnectedTechniciansUI();
+      }
+    });
+    window.helperApi.onTechnicianJoined((data) => {
+      const id = data.technicianId || data.socketId;
+      if (id && !connectedTechnicians.some(t => t.technicianId === id)) {
+        connectedTechnicians.push({ technicianId: id, technicianName: data.technicianName || 'Technician' });
+        updateConnectedTechniciansUI();
+      }
+    });
+    window.helperApi.onTechnicianLeft((data) => {
+      const id = data.technicianId;
+      if (id) {
+        connectedTechnicians = connectedTechnicians.filter(t => t.technicianId !== id);
+        updateConnectedTechniciansUI();
+      }
+    });
+
     // Chat messages from technician — show notification, auto-open chat window
     window.helperApi.onChatMessage((data) => {
       showChatNotification(data);
@@ -377,6 +418,8 @@ async function createPeerConnection(sessionId) {
 
 function setDisconnected() {
   isConnected = false;
+  connectedTechnicians = [];
+  updateConnectedTechniciansUI();
   startBtn.textContent = 'Start Support';
   startBtn.classList.remove('disconnect');
   startBtn.disabled = false;
@@ -393,6 +436,8 @@ async function disconnect() {
     peerConnection = null;
   }
   await window.helperApi.socketDisconnect();
+  connectedTechnicians = [];
+  updateConnectedTechniciansUI();
   setDisconnected();
   setStatusUI('Ready', '');
   log('Disconnected');

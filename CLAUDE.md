@@ -109,6 +109,14 @@ npm run deploy           # Run deploy.sh
 | `CONTRIBUTING.md` | How to contribute / onboard |
 | `QUICK_START.md` | Fast setup guide |
 
+## Agents (auto-invoke)
+
+Project agents live in `.cursor/agents/`; when to run them is in `.cursor/skills/auto-run-agents/SKILL.md`. **You must invoke the relevant agent(s) in the same turn** when the user's message or recent context matches a trigger — do not wait for the user to name the agent.
+
+- **Trigger examples:** User says "build and restart", "I pushed", "review my code", "ready for release", "put agents to work", or context shows recent code change / push / release intent.
+- **Action:** Read `.cursor/skills/auto-run-agents/SKILL.md` and apply the Trigger → Agent mapping. For "put agents to work" / "agents suggest I approve", use the **agent-approval-workflow** skill (present todo list, then execute only accepted items). For "build frontend" / "restart backend" or after frontend/backend changes, run the **build-restart** agent (execute `npm run build` and/or `pm2 restart remote-support-backend` yourself).
+- **Do not skip** unless the user explicitly says not to run agents.
+
 ## Before Making Changes
 
 1. Read the relevant files before modifying — understand existing patterns

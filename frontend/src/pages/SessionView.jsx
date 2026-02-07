@@ -5,7 +5,7 @@ import './SessionView.css';
 
 const MONITOR_OPTIONS = [1, 2, 3, 4];
 
-function SessionView() {
+function SessionView({ user }) {
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const videoRef = useRef(null);
@@ -50,17 +50,20 @@ function SessionView() {
   const panelRequestIdRef = useRef(0);
   const panelListPathRef = useRef('');
   const sendSelectedToRemoteRef = useRef(null);
+  const peerConnectionRef = useRef(null);
 
   const openControlPanel = () => {
     if (controlPanelRef.current && !controlPanelRef.current.closed) {
       controlPanelRef.current.focus();
-    } else {
-      controlPanelRef.current = window.open(
-        `/control-panel.html?sessionId=${encodeURIComponent(sessionId)}`,
-        `control-panel-${sessionId}`,
-        'width=280,height=340,menubar=no,toolbar=no,location=no,status=no,resizable=yes'
-      );
+      return true;
     }
+    const w = window.open(
+      `/control-panel.html?sessionId=${encodeURIComponent(sessionId)}`,
+      `control-panel-${sessionId}`,
+      'width=280,height=340,menubar=no,toolbar=no,location=no,status=no,resizable=yes'
+    );
+    controlPanelRef.current = w;
+    return !!(w && !w.closed);
   };
 
   const openChatPopup = () => {
@@ -115,7 +118,9 @@ function SessionView() {
     newSocket.on('connect', () => {
       console.log('Connected to signaling server');
       setStatus('Waiting for helper...');
-      newSocket.emit('join-session', { sessionId, role: 'technician' });
+      const technicianName = user?.username || user?.displayName || 'Technician';
+      const technicianId = user?.id ?? user?.nextcloudId ?? 'technician';
+      newSocket.emit('join-session', { sessionId, role: 'technician', technicianId, technicianName });
     });
 
     newSocket.on('connect_error', (err) => {
@@ -130,6 +135,7 @@ function SessionView() {
 
       try {
         const pc = createPeerConnection(newSocket, sessionId);
+        peerConnectionRef.current = pc;
         setPeerConnection(pc);
 
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
@@ -151,15 +157,14 @@ function SessionView() {
       }
     });
 
-    // Handle ICE candidates from helper
+    // Handle ICE candidates from helper (use ref so we don't miss candidates that arrive before state updates)
     newSocket.on('webrtc-ice-candidate', async (data) => {
-      console.log('Received ICE candidate from', data.role);
-      if (peerConnection && data.role === 'helper') {
-        try {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } catch (err) {
-          console.error('Error adding ICE candidate:', err);
-        }
+      const pc = peerConnectionRef.current;
+      if (!pc || data.role !== 'helper') return;
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+      } catch (err) {
+        console.error('Error adding ICE candidate:', err);
       }
     });
 
@@ -223,8 +228,9 @@ function SessionView() {
     });
 
     return () => {
-      if (peerConnection) {
-        peerConnection.close();
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
       }
       newSocket.disconnect();
     };
@@ -249,24 +255,6 @@ function SessionView() {
       }
     }
   }, [remoteStream, splitView]);
-
-  // Update ICE candidate handler when peerConnection changes
-  useEffect(() => {
-    if (!socket || !peerConnection) return;
-
-    const handleIceCandidate = async (data) => {
-      if (data.role === 'helper') {
-        try {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } catch (err) {
-          console.error('Error adding ICE candidate:', err);
-        }
-      }
-    };
-
-    socket.on('webrtc-ice-candidate', handleIceCandidate);
-    return () => socket.off('webrtc-ice-candidate', handleIceCandidate);
-  }, [socket, peerConnection]);
 
   useEffect(() => {
     if (sessionId) loadFiles();
@@ -489,8 +477,9 @@ function SessionView() {
   };
 
   const disconnect = () => {
-    if (peerConnection) {
-      peerConnection.close();
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
     }
     if (socket) {
       socket.disconnect();
@@ -569,9 +558,17 @@ function SessionView() {
       setIsFullscreen(false);
     } else {
       try {
+        // Open control panel *before* fullscreen so the popup doesn't steal focus
+        // and trigger the browser to exit fullscreen immediately.
+        openControlPanel();
         await container.requestFullscreen?.();
         setIsFullscreen(true);
-        openControlPanel();
+        // Bring popup to front after fullscreen; it often opens behind the fullscreen window.
+        setTimeout(() => {
+          if (controlPanelRef.current && !controlPanelRef.current.closed) {
+            controlPanelRef.current.focus();
+          }
+        }, 150);
       } catch (err) {
         console.error('Fullscreen failed', err);
       }
@@ -991,6 +988,38 @@ function SessionView() {
           <div className="connecting-overlay">
             <div className="spinner"></div>
             <p>{status}</p>
+          </div>
+        )}
+        {isFullscreen && (
+          <div className="fullscreen-controls-bar" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="fullscreen-controls-btn"
+              onClick={() => {
+                const el = document.fullscreenElement;
+                if (el?.classList?.contains('video-container')) el.exitFullscreen?.();
+                setIsFullscreen(false);
+              }}
+              title="Exit fullscreen"
+            >
+              Exit fullscreen
+            </button>
+            <button
+              type="button"
+              className="fullscreen-controls-btn"
+              onClick={() => openControlPanel()}
+              title="Open control panel in a separate window"
+            >
+              Open controls
+            </button>
+            <button
+              type="button"
+              className="fullscreen-controls-btn fullscreen-controls-btn-danger"
+              onClick={disconnect}
+              title="Disconnect session"
+            >
+              Disconnect
+            </button>
           </div>
         )}
       </div>

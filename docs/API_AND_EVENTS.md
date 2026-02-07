@@ -59,8 +59,11 @@ All events are scoped by session: clients join `session-${sessionId}` via `join-
 
 | Event | Who sends | Who receives | Payload | Purpose |
 |-------|-----------|--------------|---------|---------|
-| join-session | Both | Server (room) | sessionId, role | Join session room |
+| join-session | Both | Server (room) | sessionId, role; technician: technicianId?, technicianName? | Join session room; technician name shown in helper |
 | leave-session | Both | Server | sessionId | Leave room |
+| technicians-present | Server | Helper | sessionId, technicians: [{ technicianId, technicianName }] | Current technicians when helper joins |
+| technician-joined | Server | Room (helper) | sessionId, technicianId, technicianName | A technician joined; helper shows name |
+| technician-left | Server | Room (helper) | sessionId, technicianId, technicianName | A technician left; helper updates list |
 | webrtc-offer | Helper | Technician | sessionId, offer | WebRTC offer |
 | webrtc-answer | Technician | Helper | sessionId, answer | WebRTC answer |
 | webrtc-ice-candidate | Both | Other peer | sessionId, candidate, role | ICE candidate |
@@ -85,6 +88,6 @@ All events are scoped by session: clients join `session-${sessionId}` via `join-
 
 - **Dashboard**: GET /api/sessions, /api/devices, POST /api/sessions/:id/connect, POST /api/packages/generate, etc. Socket: join-session (technician), webrtc-answer, webrtc-ice-candidate, remote-mouse, remote-keyboard, set-stream-quality, list-remote-dir, get-remote-file, put-remote-file, and result events.
 - **SessionView**: Same socket events for active session; GET /api/files/session/:id, POST /api/files/upload, GET /api/monitors/session/:id/switch (POST).
-- **Helper**: POST /api/sessions/assign, POST /api/sessions/register, Socket: join-session (helper), webrtc-offer, webrtc-ice-candidate, receives remote-mouse, remote-keyboard, set-stream-quality, list-remote-dir, get-remote-file, put-remote-file, switch-monitor, file-available.
+- **Helper**: POST /api/sessions/assign, POST /api/sessions/register, Socket: join-session (helper), webrtc-offer, webrtc-ice-candidate, receives remote-mouse, remote-keyboard, set-stream-quality, list-remote-dir, get-remote-file, put-remote-file, switch-monitor, file-available, technicians-present, technician-joined, technician-left (to show “Connected: Technician (Name)” list).
 
-Last updated: 2025-02-06
+Last updated: 2025-02-07

@@ -68,7 +68,7 @@ function App() {
         <Route 
           path="/session/:sessionId" 
           element={
-            isAuthenticated ? <SessionView /> : <Navigate to="/login" />
+            isAuthenticated ? <SessionView user={user} /> : <Navigate to="/login" />
           } 
         />
         <Route path="/" element={<Navigate to="/dashboard" />} />

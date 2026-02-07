@@ -320,6 +320,24 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
       }
     });
 
+    socket.on('technicians-present', (data) => {
+      if (mainWindow) {
+        mainWindow.webContents.send('signaling:technicians-present', data);
+      }
+    });
+
+    socket.on('technician-joined', (data) => {
+      if (mainWindow) {
+        mainWindow.webContents.send('signaling:technician-joined', data);
+      }
+    });
+
+    socket.on('technician-left', (data) => {
+      if (mainWindow) {
+        mainWindow.webContents.send('signaling:technician-left', data);
+      }
+    });
+
     socket.on('remote-mouse', (data) => {
       injectMouse(data);
     });

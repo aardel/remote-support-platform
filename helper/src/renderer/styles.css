@@ -114,6 +114,43 @@ body {
   font-family: monospace;
 }
 
+/* Connected technicians */
+.connected-technicians-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.connected-technicians-label {
+  color: #166534;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.connected-technicians-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.connected-technician-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  background: #22c55e;
+  color: #fff;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
 /* Settings */
 .settings {
   margin-bottom: 14px;

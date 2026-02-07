@@ -9,8 +9,8 @@ class WebSocketHandler {
             }
         });
 
-        // Track connections by session
-        this.sessionConnections = new Map(); // sessionId -> { helper: socketId, technician: socketId }
+        // Track connections by session: helper = single socketId; technicians = array of { socketId, technicianId, technicianName }
+        this.sessionConnections = new Map(); // sessionId -> { helper: socketId, technicians: [...] }
 
         // Cache offers and ICE candidates for late-joining technicians
         this.pendingOffers = new Map(); // sessionId -> { offer, from, iceCandidates }
@@ -24,25 +24,35 @@ class WebSocketHandler {
 
             // Join session room
             socket.on('join-session', (data) => {
-                const { sessionId, role } = data;
+                const { sessionId, role, technicianId, technicianName } = data;
                 socket.join(`session-${sessionId}`);
                 socket.sessionId = sessionId;
                 socket.role = role || 'unknown';
 
                 // Track connection
                 if (!this.sessionConnections.has(sessionId)) {
-                    this.sessionConnections.set(sessionId, {});
+                    this.sessionConnections.set(sessionId, { helper: null, technicians: [] });
                 }
                 const conn = this.sessionConnections.get(sessionId);
                 if (role === 'helper') {
                     conn.helper = socket.id;
+                    // Send current technicians list to the helper so it can show who is already connected
+                    if (conn.technicians.length > 0) {
+                        socket.emit('technicians-present', {
+                            sessionId,
+                            technicians: conn.technicians.map(t => ({ technicianId: t.technicianId, technicianName: t.technicianName }))
+                        });
+                    }
                 } else if (role === 'technician') {
-                    conn.technician = socket.id;
+                    const techId = technicianId || socket.id;
+                    const techName = technicianName || 'Technician';
+                    conn.technicians.push({ socketId: socket.id, technicianId: techId, technicianName: techName });
+                    console.log(`Socket ${socket.id} joined session ${sessionId} as technician "${techName}"`);
+                    // Notify helper (and others) so they can show who is connected
+                    socket.to(`session-${sessionId}`).emit('technician-joined', { sessionId, technicianId: techId, technicianName: techName });
                 }
 
-                console.log(`Socket ${socket.id} joined session ${sessionId} as ${role}`);
-
-                // Notify others in the session
+                // Notify others in the session (legacy)
                 socket.to(`session-${sessionId}`).emit('peer-joined', { role, sessionId });
 
                 // If technician joins and there's a pending offer, send it
@@ -108,11 +118,11 @@ class WebSocketHandler {
                 const { sessionId, candidate, role } = data;
                 console.log(`ICE candidate from ${role} for session ${sessionId}`);
 
-                // Cache ICE candidates from helper if technician hasn't joined yet
+                // Cache ICE candidates from helper if no technician has joined yet
                 if (role === 'helper' && this.pendingOffers.has(sessionId)) {
                     const pending = this.pendingOffers.get(sessionId);
                     const conn = this.sessionConnections.get(sessionId);
-                    if (!conn || !conn.technician) {
+                    if (!conn || !conn.technicians || conn.technicians.length === 0) {
                         pending.iceCandidates.push({
                             sessionId,
                             candidate,
@@ -211,18 +221,28 @@ class WebSocketHandler {
                             conn.helper = null;
                             // Clear pending offer when helper disconnects
                             this.pendingOffers.delete(socket.sessionId);
-                            // Notify technician that helper disconnected
+                            // Notify technicians that helper disconnected
                             this.io.to(`session-${socket.sessionId}`).emit('peer-disconnected', {
                                 role: 'helper',
                                 sessionId: socket.sessionId
                             });
-                        } else if (conn.technician === socket.id) {
-                            conn.technician = null;
-                            // Notify helper that technician disconnected
-                            this.io.to(`session-${socket.sessionId}`).emit('peer-disconnected', {
-                                role: 'technician',
-                                sessionId: socket.sessionId
-                            });
+                        } else if (conn.technicians) {
+                            const idx = conn.technicians.findIndex(t => t.socketId === socket.id);
+                            if (idx !== -1) {
+                                const tech = conn.technicians[idx];
+                                conn.technicians.splice(idx, 1);
+                                // Notify helper (and others) so they can update the "who is connected" list
+                                this.io.to(`session-${socket.sessionId}`).emit('technician-left', {
+                                    sessionId: socket.sessionId,
+                                    technicianId: tech.technicianId,
+                                    technicianName: tech.technicianName
+                                });
+                                // Legacy: notify helper that a technician disconnected
+                                this.io.to(`session-${socket.sessionId}`).emit('peer-disconnected', {
+                                    role: 'technician',
+                                    sessionId: socket.sessionId
+                                });
+                            }
                         }
                     }
                 }

@@ -1,0 +1,30 @@
+# CI: build frontend and run smoke test on every push to main.
+# Ensures the app builds and tests pass before/after merge.
+
+name: CI (build + test)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Smoke test
+        run: npm test

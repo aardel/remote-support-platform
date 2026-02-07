@@ -67,3 +67,4 @@ If no tests exist yet, add them for critical paths (auth, sessions, file upload)
 - **Deployment:** `docs/DEPLOYMENT.md`, `DEPLOY_TO_SERVER.md`
 - **API and Socket.io:** `docs/API_AND_EVENTS.md`
 - **Quick start:** `QUICK_START.md`
+- **Agents and automation:** Agents and skills live in `.cursor/` (committed to the repo). See `.cursor/agents/README.md` for the agent list and `docs/AGENTS_AUTOMATION.md` for what runs on push vs in Cursor chat.

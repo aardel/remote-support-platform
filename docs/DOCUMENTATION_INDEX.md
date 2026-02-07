@@ -126,6 +126,10 @@
 - Compatibility: `docs/COMPATIBILITY.md`
 - Feasibility: `docs/FEASIBILITY_ASSESSMENT.md`
 
+### Session UI (fullscreen viewer + control panel)
+
+- **New interface spec**: `docs/NEW_INTERFACE.md` — Two-window session UI: fullscreen viewer + floating control panel (BroadcastChannel, chat, files, minimize).
+
 ### Current stack (WebRTC + Electron)
 
 - **API and Socket.io contract**: `docs/API_AND_EVENTS.md` — REST routes and Socket.io events (single source of truth).
@@ -135,6 +139,7 @@
 - **Security**: `docs/SECURITY.md` — npm audit and security practices.
 - **Dependencies**: `docs/DEPENDENCIES.md` — Node version and package layout.
 - **Contributing**: `CONTRIBUTING.md` (repo root) — How to run, where to change what, PR flow.
+- **Agents and automation**: `docs/AGENTS_AUTOMATION.md` — What runs on push (CI), when agents run (Cursor chat), full automation options.
 - **Changelog**: `CHANGELOG.md` (repo root) — Release history and Unreleased changes.
 - **Versioning**: `docs/VERSIONING.md` — Single canonical version (root), sync to helper and web app, bump and release flow.
 

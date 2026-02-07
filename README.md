@@ -133,7 +133,7 @@ After templates are on the server, new sessions get `packages/support-<SESSION_I
 - **Full index**: [docs/DOCUMENTATION_INDEX.md](docs/DOCUMENTATION_INDEX.md) — Guide to all documentation
 - **Direct instructions**: [docs/INSTRUCTIONS.md](docs/INSTRUCTIONS.md) — Copy-paste steps for GitHub description and commit
 
-**Maintainers:** Cursor subagents in [.cursor/agents/](.cursor/agents/) (changelog, version-steward, docs-steward, code-reviewer, etc.) help keep docs, versioning, and release flow consistent; see `.cursor/agents/README.md`.
+**Maintainers:** Agents and skills live in [.cursor/](.cursor/) and are **versioned in the repo** so automation rules are shared. [.cursor/agents/](.cursor/agents/) (changelog, version-steward, docs-steward, code-reviewer, etc.) help keep docs, versioning, and release flow consistent — see `.cursor/agents/README.md`. When to run them: `.cursor/skills/auto-run-agents/SKILL.md`. Full picture: [docs/AGENTS_AUTOMATION.md](docs/AGENTS_AUTOMATION.md).
 
 Other docs in the `docs/` folder:
 

@@ -25,6 +25,9 @@ contextBridge.exposeInMainWorld('helperApi', {
   onWebrtcAnswer: (callback) => ipcRenderer.on('signaling:webrtc-answer', (_event, data) => callback(data)),
   onWebrtcIceCandidate: (callback) => ipcRenderer.on('signaling:webrtc-ice-candidate', (_event, data) => callback(data)),
   onPeerJoined: (callback) => ipcRenderer.on('signaling:peer-joined', (_event, data) => callback(data)),
+  onTechniciansPresent: (callback) => ipcRenderer.on('signaling:technicians-present', (_event, data) => callback(data)),
+  onTechnicianJoined: (callback) => ipcRenderer.on('signaling:technician-joined', (_event, data) => callback(data)),
+  onTechnicianLeft: (callback) => ipcRenderer.on('signaling:technician-left', (_event, data) => callback(data)),
 
   // Remote control APIs (for receiving technician input)
   onMouseEvent: (callback) => ipcRenderer.on('signaling:remote-mouse', (_event, data) => callback(data)),

@@ -623,3 +623,5 @@ The **build-restart** agent (`.cursor/agents/build-restart.md`) runs build and/o
 - **Auto-run agents** (`.cursor/skills/auto-run-agents/SKILL.md`): Invoke the right agent when context matches (e.g. after code changes → **code-reviewer**; "build and restart" → **build-restart**; release → **changelog**, **version-steward**, **github-docs-sync**).
 - **Agent approval workflow** (`.cursor/skills/agent-approval-workflow/SKILL.md`): For "put agents to work" / "agents suggest, I approve" — agents produce a single approval todo list; you accept or decline; only accepted items are executed.
 - **Relevant agents for this interface**: **build-restart** (build frontend, restart backend after UI changes), **code-reviewer** (review SessionView/control-panel changes), **ui-steward** (dashboard/session UI, `docs/UI_GUIDELINES.md`), **docs-steward** (keep docs in sync).
+
+**Full automation:** See `docs/AGENTS_AUTOMATION.md` — what runs on every push (CI build + test) vs what runs only when you’re in Cursor chat (agents).
