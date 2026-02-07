@@ -424,7 +424,11 @@ function SessionView({ user }) {
 
   // half: undefined = single view, 'top' = top half, 'bottom' = bottom half (for split view)
   const handleMouseEvent = (e, half) => {
-    e.preventDefault();
+    // Only preventDefault on contextmenu (block right-click menu) and mousemove (block text selection)
+    // Do NOT preventDefault on mousedown/click — that prevents the video from gaining focus for keyboard events
+    if (e.type === 'contextmenu' || e.type === 'mousemove') {
+      e.preventDefault();
+    }
     if (!socket || !connected) {
       if (e.type === 'mousedown') console.warn('[mouse] blocked: socket=', !!socket, 'connected=', connected);
       return;
