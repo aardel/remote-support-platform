@@ -15,6 +15,8 @@ function Dashboard({ user, onLogout }) {
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [templateStatus, setTemplateStatus] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [appVersion, setAppVersion] = useState(null);
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
   const technician = user || {};
@@ -24,6 +26,7 @@ function Dashboard({ user, onLogout }) {
     loadDevices();
     loadTemplateStatus();
     setupWebSocket();
+    axios.get('/api/version').then(r => setAppVersion(r.data.version)).catch(() => {});
   }, []);
 
   const setupWebSocket = () => {
@@ -253,6 +256,18 @@ function Dashboard({ user, onLogout }) {
       </header>
 
       <div className="dashboard-content">
+        <div className="dashboard-search">
+          <label htmlFor="dashboard-search-input">Search</label>
+          <input
+            id="dashboard-search-input"
+            type="text"
+            placeholder="Session ID, hostname, or device name…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value.trim())}
+            className="dashboard-search-input"
+            aria-label="Filter sessions and devices"
+          />
+        </div>
         <div className="sessions-list" style={{ marginBottom: '30px' }}>
           <h2>Registered Devices</h2>
           {devices.length === 0 ? (
@@ -262,7 +277,17 @@ function Dashboard({ user, onLogout }) {
             </div>
           ) : (
             <div className="sessions-grid">
-              {devices.map(device => (
+              {devices
+                .filter((device) => {
+                  if (!searchQuery) return true;
+                  const q = searchQuery.toLowerCase();
+                  return (
+                    (device.display_name || '').toLowerCase().includes(q) ||
+                    (device.hostname || '').toLowerCase().includes(q) ||
+                    (device.device_id || '').toLowerCase().includes(q)
+                  );
+                })
+                .map(device => (
                 <div key={device.device_id} className="session-card">
                   <div className="session-header">
                     <span className="session-id">{device.display_name || device.hostname || device.device_id}</span>
@@ -398,7 +423,15 @@ function Dashboard({ user, onLogout }) {
             </div>
           ) : (
             <div className="sessions-grid">
-              {sessions.map(session => (
+              {sessions
+                .filter((session) => {
+                  if (!searchQuery) return true;
+                  const q = searchQuery.toLowerCase();
+                  const sid = session.session_id || session.sessionId || '';
+                  const host = (session.client_info && session.client_info.hostname) || '';
+                  return sid.toLowerCase().includes(q) || host.toLowerCase().includes(q);
+                })
+                .map(session => (
                 <div key={session.session_id} className="session-card">
                   <div className="session-header">
                     <span className="session-id">{session.session_id}</span>
@@ -495,6 +528,11 @@ function Dashboard({ user, onLogout }) {
           )}
         </div>
       </div>
+      {appVersion && (
+        <footer className="dashboard-footer">
+          <span>Remote Support Platform v{appVersion}</span>
+        </footer>
+      )}
     </div>
   );
 }

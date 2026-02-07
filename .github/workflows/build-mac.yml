@@ -1,8 +1,7 @@
+# Superseded by build-helper.yml (one run builds Win + Mac). Kept for manual "macOS only" runs.
 name: Build macOS DMG
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       version:

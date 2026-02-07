@@ -1,8 +1,7 @@
+# Superseded by build-helper.yml (one run builds Win + Mac). Kept for manual "Windows only" runs.
 name: Build Windows EXE
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       version:

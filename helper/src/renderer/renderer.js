@@ -45,6 +45,10 @@ function setupFileDownloadBtn() {
 }
 
 async function init() {
+  const version = await window.helperApi.getVersion();
+  const versionEl = document.getElementById('helperVersion');
+  if (versionEl) versionEl.textContent = `Helper v${version}`;
+
   statusEl.textContent = 'Getting session from server...';
   const info = await window.helperApi.getInfo();
   config = info.config;

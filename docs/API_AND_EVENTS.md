@@ -1,0 +1,90 @@
+# API and Socket.io contract
+
+Single source of truth for REST routes and Socket.io events. Keep this in sync when adding or changing endpoints or events.
+
+**Base URL:** `/api` for REST. Socket.io connects to server origin.
+
+---
+
+## REST API
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| **System** | | | |
+| GET | /api/health | No | Health check (status, timestamp) |
+| GET | /api/version | No | App version and name (from root package.json) |
+| **Auth** | | | |
+| GET | /api/auth/login | No | Start OAuth or show login |
+| GET | /api/auth/callback | No | OAuth callback |
+| GET | /api/auth/me | Session | Current user |
+| GET | /api/auth/logout | No | Logout |
+| POST | /api/auth/local/register | No | Register (local auth) |
+| POST | /api/auth/local/login | No | Login (local auth) |
+| **Sessions** | | | |
+| POST | /api/sessions/assign | No | Assign session by deviceId (helper) |
+| POST | /api/sessions/create | Yes | Create session (technician) |
+| GET | /api/sessions/:sessionId | No | Get session |
+| POST | /api/sessions/register | No | Register session (helper) |
+| PATCH | /api/sessions/:sessionId/settings | No | Update session settings |
+| POST | /api/sessions/:sessionId/connect | Yes | Request connect (technician) |
+| POST | /api/sessions/:sessionId/approval | No | Approval response |
+| GET | /api/sessions | Yes | List sessions |
+| DELETE | /api/sessions/:sessionId | Yes | Delete session |
+| **Packages** | | | |
+| GET | /api/packages/templates | Yes | Template status (EXE/DMG) |
+| POST | /api/packages/templates | Yes | Upload template |
+| POST | /api/packages/generate | Yes | Generate support package |
+| GET | /api/packages/manifest/:sessionId | No | Package manifest |
+| GET | /api/packages/download/:sessionId | No | Download package |
+| **Files** | | | |
+| POST | /api/files/upload | No | Upload file (sessionId in body) |
+| GET | /api/files/download/:fileId | No | Download file |
+| GET | /api/files/session/:sessionId | No | List files for session |
+| **Monitors** | | | |
+| GET | /api/monitors/session/:sessionId | Yes | Get monitor info |
+| POST | /api/monitors/session/:sessionId/switch | Yes | Switch monitor (monitorIndex) |
+| **Devices** | | | |
+| POST | /api/devices/register | No | Register device (helper) |
+| GET | /api/devices/pending/:deviceId | No | Pending session for device |
+| GET | /api/devices | Yes | List devices |
+| POST | /api/devices/:deviceId/request | Yes | Request session for device |
+| **Websocket** | | | |
+| GET | /api/websocket/info | No | Socket.io connection info |
+
+---
+
+## Socket.io events
+
+All events are scoped by session: clients join `session-${sessionId}` via `join-session`. **Technician** = dashboard browser; **Helper** = Electron app on user PC.
+
+| Event | Who sends | Who receives | Payload | Purpose |
+|-------|-----------|--------------|---------|---------|
+| join-session | Both | Server (room) | sessionId, role | Join session room |
+| leave-session | Both | Server | sessionId | Leave room |
+| webrtc-offer | Helper | Technician | sessionId, offer | WebRTC offer |
+| webrtc-answer | Technician | Helper | sessionId, answer | WebRTC answer |
+| webrtc-ice-candidate | Both | Other peer | sessionId, candidate, role | ICE candidate |
+| remote-mouse | Technician | Helper | sessionId, type, x, y, button | Mouse event (0–1 coords) |
+| remote-keyboard | Technician | Helper | sessionId, type, key, code, ctrlKey, … | Keyboard event |
+| set-stream-quality | Technician | Helper | sessionId, quality | quality \| balanced \| speed |
+| list-remote-dir | Technician | Helper | sessionId, path, requestId | List dir on user PC |
+| list-remote-dir-result | Helper | Technician | sessionId, requestId, list, error? | Dir listing |
+| get-remote-file | Technician | Helper | sessionId, path, requestId | Read file on user PC |
+| get-remote-file-result | Helper | Technician | sessionId, requestId, content?, name?, error? | File content (base64) |
+| put-remote-file | Technician | Helper | sessionId, path, filename, content, requestId | Write file on user PC |
+| put-remote-file-result | Helper | Technician | sessionId, requestId, success, error? | Write result |
+| switch-monitor | Technician (via HTTP then server) | Helper | sessionId, monitorIndex | Switch capture display |
+| file-available | Server | Helper | sessionId, id, downloadUrl, … | Notify file for download |
+| approval-response | Helper? | Server | sessionId, approved | User approval |
+| peer-joined | Server | Room | role, sessionId | Peer joined |
+| peer-disconnected | Server | Room | role, sessionId | Peer left |
+
+---
+
+## Frontend / Helper usage
+
+- **Dashboard**: GET /api/sessions, /api/devices, POST /api/sessions/:id/connect, POST /api/packages/generate, etc. Socket: join-session (technician), webrtc-answer, webrtc-ice-candidate, remote-mouse, remote-keyboard, set-stream-quality, list-remote-dir, get-remote-file, put-remote-file, and result events.
+- **SessionView**: Same socket events for active session; GET /api/files/session/:id, POST /api/files/upload, GET /api/monitors/session/:id/switch (POST).
+- **Helper**: POST /api/sessions/assign, POST /api/sessions/register, Socket: join-session (helper), webrtc-offer, webrtc-ice-candidate, receives remote-mouse, remote-keyboard, set-stream-quality, list-remote-dir, get-remote-file, put-remote-file, switch-monitor, file-available.
+
+Last updated: 2025-02-06

@@ -54,3 +54,6 @@ coverage/
 *.pem
 *.key
 *.crt
+
+# Deploy key for GitHub Actions (never commit)
+.deploy-keys/

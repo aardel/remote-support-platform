@@ -126,6 +126,18 @@
 - Compatibility: `docs/COMPATIBILITY.md`
 - Feasibility: `docs/FEASIBILITY_ASSESSMENT.md`
 
+### Current stack (WebRTC + Electron)
+
+- **API and Socket.io contract**: `docs/API_AND_EVENTS.md` — REST routes and Socket.io events (single source of truth).
+- **Deployment**: `docs/DEPLOYMENT.md` — Production deploy, PM2, nginx.
+- **UI guidelines**: `docs/UI_GUIDELINES.md` — Dashboard/session UI principles and backlog (minimalistic, scale-friendly).
+- **Roadmap**: `docs/ROADMAP.md` — Future feature ideas (search, chat, recording, etc.).
+- **Security**: `docs/SECURITY.md` — npm audit and security practices.
+- **Dependencies**: `docs/DEPENDENCIES.md` — Node version and package layout.
+- **Contributing**: `CONTRIBUTING.md` (repo root) — How to run, where to change what, PR flow.
+- **Changelog**: `CHANGELOG.md` (repo root) — Release history and Unreleased changes.
+- **Versioning**: `docs/VERSIONING.md` — Single canonical version (root), sync to helper and web app, bump and release flow.
+
 ---
 
 ## Next Steps

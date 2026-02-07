@@ -122,6 +122,8 @@ ipcMain.handle('helper:get-info', () => {
   };
 });
 
+ipcMain.handle('helper:get-version', () => app.getVersion());
+
 ipcMain.handle('helper:register-session', async (_event, payload) => {
   const deviceId = getDeviceId();
   const config = readConfig();

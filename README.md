@@ -1,16 +1,15 @@
 # Remote Desktop Support Platform
 
-A browser-based remote support solution that allows technicians to assist users with full mouse/keyboard control and file transfer capabilities, using VNC technology with a simple one-time setup.
+Browser-based remote support: technicians use a web dashboard to view and control user PCs via an Electron helper app. WebRTC for screen sharing, Socket.io for signaling, full mouse/keyboard control, and two-panel file transfer. Self-hosted; no port forwarding.
 
 ## Vision
 
-- **Technician**: Uses web-based dashboard (noVNC browser client) to manage support sessions
-- **User**: Receives a link, downloads package, runs it once - TightVNC Portable installed
-- **No Installation Per Session**: TightVNC Portable installed once, works for all future sessions
-- **Full Control**: Mouse/keyboard control via VNC protocol
-- **File Transfer**: Built-in bidirectional file transfer (WebRTC Data Channel + HTTP)
-- **Better Workflow**: Improved experience compared to TeamViewer
-- **Windows XP Support**: ✅ Yes (via TightVNC)
+- **Technician**: Web dashboard (React) — sessions, devices, connect, stream quality, split view, file browser
+- **User**: Runs the helper (Electron EXE/DMG) once; session is assigned by device; minimal UI (Start/Disconnect)
+- **Screen + control**: WebRTC screen share; mouse/keyboard control via helper (robotjs)
+- **File transfer**: Two-panel (your computer ↔ remote); remote file browser (list/send/receive)
+- **Multi-monitor**: Technician switches which display is shared; stream quality preset (Best / Balanced / Speed); split view for vertical monitors
+- **Self-hosted**: Your server, your data; optional connection approval
 
 ## Quick Start
 
@@ -65,35 +64,35 @@ Remote Desktop Server/
 
 ## Key Features
 
-- ✅ **Simple Setup** (one-time TightVNC Portable install)
-- ✅ **Screen sharing** (VNC protocol via websockify bridge)
-- ✅ **Mouse/keyboard control** (Full VNC control)
-- ✅ **File transfer** (bidirectional, hybrid approach)
-- ✅ **Multi-monitor support** (select and switch monitors)
-- ✅ **Connection approval** (security layer with manual approval)
-- ✅ **Self-hosted** (full control on your Contabo VPS)
-- ✅ **Windows XP+ support** (via TightVNC Portable)
-- ✅ **No port forwarding** (reverse connection)
+- ✅ **WebRTC screen sharing** (Electron helper captures display; technician views in browser)
+- ✅ **Mouse/keyboard control** (robotjs in helper; technician sends events via Socket.io)
+- ✅ **Session by device** (same device reuses session; no manual session ID)
+- ✅ **Remote file browser** (list dirs on user PC; Send → / ← Receive; two-panel UI)
+- ✅ **Multi-monitor** (technician switches display); **stream quality** (Best / Balanced / Speed); **split view** (vertical monitors: top/bottom side by side)
+- ✅ **File transfer** (upload/download, session-scoped; file-available notification to helper)
+- ✅ **Connection approval** (optional manual approval before connect)
+- ✅ **Self-hosted** (Node backend, React dashboard, Electron helper; no port forwarding)
+- ✅ **Helper builds** (GitHub Actions: Windows EXE, macOS DMG on push to main)
 
 ## Technology Stack
 
-- **Backend**: Node.js + Express + websockify (VNC bridge)
-- **Frontend**: React (technician dashboard) + HTML/JS (user launcher)
-- **VNC**: TightVNC Portable (user side) + noVNC (technician browser client)
-- **Database**: PostgreSQL + Redis
-- **Infrastructure**: Self-hosted on Contabo VPS
-- **File Transfer**: WebRTC Data Channel + HTTP fallback
+- **Backend**: Node.js, Express, Socket.io
+- **Frontend**: React, Vite (technician dashboard)
+- **Helper**: Electron (screen capture, getDisplayMedia, robotjs optional, Socket.io client)
+- **Signaling**: Socket.io (WebRTC offer/answer/ICE, remote control, file browser events)
+- **Infrastructure**: Self-hosted (e.g. PM2, nginx); optional PostgreSQL
 
 ## Architecture Overview
 
 ```
-User's PC (TightVNC) → Reverse Connection → Your Server (websockify) → Technician Browser (noVNC)
+Technician browser (React) ←→ Server (Express + Socket.io) ←→ User PC (Electron helper)
+                                  ↑
+                            WebRTC (video) + Socket.io (signaling, mouse/keyboard, file ops)
 ```
 
-- **User Side**: TightVNC Portable (VNC server, one-time install)
-- **Server**: websockify bridge (WebSocket ↔ VNC protocol)
-- **Technician Side**: noVNC browser client (no installation)
-- **Connection**: Reverse VNC connection (no port forwarding)
+- **Technician**: Dashboard lists sessions/devices; connect opens SessionView (video, controls, files).
+- **Server**: REST API + Socket.io; forwards events between technician and helper by session.
+- **Helper**: Assigns session, captures screen (WebRTC), injects mouse/keyboard, handles file list/get/put (homedir-scoped).
 
 ## Development Workflow
 
@@ -105,26 +104,38 @@ See `docs/DEPLOYMENT.md` for detailed deployment instructions.
 
 ## Packaging (CI)
 
-This repo includes GitHub Actions workflows to build the helper installers.
+Helper installers (Windows EXE, macOS DMG) are built by GitHub Actions.
 
-**Windows EXE**
-1. Open GitHub → `Actions` → **Build Windows EXE**.
-2. Click **Run workflow**.
-3. Download artifact `remote-support-helper-exe`.
-4. Upload it in the dashboard under **Helper Templates** as `EXE`.
+**Automated (recommended)**
+- **Push to `main`** → workflow **Build Helper (Win + Mac)** runs and builds both. One run → two artifacts: `helper-exe` and `helper-dmg`.
+- **Push a tag `v*`** (e.g. `git tag v1.0.0 && git push origin v1.0.0`) → same build plus a **GitHub Release** is created with the EXE and DMG attached. Download from the Releases page.
 
-**macOS DMG**
-1. Open GitHub → `Actions` → **Build macOS DMG**.
-2. Click **Run workflow**.
-3. Download artifact `remote-support-helper-dmg`.
-4. Upload it in the dashboard under **Helper Templates** as `DMG`.
+**Manual run**
+1. GitHub → **Actions** → **Build Helper (Win + Mac)** → **Run workflow**.
+2. When it finishes, open the run and download **helper-exe** and **helper-dmg**.
+3. Upload them in the dashboard under **Helper Templates** (EXE and DMG), or copy to server `packages/` as `support-template.exe` and `support-template.dmg`.
 
-After upload, new sessions will automatically copy the template into
-`packages/support-<SESSION_ID>.<ext>` for immediate download.
+**Automatic deploy to server**
+- When repo secrets are set (`DEPLOY_SSH_KEY`, `SERVER_HOST`, `SERVER_USER`; optional `SERVER_PACKAGES_PATH`, e.g. `/opt/remote-support/packages`), every successful build **uploads the latest EXE and DMG to the server** as `support-template.exe` and `support-template.dmg`. No manual download or dashboard upload. See `docs/GITHUB_ACTIONS_HELPER.md`.
+
+After templates are on the server, new sessions get `packages/support-<SESSION_ID>.<ext>` for download.
 
 ## Documentation
 
-All documentation is in the `docs/` folder:
+- **API and Socket.io**: [docs/API_AND_EVENTS.md](docs/API_AND_EVENTS.md) — REST routes and Socket.io events (single source of truth)
+- **Contributing**: [CONTRIBUTING.md](CONTRIBUTING.md) — How to run, where to change what, PR flow
+- **Changelog**: [CHANGELOG.md](CHANGELOG.md) — Release history
+- **UI guidelines**: [docs/UI_GUIDELINES.md](docs/UI_GUIDELINES.md) — Dashboard/session UI principles and backlog
+- **Roadmap**: [docs/ROADMAP.md](docs/ROADMAP.md) — Future feature ideas
+- **Security**: [docs/SECURITY.md](docs/SECURITY.md) — npm audit and practices
+- **Dependencies**: [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) — Node version and packages
+- **Versioning**: [docs/VERSIONING.md](docs/VERSIONING.md) — Single canonical version, sync to helper and web app, bump and release flow
+- **Full index**: [docs/DOCUMENTATION_INDEX.md](docs/DOCUMENTATION_INDEX.md) — Guide to all documentation
+- **Direct instructions**: [docs/INSTRUCTIONS.md](docs/INSTRUCTIONS.md) — Copy-paste steps for GitHub description and commit
+
+**Maintainers:** Cursor subagents in [.cursor/agents/](.cursor/agents/) (changelog, version-steward, docs-steward, code-reviewer, etc.) help keep docs, versioning, and release flow consistent; see `.cursor/agents/README.md`.
+
+Other docs in the `docs/` folder:
 
 - **docs/FINAL_ARCHITECTURE.md**: Complete overview of final decisions and architecture
 - **docs/VNC_HYBRID_SOLUTION.md**: VNC implementation details and Windows XP support
@@ -152,32 +163,20 @@ All documentation is in the `docs/` folder:
 
 ## Project Status
 
-### ✅ **COMPLETE - Ready for Testing!**
+### ✅ **Ready for testing**
 
-**What's Built:**
-- ✅ Complete backend API (Express + Socket.io)
-- ✅ Database models and migrations
-- ✅ VNC bridge (WebSocket ↔ VNC)
-- ✅ Customer UI launcher
-- ✅ Technician dashboard (React)
-- ✅ Authentication system
-- ✅ File transfer system
-- ✅ Connection approval system
-- ✅ Package generator
+**What's built:**
+- Backend (Express + Socket.io), technician dashboard (React), Electron helper (WebRTC, file browser, mouse/keyboard)
+- Session-by-device, stream quality, split view, remote file transfer, multi-monitor
+- Auth, connection approval, package generation, GitHub Actions (EXE/DMG builds)
 
-**Files Created:** 46+ files  
-**Lines of Code:** 3000+ lines  
-**Status:** Ready for testing and deployment
+See `PROJECT_STATUS.md` for details; `docs/API_AND_EVENTS.md` for API and Socket.io.
 
-See `PROJECT_STATUS.md` for complete status.
+## Next steps
 
-## Next Steps
-
-1. ✅ **Project Complete** - All core features implemented
-2. ⏭️ **Install dependencies** - Run `npm install` and `cd frontend && npm install`
-3. ⏭️ **Test locally** - Follow `SETUP.md` guide
-4. ⏭️ **Add TightVNC** - Include in package generator
-5. ⏭️ **Deploy to server** - Follow `docs/DEPLOYMENT.md` guide
+1. Install: `npm install`, `cd frontend && npm install`, `cd ../helper && npm install`
+2. Run: `npm run dev` (or build frontend + PM2 for production)
+3. Deploy: `docs/DEPLOYMENT.md`
 
 ## Questions?
 

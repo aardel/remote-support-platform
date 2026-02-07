@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('helperApi', {
+  getVersion: () => ipcRenderer.invoke('helper:get-version'),
   getInfo: () => ipcRenderer.invoke('helper:get-info'),
   checkPending: () => ipcRenderer.invoke('helper:check-pending'),
   assignSession: (allowUnattended) => ipcRenderer.invoke('helper:assign-session', allowUnattended),

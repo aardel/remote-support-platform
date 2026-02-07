@@ -1,7 +1,7 @@
 {
   "name": "remote-support-platform",
-  "version": "1.0.0",
-  "description": "Browser-based remote support solution using VNC technology",
+  "version": "1.0.1",
+  "description": "Browser-based remote support: Electron helper + WebRTC screen share, mouse/keyboard control, file transfer. Self-hosted.",
   "main": "backend/server.js",
   "scripts": {
     "dev": "nodemon backend/server.js",
@@ -10,7 +10,9 @@
     "create-test-user": "node backend/scripts/create-test-technician.js",
     "build": "cd frontend && npm install && npm run build",
     "deploy": "bash deploy.sh",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node -e \"console.log('OK'); process.exit(0);\" && node tests/smoke.js",
+    "version:sync": "node scripts/sync-version.js",
+    "version": "node scripts/sync-version.js"
   },
   "keywords": [
     "remote-support",

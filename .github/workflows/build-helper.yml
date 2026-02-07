@@ -1,0 +1,96 @@
+# Build Windows EXE and macOS DMG, then upload to server.
+# Trigger: push to main, or "Run workflow" in Actions.
+# Deploy: runs automatically after every successful build when DEPLOY_SSH_KEY (and SERVER_*) secrets are set.
+
+name: Build Helper (Win + Mac)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label (optional)"
+        required: false
+        default: ""
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  build-win:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Sync version from root (helper + frontend)
+        run: node scripts/sync-version.js ${{ github.event.inputs.version }}
+      - name: Install helper dependencies
+        working-directory: helper
+        run: npm install
+      - name: Build EXE
+        working-directory: helper
+        run: npm run build:win
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: helper-exe
+          path: helper/dist/*.exe
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Sync version from root (helper + frontend)
+        run: node scripts/sync-version.js ${{ github.event.inputs.version }}
+      - name: Install helper dependencies
+        working-directory: helper
+        run: npm install
+      - name: Build DMG
+        working-directory: helper
+        run: npm run build:mac
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: helper-dmg
+          path: helper/dist/*.dmg
+
+  # Upload latest EXE and DMG to server. Runs automatically when DEPLOY_SSH_KEY is set.
+  # Secrets: DEPLOY_SSH_KEY, SERVER_HOST, SERVER_USER; optional SERVER_PACKAGES_PATH (e.g. /opt/remote-support/packages).
+  deploy-templates:
+    runs-on: ubuntu-latest
+    needs: [build-win, build-mac]
+    if: ${{ secrets.DEPLOY_SSH_KEY != '' }}
+    steps:
+      - name: Download EXE
+        uses: actions/download-artifact@v4
+        with:
+          name: helper-exe
+          path: exe
+      - name: Download DMG
+        uses: actions/download-artifact@v4
+        with:
+          name: helper-dmg
+          path: dmg
+      - name: Deploy to server
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_PACKAGES_PATH: ${{ secrets.SERVER_PACKAGES_PATH }}
+        run: |
+          DEPLOY_PATH="${SERVER_PACKAGES_PATH:-packages}"
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_HOST} "mkdir -p $DEPLOY_PATH"
+          exe=$(ls exe/*.exe 2>/dev/null | head -1)
+          dmg=$(ls dmg/*.dmg 2>/dev/null | head -1)
+          [ -n "$exe" ] && scp -o StrictHostKeyChecking=no "$exe" ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_PATH}/support-template.exe
+          [ -n "$dmg" ] && scp -o StrictHostKeyChecking=no "$dmg" ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_PATH}/support-template.dmg
+          rm -f ~/.ssh/deploy_key
