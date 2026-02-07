@@ -241,6 +241,10 @@ class WebSocketHandler {
                             if (idx !== -1) {
                                 const tech = conn.technicians[idx];
                                 conn.technicians.splice(idx, 1);
+                                // Clear cached offer so reconnecting technician gets a fresh one
+                                if (conn.technicians.length === 0) {
+                                    this.pendingOffers.delete(socket.sessionId);
+                                }
                                 // Notify helper (and others) so they can update the "who is connected" list
                                 this.io.to(`session-${socket.sessionId}`).emit('technician-left', {
                                     sessionId: socket.sessionId,
