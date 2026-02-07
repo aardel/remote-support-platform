@@ -13,7 +13,7 @@ Principles and backlog for the technician dashboard and session view. Goal: **mi
 ## Current layout (summary)
 
 - **Dashboard**: Header (title, user, Logout) → **Search** (single input filtering both Devices and Sessions by session ID, hostname, device name) → Registered Devices (cards) → Generate Package + Helper Templates → Active Sessions (cards) → **Footer** (app version from `/api/version`). Single scroll; search implemented; no status filter or sort yet.
-- **SessionView**: Header (session, status, Monitor, Stream quality, Split view, Files, Disconnect) → video area (single or split) → file-transfer modal (two-panel, remote file browser).
+- **SessionView**: Header (session, status, Monitor, Stream quality, Split view, Files, Disconnect) → video area (single or split) → file-transfer modal (two-panel, remote file browser). The **Monitor** dropdown only enables displays that exist on the customer’s machine (helper sends `displayCount` in capabilities); options beyond that show “(not available)” and are disabled (single- and dual-monitor aware).
 
 ### Split view (intended behavior)
 

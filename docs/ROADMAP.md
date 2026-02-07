@@ -2,13 +2,14 @@
 
 Candidate features for the Remote Support Platform. Aligned with current stack (WebRTC, Electron, Socket.io). Prioritized by impact and fit. Informed by common remote-support tools (TeamViewer, AnyDesk: session recording, chat, unattended access, file transfer, multi-monitor).
 
-**Last updated:** 2025-02-06 (future-features pass)
+**Last updated:** 2025-02-07 (prioritized; monitor dropdown displayCount done)
 
 ---
 
 ## Quick wins
 
 - **Dashboard search and filter**: ✅ Search implemented; status filter and sort still in backlog. See `docs/UI_GUIDELINES.md`.
+- **Monitor dropdown (displayCount)**: ✅ SessionView and control panel only enable monitor options that exist on the customer’s machine (single/dual); helper sends `displayCount` in capabilities.
 - **Session/device sort**: By status, date, hostname.
 - **Clipboard sync**: Send clipboard text between technician and user (Socket event + helper paste).
 - **Reconnect on disconnect**: Auto-reconnect or one-click reconnect when WebRTC drops.

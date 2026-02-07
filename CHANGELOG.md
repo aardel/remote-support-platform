@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+- (Next release)
+
+---
+
+## [1.0.2] – 2025-02-07
+
 ### Added
 
 - **Helper: connected technicians list** — Helper window shows who is viewing: "Connected: Technician (Name)" with one chip per technician (e.g. Aaron Delia, Jane Smith). Multiple technicians can be connected; list updates on join/leave. See `docs/API_AND_EVENTS.md` (technician-joined, technician-left, technicians-present).

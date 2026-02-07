@@ -4,7 +4,7 @@
 
 Run `npm audit` in the repo root (and in `frontend/` and `helper/` if you add scripts there). Address **high** and **critical** before release.
 
-**Last run:** 2025-02-06 — 3 high severity in dependency chain (tar → @mapbox/node-pre-gyp → bcrypt). Fix may require:
+**Last run:** 2025-02-07 — Root: 3 high severity (tar → @mapbox/node-pre-gyp → bcrypt). Frontend: 2 moderate (run `npm audit` in `frontend/`). Fix for root may require:
 
 ```bash
 npm audit fix
