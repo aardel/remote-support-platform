@@ -74,8 +74,9 @@ function formatDuration(ms) {
 }
 
 function startConnectedTimer() {
-  connectedSince = Date.now();
   stopConnectedTimer();
+  connectedSince = Date.now();
+  setStatusUI('Connected 0:00', 'dot-green');
   connectedTimer = setInterval(() => {
     if (connectedSince && isConnected) {
       setStatusUI(`Connected ${formatDuration(Date.now() - connectedSince)}`, 'dot-green');
