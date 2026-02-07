@@ -9,11 +9,9 @@ const fileNotificationEl = document.getElementById('fileNotification');
 const fileNotificationText = document.getElementById('fileNotificationText');
 const fileDownloadBtn = document.getElementById('fileDownloadBtn');
 const detailsToggle = document.getElementById('detailsToggle');
-const chatSection = document.getElementById('chatSection');
-const chatMessagesEl = document.getElementById('chatMessages');
-const chatInput = document.getElementById('chatInput');
-const chatSendBtn = document.getElementById('chatSendBtn');
-const chatBadge = document.getElementById('chatBadge');
+const chatNotificationEl = document.getElementById('chatNotification');
+const chatNotificationText = document.getElementById('chatNotificationText');
+const chatOpenBtn = document.getElementById('chatOpenBtn');
 
 let peerConnection = null;
 let mediaStream = null;
@@ -60,39 +58,15 @@ detailsToggle.addEventListener('click', () => {
   detailsToggle.textContent = logVisible ? 'Hide details' : 'Show details';
 });
 
-// Chat
-function addChatMessage(msg) {
-  const div = document.createElement('div');
-  div.className = `chat-msg from-${msg.role === 'technician' ? 'technician' : 'user'}`;
-  const text = document.createElement('div');
-  text.textContent = msg.message;
-  div.appendChild(text);
-  const time = document.createElement('div');
-  time.className = 'chat-msg-time';
-  time.textContent = new Date(msg.timestamp || Date.now()).toLocaleTimeString();
-  div.appendChild(time);
-  chatMessagesEl.appendChild(div);
-  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+// Chat notification + popup
+function showChatNotification(msg) {
+  if (chatNotificationText) chatNotificationText.textContent = `New message: "${msg.message}"`;
+  if (chatNotificationEl) chatNotificationEl.style.display = 'flex';
 }
 
-function showChat() {
-  chatSection.style.display = '';
-}
-
-function sendChatMessage() {
-  const msg = chatInput.value.trim();
-  if (!msg || !currentSessionId) return;
-  window.helperApi.socketEmit('chat-message', {
-    sessionId: currentSessionId,
-    message: msg,
-    role: 'user'
-  });
-  chatInput.value = '';
-}
-
-chatSendBtn.addEventListener('click', sendChatMessage);
-chatInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') sendChatMessage();
+chatOpenBtn.addEventListener('click', () => {
+  window.helperApi.openChatWindow();
+  if (chatNotificationEl) chatNotificationEl.style.display = 'none';
 });
 
 function showFileNotification() {
@@ -310,10 +284,10 @@ async function connectSignaling(sessionId) {
       log(`Peer joined: ${data.role}`);
     });
 
-    // Chat messages from technician
+    // Chat messages from technician — show notification, auto-open chat window
     window.helperApi.onChatMessage((data) => {
-      showChat();
-      addChatMessage(data);
+      showChatNotification(data);
+      window.helperApi.openChatWindow();
     });
 
     // Handle remote control events

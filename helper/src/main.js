@@ -15,7 +15,10 @@ try {
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 let mainWindow;
+let chatWindow = null;
 let socket = null;
+let currentSessionId = null;
+let chatHistory = [];
 
 const MOUSE_BUTTONS = ['left', 'middle', 'right'];
 
@@ -284,6 +287,8 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
 
     socket.on('connect', () => {
       console.log('Connected to signaling server');
+      currentSessionId = sessionId;
+      chatHistory = [];
       socket.emit('join-session', { sessionId, role: 'helper' });
       resolve({ success: true });
     });
@@ -337,8 +342,14 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
     });
 
     socket.on('chat-message', (data) => {
+      chatHistory.push(data);
+      // Notify main window (for notification bar)
       if (mainWindow) {
         mainWindow.webContents.send('signaling:chat-message', data);
+      }
+      // Forward to chat window if open
+      if (chatWindow && !chatWindow.isDestroyed()) {
+        chatWindow.webContents.send('chat:new-message', data);
       }
     });
 
@@ -500,6 +511,57 @@ ipcMain.handle('helper:socket-disconnect', async () => {
   if (socket) {
     socket.disconnect();
     socket = null;
+  }
+  currentSessionId = null;
+  return { success: true };
+});
+
+// Chat popup window
+function openChatWindow() {
+  if (chatWindow && !chatWindow.isDestroyed()) {
+    chatWindow.focus();
+    return;
+  }
+  chatWindow = new BrowserWindow({
+    width: 400,
+    height: 500,
+    resizable: true,
+    title: 'Chat with Technician',
+    webPreferences: {
+      preload: path.join(__dirname, 'chatPreload.js')
+    }
+  });
+  chatWindow.loadFile(path.join(__dirname, 'renderer', 'chat.html'));
+  chatWindow.on('closed', () => { chatWindow = null; });
+}
+
+ipcMain.handle('helper:open-chat-window', () => {
+  openChatWindow();
+  return { success: true };
+});
+
+// Chat window sends a message
+ipcMain.handle('chat:send-message', async (_event, msg) => {
+  if (!socket || !currentSessionId) throw new Error('Not connected');
+  const data = {
+    sessionId: currentSessionId,
+    message: msg,
+    role: 'user',
+    timestamp: Date.now()
+  };
+  socket.emit('chat-message', data);
+  chatHistory.push(data);
+  // Also echo to chat window so sender sees their own message
+  if (chatWindow && !chatWindow.isDestroyed()) {
+    chatWindow.webContents.send('chat:new-message', data);
+  }
+  return { success: true };
+});
+
+// Chat window requests message history
+ipcMain.handle('chat:request-history', () => {
+  if (chatWindow && !chatWindow.isDestroyed()) {
+    chatWindow.webContents.send('chat:history', chatHistory);
   }
   return { success: true };
 });

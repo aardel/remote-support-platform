@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld('helperApi', {
   onSetStreamQuality: (callback) => ipcRenderer.on('signaling:set-stream-quality', (_event, data) => callback(data)),
 
   // Chat
+  openChatWindow: () => ipcRenderer.invoke('helper:open-chat-window'),
   onChatMessage: (callback) => ipcRenderer.on('signaling:chat-message', (_event, data) => callback(data)),
 
   // File transfer
