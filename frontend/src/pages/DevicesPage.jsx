@@ -71,7 +71,19 @@ function DevicesPage() {
       .some(v => (v || '').toLowerCase().includes(q));
   });
 
-  const geoLabel = (d) => [d.last_city, d.last_region, d.last_country].filter(Boolean).join(', ');
+  const countryFlag = (country) => {
+    if (!country) return '';
+    // Try to match common country names to ISO codes for emoji flags
+    const map = { 'United States': 'US', 'United Kingdom': 'GB', 'Germany': 'DE', 'France': 'FR', 'Italy': 'IT', 'Spain': 'ES', 'Canada': 'CA', 'Australia': 'AU', 'Japan': 'JP', 'China': 'CN', 'India': 'IN', 'Brazil': 'BR', 'Netherlands': 'NL', 'Sweden': 'SE', 'Switzerland': 'CH', 'Austria': 'AT', 'Belgium': 'BE', 'Norway': 'NO', 'Denmark': 'DK', 'Finland': 'FI', 'Ireland': 'IE', 'Poland': 'PL', 'Portugal': 'PT', 'Greece': 'GR', 'Israel': 'IL', 'Turkey': 'TR', 'Russia': 'RU', 'Mexico': 'MX', 'South Korea': 'KR', 'Malta': 'MT', 'Luxembourg': 'LU', 'Singapore': 'SG', 'New Zealand': 'NZ', 'Czech Republic': 'CZ', 'Romania': 'RO', 'Hungary': 'HU', 'Croatia': 'HR', 'Bulgaria': 'BG', 'Slovakia': 'SK', 'Slovenia': 'SI', 'Estonia': 'EE', 'Latvia': 'LV', 'Lithuania': 'LT', 'Cyprus': 'CY', 'Iceland': 'IS' };
+    const code = map[country] || (country.length === 2 ? country.toUpperCase() : null);
+    if (!code) return '';
+    try { return String.fromCodePoint(...code.split('').map(c => 127397 + c.charCodeAt(0))) + ' '; } catch (_) { return ''; }
+  };
+
+  const geoLabel = (d) => {
+    const parts = [d.last_city, d.last_region, d.last_country].filter(Boolean);
+    return parts.length ? countryFlag(d.last_country) + parts.join(', ') : '';
+  };
 
   return (
     <div className="page-container">

@@ -11,6 +11,7 @@ import SessionsPage from './pages/SessionsPage';
 import StatisticsPage from './pages/StatisticsPage';
 import HelperTemplatesPage from './pages/HelperTemplatesPage';
 import SessionView from './pages/SessionView';
+import PreferencesPage from './pages/PreferencesPage';
 import GenerateModal from './components/GenerateModal';
 import './App.css';
 
@@ -90,6 +91,7 @@ function App() {
           <Route path="/sessions" element={<SessionsPage />} />
           <Route path="/statistics" element={<StatisticsPage />} />
           <Route path="/helper-templates" element={<HelperTemplatesPage />} />
+          <Route path="/preferences" element={<PreferencesPage />} />
         </Route>
         <Route path="/" element={<Navigate to="/dashboard" />} />
       </Routes>

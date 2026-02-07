@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { to: '/statistics', icon: '📊', label: 'Statistics' },
   { to: '/helper-templates', icon: '📦', label: 'Helper Templates' },
   { to: '/dashboard/classic', icon: '📋', label: 'Classic Dashboard' },
+  { to: '/preferences', icon: '⚙', label: 'Preferences' },
 ];
 
 function Layout({ user, onLogout, onGenerateClick }) {
