@@ -44,6 +44,7 @@ router.get('/update-info', (req, res) => {
   try {
     const platform = (req.query.platform || process.platform || '').toString().toLowerCase();
     const currentVersion = (req.query.currentVersion || '0.0.0').trim();
+    const clientBuildTime = req.query.buildTime ? parseInt(req.query.buildTime, 10) : null;
     const latestVersion = getLatestVersion();
 
     const platformKey = platform === 'darwin' || platform === 'mac' ? 'darwin' : 'win';
@@ -51,7 +52,26 @@ router.get('/update-info', (req, res) => {
     const templatePath = path.join(PACKAGES_DIR, `support-template.${ext}`);
     const available = fs.existsSync(templatePath);
 
-    const updateAvailable = available && compareVersions(latestVersion, currentVersion) > 0;
+    let updateAvailable = false;
+    let serverBuildTime = null;
+
+    if (available) {
+      const versionCmp = compareVersions(latestVersion, currentVersion);
+      if (versionCmp > 0) {
+        // Newer version on server
+        updateAvailable = true;
+      } else if (versionCmp === 0 && clientBuildTime) {
+        // Same version — compare template file modification time vs helper build time
+        try {
+          const stat = fs.statSync(templatePath);
+          serverBuildTime = Math.floor(stat.mtimeMs);
+          if (serverBuildTime > clientBuildTime) {
+            updateAvailable = true;
+          }
+        } catch (_) { /* stat failed, skip timestamp check */ }
+      }
+    }
+
     const baseUrl = (req.protocol + '://' + req.get('host')).replace(/\/$/, '');
     const downloadUrl = available ? `${baseUrl}/api/helper/download/${platformKey}` : null;
 
@@ -60,7 +80,12 @@ router.get('/update-info', (req, res) => {
       currentVersion,
       latestVersion,
       downloadUrl,
-      releaseNotes: updateAvailable ? `Version ${latestVersion} is available.` : null
+      serverBuildTime,
+      releaseNotes: updateAvailable
+        ? (compareVersions(latestVersion, currentVersion) > 0
+          ? `Version ${latestVersion} is available.`
+          : `A newer build of ${latestVersion} is available.`)
+        : null
     });
   } catch (e) {
     console.error('Helper update-info error:', e);

@@ -147,6 +147,25 @@ ipcMain.handle('helper:get-info', () => {
 
 ipcMain.handle('helper:get-version', () => app.getVersion());
 
+// Get the helper's own build time (modification time of the main executable or app bundle)
+function getHelperBuildTime() {
+  try {
+    // In packaged app: use the executable's mtime
+    const exePath = app.getPath('exe');
+    if (exePath && fs.existsSync(exePath)) {
+      return Math.floor(fs.statSync(exePath).mtimeMs);
+    }
+  } catch (_) {}
+  try {
+    // Fallback: use package.json mtime in the app directory
+    const pkgPath = path.join(app.getAppPath(), 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      return Math.floor(fs.statSync(pkgPath).mtimeMs);
+    }
+  } catch (_) {}
+  return null;
+}
+
 ipcMain.handle('helper:check-for-update', async () => {
   try {
     const config = readConfig();
@@ -154,7 +173,9 @@ ipcMain.handle('helper:check-for-update', async () => {
     if (!base) return { updateAvailable: false };
     const platform = process.platform === 'darwin' ? 'darwin' : 'win';
     const currentVersion = app.getVersion();
-    const url = `${base}/api/helper/update-info?platform=${platform}&currentVersion=${encodeURIComponent(currentVersion)}`;
+    const buildTime = getHelperBuildTime();
+    const params = `platform=${platform}&currentVersion=${encodeURIComponent(currentVersion)}${buildTime ? `&buildTime=${buildTime}` : ''}`;
+    const url = `${base}/api/helper/update-info?${params}`;
     const lib = url.startsWith('https') ? https : http;
     const data = await new Promise((resolve, reject) => {
       lib.get(url, { rejectUnauthorized: false }, (res) => {
