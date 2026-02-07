@@ -5,6 +5,25 @@ import './SessionView.css';
 
 const MONITOR_OPTIONS = [1, 2, 3, 4];
 
+// Boost SDP bitrate so the encoder/decoder negotiate high quality from the start
+function boostSdpBitrate(sdp) {
+  const lines = sdp.split('\r\n');
+  const out = [];
+  let inVideo = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith('m=video')) { inVideo = true; out.push(line); continue; }
+    if (line.startsWith('m=') && !line.startsWith('m=video')) { inVideo = false; }
+    if (inVideo && line.startsWith('b=AS:')) continue; // remove existing
+    out.push(line);
+    if (inVideo && line.startsWith('c=')) out.push('b=AS:16000');
+    if (inVideo && line.startsWith('a=fmtp:') && !line.includes('x-google-min-bitrate')) {
+      out[out.length - 1] = line + ';x-google-min-bitrate=4000;x-google-start-bitrate=8000;x-google-max-bitrate=16000';
+    }
+  }
+  return out.join('\r\n');
+}
+
 function SessionView({ user }) {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -56,6 +75,7 @@ function SessionView({ user }) {
   const panelListPathRef = useRef('');
   const sendSelectedToRemoteRef = useRef(null);
   const peerConnectionRef = useRef(null);
+  const lastMouseMoveRef = useRef(0);
   const userRef = useRef(user);
   userRef.current = user;
 
@@ -142,8 +162,12 @@ function SessionView({ user }) {
         console.log('Set remote description');
 
         const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        console.log('Created and set local description');
+        const boostedAnswer = new RTCSessionDescription({
+          type: answer.type,
+          sdp: boostSdpBitrate(answer.sdp)
+        });
+        await pc.setLocalDescription(boostedAnswer);
+        console.log('Created and set local description (SDP bitrate boosted)');
 
         newSocket.emit('webrtc-answer', {
           sessionId,
@@ -259,6 +283,14 @@ function SessionView({ user }) {
     }
   }, [remoteStream, splitView]);
 
+  // Auto-focus video element when connected so keyboard events work immediately
+  useEffect(() => {
+    if (connected) {
+      const el = splitView ? videoTopRef.current : videoRef.current;
+      if (el) el.focus();
+    }
+  }, [connected, splitView]);
+
   useEffect(() => {
     if (sessionId) loadFiles();
   }, [sessionId]);
@@ -367,6 +399,13 @@ function SessionView({ user }) {
     if (!socket || !connected) {
       if (e.type === 'mousedown') console.warn('[mouse] blocked: socket=', !!socket, 'connected=', connected);
       return;
+    }
+
+    // Throttle mousemove to ~60/sec (16ms) to avoid flooding the socket
+    if (e.type === 'mousemove') {
+      const now = performance.now();
+      if (now - lastMouseMoveRef.current < 16) return;
+      lastMouseMoveRef.current = now;
     }
 
     const video = half === 'top' ? videoTopRef.current : half === 'bottom' ? videoBottomRef.current : videoRef.current;

@@ -43,20 +43,62 @@ function injectMouse(data) {
   }
 }
 
+// Map browser key names to robotjs key names
+const BROWSER_TO_ROBOTJS = {
+  'arrowup': 'up', 'arrowdown': 'down', 'arrowleft': 'left', 'arrowright': 'right',
+  ' ': 'space', 'escape': 'escape', 'backspace': 'backspace', 'delete': 'delete',
+  'enter': 'enter', 'tab': 'tab', 'home': 'home', 'end': 'end',
+  'pageup': 'pageup', 'pagedown': 'pagedown', 'insert': 'insert',
+  'capslock': 'capslock', 'numlock': 'numlock', 'scrolllock': 'scrolllock',
+  'printscreen': 'printscreen', 'pause': 'pause',
+  'f1': 'f1', 'f2': 'f2', 'f3': 'f3', 'f4': 'f4', 'f5': 'f5', 'f6': 'f6',
+  'f7': 'f7', 'f8': 'f8', 'f9': 'f9', 'f10': 'f10', 'f11': 'f11', 'f12': 'f12',
+  'control': 'control', 'shift': 'shift', 'alt': 'alt', 'meta': 'command',
+};
+
 function injectKeyboard(data) {
   if (!robot) return;
   try {
+    // Skip bare modifier keys (they are handled via ctrlKey/shiftKey/altKey/metaKey flags)
+    const keyLower = (data.key || '').toLowerCase();
+    if (['control', 'shift', 'alt', 'meta'].includes(keyLower)) return;
+
     const mods = [];
     if (data.ctrlKey) mods.push('control');
     if (data.shiftKey) mods.push('shift');
     if (data.altKey) mods.push('alt');
     if (data.metaKey) mods.push('command');
-    const key = data.key && data.key.length === 1 ? data.key.toLowerCase() : (data.key || data.code || '').toLowerCase();
-    const down = data.type === 'keydown' ? 'down' : 'up';
+
+    let key = null;
+
+    // 1. Try data.key — most reliable for special keys
+    if (data.key) {
+      if (data.key.length === 1) {
+        // Single character: letter, number, symbol — use as-is (lowercased)
+        key = data.key.toLowerCase();
+      } else if (BROWSER_TO_ROBOTJS[keyLower]) {
+        key = BROWSER_TO_ROBOTJS[keyLower];
+      }
+    }
+
+    // 2. Fallback to data.code if key not resolved
+    if (!key && data.code) {
+      const code = data.code;
+      if (code.startsWith('Key') && code.length === 4) {
+        key = code.charAt(3).toLowerCase(); // KeyA -> a
+      } else if (code.startsWith('Digit') && code.length === 6) {
+        key = code.charAt(5); // Digit1 -> 1
+      } else if (BROWSER_TO_ROBOTJS[code.toLowerCase()]) {
+        key = BROWSER_TO_ROBOTJS[code.toLowerCase()];
+      }
+    }
+
     if (!key) return;
+
+    const down = data.type === 'keydown' ? 'down' : 'up';
     robot.keyToggle(key, down, mods.length ? mods : undefined);
   } catch (e) {
-    console.warn('Keyboard injection error:', e.message);
+    console.warn('Keyboard injection error:', e.message, data.key, data.code);
   }
 }
 

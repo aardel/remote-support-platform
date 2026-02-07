@@ -251,7 +251,11 @@ async function startScreenCapture(overrideIndex) {
     log(`Using display ${selectedIndex + 1}`);
     const displayIndex = selectedIndex >= 0 ? selectedIndex : undefined;
     const displayInfo = await window.helperApi.getDisplayInfo(displayIndex);
-    log(`Display: ${displayInfo.width}x${displayInfo.height}`);
+    // Use physical (native) resolution on HiDPI/Retina displays
+    const sf = displayInfo.scaleFactor || 1;
+    const captureWidth = Math.round(displayInfo.width * sf);
+    const captureHeight = Math.round(displayInfo.height * sf);
+    log(`Display: ${displayInfo.width}x${displayInfo.height} @${sf}x → capture ${captureWidth}x${captureHeight}`);
 
     const newStream = await navigator.mediaDevices.getUserMedia({
       audio: false,
@@ -259,10 +263,10 @@ async function startScreenCapture(overrideIndex) {
         mandatory: {
           chromeMediaSource: 'desktop',
           chromeMediaSourceId: screenSource.id,
-          minWidth: displayInfo.width,
-          minHeight: displayInfo.height,
-          maxWidth: displayInfo.width,
-          maxHeight: displayInfo.height,
+          minWidth: captureWidth,
+          minHeight: captureHeight,
+          maxWidth: captureWidth,
+          maxHeight: captureHeight,
           maxFrameRate: 30
         }
       }
