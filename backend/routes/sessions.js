@@ -21,6 +21,19 @@ router.post('/assign', async (req, res) => {
             allowUnattended: allowUnattended !== false,
             lastIp: req.ip
         });
+
+        // Broadcast new/existing session to all dashboards so they update in real-time
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('session-created', {
+                sessionId: result.sessionId,
+                status: 'waiting',
+                created_at: new Date().toISOString(),
+                device_id: deviceId,
+                client_info: { os, hostname, arch }
+            });
+        }
+
         res.json({ success: true, ...result });
     } catch (error) {
         console.error('Error assigning session:', error);
@@ -274,10 +287,10 @@ router.delete('/:sessionId', requireAuth, async (req, res) => {
             SessionService.inMemorySessions.delete(sessionId);
         }
 
-        // Notify via WebSocket
+        // Notify via WebSocket (broadcast globally so all dashboards update)
         const io = req.app.get('io');
         if (io) {
-            io.to(`session-${sessionId}`).emit('session-ended', { sessionId });
+            io.emit('session-ended', { sessionId });
         }
 
         res.json({ success: true, message: 'Session deleted' });

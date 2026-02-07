@@ -32,29 +32,66 @@ function Dashboard({ user, onLogout }) {
   const setupWebSocket = () => {
     const socket = io(window.location.origin);
 
-    // Listen for session updates (global broadcast)
+    // Listen for new sessions created via helper /assign
+    socket.on('session-created', (data) => {
+      setSessions(prev => {
+        const exists = prev.some(s => (s.session_id || s.sessionId) === data.sessionId);
+        if (exists) return prev;
+        return [{
+          session_id: data.sessionId,
+          status: data.status || 'waiting',
+          created_at: data.created_at || new Date().toISOString(),
+          device_id: data.device_id,
+          client_info: data.client_info
+        }, ...prev];
+      });
+    });
+
+    // Listen for session updates (global broadcast) — upsert: update if exists, add if not
     socket.on('session-updated', (data) => {
-      setSessions(prev => prev.map(s => {
-        const sId = s.session_id || s.sessionId;
-        if (sId === data.sessionId) {
-          return { ...s, status: data.status, client_info: data.clientInfo };
+      setSessions(prev => {
+        const exists = prev.some(s => (s.session_id || s.sessionId) === data.sessionId);
+        if (exists) {
+          return prev.map(s => {
+            const sId = s.session_id || s.sessionId;
+            if (sId === data.sessionId) {
+              return { ...s, status: data.status, client_info: data.clientInfo };
+            }
+            return s;
+          });
         }
-        return s;
-      }));
+        return [{
+          session_id: data.sessionId,
+          status: data.status,
+          client_info: data.clientInfo,
+          created_at: new Date().toISOString()
+        }, ...prev];
+      });
     });
 
-    // Also listen for specific session-connected events
+    // Also listen for specific session-connected events — upsert
     socket.on('session-connected', (data) => {
-      setSessions(prev => prev.map(s => {
-        const sId = s.session_id || s.sessionId;
-        if (sId === data.sessionId) {
-          return { ...s, status: 'connected', client_info: data.clientInfo };
+      setSessions(prev => {
+        const exists = prev.some(s => (s.session_id || s.sessionId) === data.sessionId);
+        if (exists) {
+          return prev.map(s => {
+            const sId = s.session_id || s.sessionId;
+            if (sId === data.sessionId) {
+              return { ...s, status: 'connected', client_info: data.clientInfo };
+            }
+            return s;
+          });
         }
-        return s;
-      }));
+        return [{
+          session_id: data.sessionId,
+          status: 'connected',
+          client_info: data.clientInfo,
+          created_at: new Date().toISOString()
+        }, ...prev];
+      });
     });
 
-    // Listen for session deletion
+    // Listen for session deletion (broadcast globally)
     socket.on('session-ended', (data) => {
       setSessions(prev => prev.filter(s => {
         const sId = s.session_id || s.sessionId;
