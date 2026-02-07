@@ -72,7 +72,10 @@ router.get('/update-info', (req, res) => {
       }
     }
 
-    const baseUrl = (req.protocol + '://' + req.get('host')).replace(/\/$/, '');
+    // Use SERVER_URL env if set (includes correct port), otherwise reconstruct from request
+    const baseUrl = process.env.SERVER_URL
+      ? process.env.SERVER_URL.replace(/\/$/, '')
+      : (req.protocol + '://' + req.get('host')).replace(/\/$/, '');
     const downloadUrl = available ? `${baseUrl}/api/helper/download/${platformKey}` : null;
 
     res.json({
