@@ -30,18 +30,19 @@ The **Release Helper** workflow runs, builds Win + Mac, and creates a release at
 
 ## Deploy templates to server (automatic)
 
-When these secrets are set, **every** successful build (push to `main` or manual run) uploads the latest EXE and DMG to your server. No manual download or dashboard upload.
+When deploy is enabled, **every** successful build (push to `main` or manual run) uploads the latest EXE and DMG to your server. No manual download or dashboard upload.
 
 1. **Repo** → **Settings** → **Secrets and variables** → **Actions**.
-2. Add:
+2. **Variables** tab: Add **DEPLOY_ENABLED** = `true` (so the workflow runs the deploy job).
+3. **Secrets** tab: Add:
    - **DEPLOY_SSH_KEY**: Private SSH key (full content, including `-----BEGIN ... -----`) that can log in to the server.
    - **SERVER_HOST**: Hostname or IP (e.g. `myserver.com` or `123.45.67.89`).
    - **SERVER_USER**: SSH user (e.g. `root` or `deploy`).
    - **SERVER_PACKAGES_PATH** (optional): Remote directory for templates. Default is `packages` (relative to SSH user’s home). For the app at `/opt/remote-support`, use **`/opt/remote-support/packages`** so the backend finds `support-template.exe` and `support-template.dmg`.
 
-3. After the next push to `main` (or manual run), the workflow builds both installers and then SCPs them to the server. The deploy job is skipped if `DEPLOY_SSH_KEY` is not set.
+4. After the next push to `main` (or manual run), the workflow builds both installers and then runs the deploy job (only when **DEPLOY_ENABLED** is `true` and secrets are set).
 
 ## Which workflow to use
 
-- **Push to main / auto-deploy:** Use **Build Helper (Win + Mac)**. It runs on every push to `main`, syncs version from root, builds both EXE and DMG, then runs the deploy job if secrets are set. Do not use "Build macOS DMG" or "Build Windows EXE" for that—they are manual-only and do not run deploy.
+- **Push to main / auto-deploy:** Use **Build Helper (Win + Mac)**. It runs on every push to `main`, syncs version from root, builds both EXE and DMG, then runs the deploy job when the repo variable **DEPLOY_ENABLED** is set to `true` and deploy secrets are set. Do not use "Build macOS DMG" or "Build Windows EXE" for that—they are manual-only and do not run deploy.
 - **Mac build (robotjs):** The helper uses Electron 28 so that robotjs prebuilds work on macOS runners (Electron 30.x can trigger "Could not detect abi" and a slow source build).

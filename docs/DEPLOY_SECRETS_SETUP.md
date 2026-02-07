@@ -53,14 +53,24 @@ Select and copy the **entire** output (from `-----BEGIN OPENSSH PRIVATE KEY-----
 2. Click **Settings**.
 3. In the left sidebar, under **Security**, click **Secrets and variables** → **Actions**.
 
-### Step 2.2 – Add DEPLOY_SSH_KEY
+### Step 2.2 – Enable the deploy job (variable)
+
+1. Click the **Variables** tab.
+2. Click **New repository variable**.
+3. **Name:** `DEPLOY_ENABLED`
+4. **Value:** `true`
+5. Click **Add variable**.
+
+This tells the workflow to run the deploy job. (GitHub doesn’t allow workflows to check “is a secret set?”, so we use this variable instead.)
+
+### Step 2.3 – Add DEPLOY_SSH_KEY
 
 1. Click **New repository secret**.
 2. **Name:** `DEPLOY_SSH_KEY`
 3. **Secret:** Paste the full private key you copied in Step 1.3 (the whole block including BEGIN and END lines).
 4. Click **Add secret**.
 
-### Step 2.3 – Add SERVER_HOST
+### Step 2.4 – Add SERVER_HOST
 
 1. Click **New repository secret**.
 2. **Name:** `SERVER_HOST`
@@ -70,14 +80,14 @@ Select and copy the **entire** output (from `-----BEGIN OPENSSH PRIVATE KEY-----
    - or whatever you use in `ssh user@host`
 4. Click **Add secret**.
 
-### Step 2.4 – Add SERVER_USER
+### Step 2.5 – Add SERVER_USER
 
 1. Click **New repository secret**.
 2. **Name:** `SERVER_USER`
 3. **Secret:** The SSH username you use to log in (e.g. `root` or your Linux user).
 4. Click **Add secret**.
 
-### Step 2.5 – Add SERVER_PACKAGES_PATH (recommended)
+### Step 2.6 – Add SERVER_PACKAGES_PATH (recommended)
 
 1. Click **New repository secret**.
 2. **Name:** `SERVER_PACKAGES_PATH`
@@ -85,7 +95,7 @@ Select and copy the **entire** output (from `-----BEGIN OPENSSH PRIVATE KEY-----
    - `/opt/remote-support/packages`
 4. Click **Add secret**.
 
-You should now have 4 secrets: `DEPLOY_SSH_KEY`, `SERVER_HOST`, `SERVER_USER`, `SERVER_PACKAGES_PATH`.
+You should now have 1 variable (**DEPLOY_ENABLED** = `true`) and 4 secrets: `DEPLOY_SSH_KEY`, `SERVER_HOST`, `SERVER_USER`, `SERVER_PACKAGES_PATH`.
 
 ---
 

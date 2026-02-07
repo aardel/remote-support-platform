@@ -60,12 +60,12 @@ jobs:
           name: helper-dmg
           path: helper/dist/*.dmg
 
-  # Upload latest EXE and DMG to server. Runs automatically when DEPLOY_SSH_KEY is set.
+  # Upload latest EXE and DMG to server. Set repo variable DEPLOY_ENABLED = true (Actions → Variables) when deploy secrets are set.
   # Secrets: DEPLOY_SSH_KEY, SERVER_HOST, SERVER_USER; optional SERVER_PACKAGES_PATH (e.g. /opt/remote-support/packages).
   deploy-templates:
     runs-on: ubuntu-latest
     needs: [build-win, build-mac]
-    if: ${{ secrets.DEPLOY_SSH_KEY != '' }}
+    if: vars.DEPLOY_ENABLED == 'true'
     steps:
       - name: Download EXE
         uses: actions/download-artifact@v4
