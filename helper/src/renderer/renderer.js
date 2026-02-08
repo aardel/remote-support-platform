@@ -34,6 +34,7 @@ let logVisible = false;
 let connectedTechnicians = [];
 let connectedSince = null; // Date when first technician connected
 let connectedTimer = null; // interval for updating connected duration
+let disconnecting = false;
 
 function updateConnectedTechniciansUI() {
   if (!connectedTechniciansRow || !connectedTechniciansList) return;
@@ -705,29 +706,36 @@ function handleAllTechniciansGone() {
     startBtn.disabled = false;
     log('Technician disconnected. Waiting for next connection (unattended mode).');
   } else {
-    setDisconnected();
+    // If unattended is off, end the session cleanly so server status does not stay "connected".
+    disconnect().catch(e => log(`Disconnect failed: ${e.message}`));
   }
 }
 
 async function disconnect() {
+  if (disconnecting) return;
+  disconnecting = true;
   log('Disconnecting...');
-  stopConnectedTimer();
-  if (mediaStream) {
-    mediaStream.getTracks().forEach(t => t.stop());
-    mediaStream = null;
+  try {
+    stopConnectedTimer();
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(t => t.stop());
+      mediaStream = null;
+    }
+    peerConnectionsBySocketId.forEach(pc => pc.close());
+    peerConnectionsBySocketId.clear();
+    if (peerConnection) {
+      peerConnection.close();
+      peerConnection = null;
+    }
+    await window.helperApi.socketDisconnect();
+    connectedTechnicians = [];
+    updateConnectedTechniciansUI();
+    setDisconnected();
+    setStatusUI('Ready', 'dot-green');
+    log('Disconnected');
+  } finally {
+    disconnecting = false;
   }
-  peerConnectionsBySocketId.forEach(pc => pc.close());
-  peerConnectionsBySocketId.clear();
-  if (peerConnection) {
-    peerConnection.close();
-    peerConnection = null;
-  }
-  await window.helperApi.socketDisconnect();
-  connectedTechnicians = [];
-  updateConnectedTechniciansUI();
-  setDisconnected();
-  setStatusUI('Ready', 'dot-green');
-  log('Disconnected');
 }
 
 startBtn.addEventListener('click', async () => {

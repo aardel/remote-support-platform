@@ -8,6 +8,8 @@ function SessionsPage() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('date');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -20,7 +22,13 @@ function SessionsPage() {
       });
     });
     socket.on('session-updated', (data) => {
-      setSessions(prev => prev.map(s => (s.session_id || s.sessionId) === data.sessionId ? { ...s, status: data.status, client_info: data.clientInfo || s.client_info } : s));
+      setSessions(prev => prev.map(s => (s.session_id || s.sessionId) === data.sessionId ? {
+        ...s,
+        status: data.status ?? s.status,
+        client_info: data.clientInfo ?? s.client_info,
+        helper_connected: data.helper_connected ?? s.helper_connected,
+        active_technicians: data.active_technicians ?? s.active_technicians
+      } : s));
     });
     socket.on('session-connected', (data) => {
       setSessions(prev => prev.map(s => (s.session_id || s.sessionId) === data.sessionId ? { ...s, status: 'connected', client_info: data.clientInfo || s.client_info } : s));
@@ -62,13 +70,35 @@ function SessionsPage() {
     }
   };
 
-  const filtered = sessions.filter(s => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    const sid = s.session_id || s.sessionId || '';
-    const host = (s.client_info && s.client_info.hostname) || '';
-    return sid.toLowerCase().includes(q) || host.toLowerCase().includes(q) || (s.status || '').toLowerCase().includes(q);
-  });
+  const filtered = sessions
+    .filter(s => {
+      if (search) {
+        const q = search.toLowerCase();
+        const sid = s.session_id || s.sessionId || '';
+        const host = (s.client_info && s.client_info.hostname) || '';
+        if (!sid.toLowerCase().includes(q) && !host.toLowerCase().includes(q) && !(s.status || '').toLowerCase().includes(q)) return false;
+      }
+      if (statusFilter !== 'all') {
+        const status = (s.status || '').toLowerCase();
+        if (statusFilter === 'connected' && status !== 'connected') return false;
+        if (statusFilter === 'waiting' && status === 'connected') return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'status') {
+        const sa = (a.status || '').toLowerCase();
+        const sb = (b.status || '').toLowerCase();
+        return sa.localeCompare(sb) || (new Date(b.created_at) - new Date(a.created_at));
+      }
+      if (sortBy === 'date') return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      if (sortBy === 'hostname') {
+        const ha = (a.client_info && a.client_info.hostname) || (a.session_id || a.sessionId) || '';
+        const hb = (b.client_info && b.client_info.hostname) || (b.session_id || b.sessionId) || '';
+        return ha.localeCompare(hb, undefined, { sensitivity: 'base' }) || (new Date(b.created_at) - new Date(a.created_at));
+      }
+      return 0;
+    });
 
   return (
     <div className="page-container">
@@ -78,6 +108,18 @@ function SessionsPage() {
       </div>
       <div className="page-toolbar">
         <input type="text" placeholder="Search sessions..." value={search} onChange={e => setSearch(e.target.value)} className="page-search" />
+        <label className="page-toolbar-label">Status</label>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="page-select" aria-label="Filter by status">
+          <option value="all">All</option>
+          <option value="connected">Connected</option>
+          <option value="waiting">Waiting</option>
+        </select>
+        <label className="page-toolbar-label">Sort</label>
+        <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="page-select" aria-label="Sort by">
+          <option value="date">Date (newest)</option>
+          <option value="status">Status</option>
+          <option value="hostname">Hostname</option>
+        </select>
       </div>
       {loading ? (
         <div className="page-empty">Loading...</div>
@@ -109,7 +151,7 @@ function SessionsPage() {
                   </div>
                 )}
                 <div className="card-actions">
-                  {s.status === 'connected' ? (
+                  {(s.status === 'connected' || s.helper_connected === true) ? (
                     <button className="btn-sm btn-primary" onClick={() => connectToSession(sid)}>Connect</button>
                   ) : (
                     <span className="muted" style={{ fontSize: 13 }}>Waiting for user...</span>

@@ -86,6 +86,8 @@ class SessionService {
             technician_id: technicianId,
             device_id: deviceId,
             status: 'waiting',
+            helper_connected: false,
+            active_technicians: 0,
             created_at: now,
             expires_at: expiresAt,
             allow_unattended: true,

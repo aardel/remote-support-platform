@@ -1,5 +1,28 @@
 const { Server } = require('socket.io');
-const Session = require('../models/Session');
+const SessionService = require('./sessionService');
+
+async function safeUpdateSession(sessionId, updates) {
+    // Session schema can vary across deployments; tolerate missing columns by retrying without them.
+    const data = { ...updates };
+    // Try a few times in case multiple new columns are missing.
+    for (let i = 0; i < 6; i++) {
+        try {
+            return await SessionService.updateSession(sessionId, data);
+        } catch (e) {
+            const msg = (e && e.message) ? String(e.message) : '';
+            const m = msg.match(/column \"([^\"]+)\" of relation \"sessions\" does not exist/i);
+            if (!m) throw e;
+            const missing = m[1];
+            if (missing in data) {
+                delete data[missing];
+                continue;
+            }
+            // If we cannot identify the offending key from the error, do not loop forever.
+            throw e;
+        }
+    }
+    return null;
+}
 
 class WebSocketHandler {
     constructor(server) {
@@ -37,6 +60,22 @@ class WebSocketHandler {
                 const conn = this.sessionConnections.get(sessionId);
                 if (role === 'helper') {
                     conn.helper = socket.id;
+                    // Helper socket is the source of truth for "online/ready".
+                    safeUpdateSession(sessionId, {
+                        status: 'connected',
+                        helper_connected: true,
+                        active_technicians: conn.technicians.length,
+                        ended_at: null,
+                        connected_at: new Date()
+                    }).catch(e => {
+                        console.error('Failed to update session status on helper join:', e.message);
+                    });
+                    this.io.emit('session-updated', {
+                        sessionId,
+                        status: 'connected',
+                        helper_connected: true,
+                        active_technicians: conn.technicians.length
+                    });
                     // Send current technicians list to the helper so it can show who is already connected
                     if (conn.technicians.length > 0) {
                         socket.emit('technicians-present', {
@@ -49,6 +88,13 @@ class WebSocketHandler {
                     const techName = technicianName || 'Technician';
                     conn.technicians.push({ socketId: socket.id, technicianId: techId, technicianName: techName });
                     console.log(`Socket ${socket.id} joined session ${sessionId} as technician "${techName}"`);
+                    safeUpdateSession(sessionId, {
+                        active_technicians: conn.technicians.length
+                    }).catch(() => {});
+                    this.io.emit('session-updated', {
+                        sessionId,
+                        active_technicians: conn.technicians.length
+                    });
                     // Notify helper (and others) so they can show who is connected
                     socket.to(`session-${sessionId}`).emit('technician-joined', { sessionId, technicianId: techId, technicianName: techName, technicianSocketId: socket.id });
                 }
@@ -158,9 +204,21 @@ class WebSocketHandler {
                 socket.to(`session-${sessionId}`).emit('remote-mouse', data);
             });
 
+            // Remote clipboard: technician sends clipboard text to paste on user PC
+            socket.on('remote-clipboard', (data) => {
+                const { sessionId } = data;
+                socket.to(`session-${sessionId}`).emit('remote-clipboard', data);
+            });
+
             // Remote control: Keyboard events from technician
             socket.on('remote-keyboard', (data) => {
                 const { sessionId } = data;
+                if (data.type === 'keydown') {
+                    const room = this.io.sockets.adapter.rooms.get(`session-${sessionId}`);
+                    const roomMembers = room ? [...room] : [];
+                    const others = roomMembers.filter(id => id !== socket.id);
+                    console.log(`[keyboard] forwarding "${data.key}" to session-${sessionId} | sender=${socket.id} | room members=${roomMembers.length} | targets=${others.length} (${others.join(', ')})`);
+                }
                 // Forward to helper
                 socket.to(`session-${sessionId}`).emit('remote-keyboard', data);
             });
@@ -224,12 +282,19 @@ class WebSocketHandler {
                             // Clear pending offer when helper disconnects
                             this.pendingOffers.delete(socket.sessionId);
                             // Update session status to 'waiting' and record ended_at
-                            Session.update(socket.sessionId, { status: 'waiting', ended_at: new Date() }).catch(e => {
+                            safeUpdateSession(socket.sessionId, {
+                                status: 'waiting',
+                                helper_connected: false,
+                                active_technicians: conn.technicians ? conn.technicians.length : 0,
+                                ended_at: new Date()
+                            }).catch(e => {
                                 console.error('Failed to update session status on helper disconnect:', e.message);
                             });
                             this.io.emit('session-updated', {
                                 sessionId: socket.sessionId,
-                                status: 'waiting'
+                                status: 'waiting',
+                                helper_connected: false,
+                                active_technicians: conn.technicians ? conn.technicians.length : 0
                             });
                             // Notify technicians that helper disconnected
                             this.io.to(`session-${socket.sessionId}`).emit('peer-disconnected', {
@@ -245,6 +310,13 @@ class WebSocketHandler {
                                 if (conn.technicians.length === 0) {
                                     this.pendingOffers.delete(socket.sessionId);
                                 }
+                                safeUpdateSession(socket.sessionId, {
+                                    active_technicians: conn.technicians.length
+                                }).catch(() => {});
+                                this.io.emit('session-updated', {
+                                    sessionId: socket.sessionId,
+                                    active_technicians: conn.technicians.length
+                                });
                                 // Notify helper (and others) so they can update the "who is connected" list
                                 this.io.to(`session-${socket.sessionId}`).emit('technician-left', {
                                     sessionId: socket.sessionId,

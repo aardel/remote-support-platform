@@ -16,6 +16,8 @@ function ClassicDashboard({ user, onLogout }) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [templateStatus, setTemplateStatus] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [sessionStatusFilter, setSessionStatusFilter] = useState('all');
+  const [sessionSortBy, setSessionSortBy] = useState('date');
   const [appVersion, setAppVersion] = useState(null);
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
@@ -58,7 +60,13 @@ function ClassicDashboard({ user, onLogout }) {
           return prev.map(s => {
             const sId = s.session_id || s.sessionId;
             if (sId === data.sessionId) {
-              return { ...s, status: data.status, client_info: data.clientInfo };
+              return {
+                ...s,
+                status: data.status ?? s.status,
+                client_info: data.clientInfo ?? s.client_info,
+                helper_connected: data.helper_connected ?? s.helper_connected,
+                active_technicians: data.active_technicians ?? s.active_technicians
+              };
             }
             return s;
           });
@@ -67,6 +75,8 @@ function ClassicDashboard({ user, onLogout }) {
           session_id: data.sessionId,
           status: data.status,
           client_info: data.clientInfo,
+          helper_connected: data.helper_connected,
+          active_technicians: data.active_technicians,
           created_at: new Date().toISOString()
         }, ...prev];
       });
@@ -488,7 +498,20 @@ function ClassicDashboard({ user, onLogout }) {
 
         <div className="sessions-list">
           <h2>Active Sessions</h2>
-          
+          <div className="dashboard-session-filters" style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
+            <label style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>Status</label>
+            <select value={sessionStatusFilter} onChange={e => setSessionStatusFilter(e.target.value)} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 13 }}>
+              <option value="all">All</option>
+              <option value="connected">Connected</option>
+              <option value="waiting">Waiting</option>
+            </select>
+            <label style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>Sort</label>
+            <select value={sessionSortBy} onChange={e => setSessionSortBy(e.target.value)} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 13 }}>
+              <option value="date">Date (newest)</option>
+              <option value="status">Status</option>
+              <option value="hostname">Hostname</option>
+            </select>
+          </div>
           {sessions.length === 0 ? (
             <div className="empty-state">
               <p>No active sessions</p>
@@ -498,11 +521,32 @@ function ClassicDashboard({ user, onLogout }) {
             <div className="sessions-grid">
               {sessions
                 .filter((session) => {
-                  if (!searchQuery) return true;
-                  const q = searchQuery.toLowerCase();
-                  const sid = session.session_id || session.sessionId || '';
-                  const host = (session.client_info && session.client_info.hostname) || '';
-                  return sid.toLowerCase().includes(q) || host.toLowerCase().includes(q);
+                  if (searchQuery) {
+                    const q = searchQuery.toLowerCase();
+                    const sid = session.session_id || session.sessionId || '';
+                    const host = (session.client_info && session.client_info.hostname) || '';
+                    if (!sid.toLowerCase().includes(q) && !host.toLowerCase().includes(q)) return false;
+                  }
+                  if (sessionStatusFilter !== 'all') {
+                    const status = (session.status || '').toLowerCase();
+                    if (sessionStatusFilter === 'connected' && status !== 'connected') return false;
+                    if (sessionStatusFilter === 'waiting' && status === 'connected') return false;
+                  }
+                  return true;
+                })
+                .sort((a, b) => {
+                  if (sessionSortBy === 'status') {
+                    const sa = (a.status || '').toLowerCase();
+                    const sb = (b.status || '').toLowerCase();
+                    return sa.localeCompare(sb) || (new Date(b.created_at) - new Date(a.created_at));
+                  }
+                  if (sessionSortBy === 'date') return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+                  if (sessionSortBy === 'hostname') {
+                    const ha = (a.client_info && a.client_info.hostname) || (a.session_id || a.sessionId) || '';
+                    const hb = (b.client_info && b.client_info.hostname) || (b.session_id || b.sessionId) || '';
+                    return ha.localeCompare(hb, undefined, { sensitivity: 'base' }) || (new Date(b.created_at) - new Date(a.created_at));
+                  }
+                  return 0;
                 })
                 .map(session => (
                 <div key={session.session_id} className="session-card">
@@ -569,7 +613,7 @@ function ClassicDashboard({ user, onLogout }) {
                   </div>
                   
                   <div className="session-actions">
-                    {session.status === 'connected' ? (
+                    {(session.status === 'connected' || session.helper_connected === true) ? (
                       <button
                         onClick={() => connectToSession(session.session_id || session.sessionId)}
                         className="connect-btn"

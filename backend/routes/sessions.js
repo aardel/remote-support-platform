@@ -108,7 +108,9 @@ router.post('/register', async (req, res) => {
             vnc_port: vncPort || 5900,
             device_id: deviceId || null,
             status: 'connected',
-            connected_at: new Date()
+            connected_at: new Date(),
+            // Clear end markers on reconnect so stats and dashboards do not treat it as ended.
+            ended_at: null
         };
         if (typeof allowUnattended === 'boolean') {
             sessionUpdate.allow_unattended = allowUnattended;

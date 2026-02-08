@@ -9,7 +9,7 @@ function QuickConnectWidget({ size }) {
 
   useEffect(() => {
     axios.get('/api/sessions').then(r => {
-      const connected = (r.data.sessions || []).filter(s => s.status === 'connected');
+      const connected = (r.data.sessions || []).filter(s => s.status === 'connected' || s.helper_connected === true);
       setSessions(connected.slice(0, 3));
     }).catch(() => {});
   }, []);

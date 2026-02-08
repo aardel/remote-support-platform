@@ -58,7 +58,13 @@ function Dashboard({ user, onLogout }) {
           return prev.map(s => {
             const sId = s.session_id || s.sessionId;
             if (sId === data.sessionId) {
-              return { ...s, status: data.status, client_info: data.clientInfo };
+              return {
+                ...s,
+                status: data.status ?? s.status,
+                client_info: data.clientInfo ?? s.client_info,
+                helper_connected: data.helper_connected ?? s.helper_connected,
+                active_technicians: data.active_technicians ?? s.active_technicians
+              };
             }
             return s;
           });
@@ -67,6 +73,8 @@ function Dashboard({ user, onLogout }) {
           session_id: data.sessionId,
           status: data.status,
           client_info: data.clientInfo,
+          helper_connected: data.helper_connected,
+          active_technicians: data.active_technicians,
           created_at: new Date().toISOString()
         }, ...prev];
       });
@@ -569,7 +577,7 @@ function Dashboard({ user, onLogout }) {
                   </div>
                   
                   <div className="session-actions">
-                    {session.status === 'connected' ? (
+                    {(session.status === 'connected' || session.helper_connected === true) ? (
                       <button
                         onClick={() => connectToSession(session.session_id || session.sessionId)}
                         className="connect-btn"

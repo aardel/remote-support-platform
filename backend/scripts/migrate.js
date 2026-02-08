@@ -108,6 +108,9 @@ async function migrate() {
         await client.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS ended_at TIMESTAMP`);
         await client.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255)`);
         await client.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS machine_name VARCHAR(255)`);
+        // Sessions: live presence (helper socket + tech count) to prevent UI lockout if status drifts
+        await client.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS helper_connected BOOLEAN DEFAULT false`);
+        await client.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS active_technicians INTEGER DEFAULT 0`);
 
         // Technician preferences (widget layout, retention)
         await client.query(`

@@ -24,11 +24,12 @@ function ActiveSessionsWidget({ size }) {
       <div className="widget-stat">{sessions.length}</div>
       {limit > 0 && sessions.slice(0, limit).map(s => {
         const sid = s.session_id || s.sessionId;
+        const ready = s.status === 'connected' || s.helper_connected === true;
         return (
           <div key={sid} className="widget-row">
             <span className="widget-row-id">{sid}</span>
             <span className={`widget-badge ${s.status === 'connected' ? 'wb-ok' : 'wb-warn'}`}>{s.status}</span>
-            {s.status === 'connected' && <button className="widget-link-btn" onClick={() => connect(sid)}>Connect</button>}
+            {ready && <button className="widget-link-btn" onClick={() => connect(sid)}>Connect</button>}
           </div>
         );
       })}
