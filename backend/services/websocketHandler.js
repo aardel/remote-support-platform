@@ -46,6 +46,17 @@ class WebSocketHandler {
         this.io.on('connection', (socket) => {
             console.log('Client connected:', socket.id);
 
+            const cleanupIfEmpty = (sessionId) => {
+                const conn = this.sessionConnections.get(sessionId);
+                if (!conn) return;
+                const helperGone = !conn.helper;
+                const techGone = !conn.technicians || conn.technicians.length === 0;
+                if (helperGone && techGone) {
+                    this.sessionConnections.delete(sessionId);
+                    this.pendingOffers.delete(sessionId);
+                }
+            };
+
             // Join session room
             socket.on('join-session', (data) => {
                 const { sessionId, role, technicianId, technicianName } = data;
@@ -123,9 +134,55 @@ class WebSocketHandler {
 
             // Leave session room
             socket.on('leave-session', (data) => {
-                const { sessionId } = data;
+                const sessionId = (data && data.sessionId) ? data.sessionId : socket.sessionId;
+                if (!sessionId) return;
                 socket.leave(`session-${sessionId}`);
                 console.log(`Socket ${socket.id} left session ${sessionId}`);
+
+                const conn = this.sessionConnections.get(sessionId);
+                if (conn) {
+                    if (conn.helper === socket.id) {
+                        conn.helper = null;
+                        this.pendingOffers.delete(sessionId);
+                        safeUpdateSession(sessionId, {
+                            status: 'waiting',
+                            helper_connected: false,
+                            active_technicians: conn.technicians ? conn.technicians.length : 0,
+                            ended_at: new Date()
+                        }).catch(() => {});
+                        this.io.emit('session-updated', {
+                            sessionId,
+                            status: 'waiting',
+                            helper_connected: false,
+                            active_technicians: conn.technicians ? conn.technicians.length : 0
+                        });
+                        this.io.to(`session-${sessionId}`).emit('peer-disconnected', { role: 'helper', sessionId });
+                    } else if (conn.technicians) {
+                        const idx = conn.technicians.findIndex(t => t.socketId === socket.id);
+                        if (idx !== -1) {
+                            const tech = conn.technicians[idx];
+                            conn.technicians.splice(idx, 1);
+                            if (conn.technicians.length === 0) {
+                                this.pendingOffers.delete(sessionId);
+                            }
+                            safeUpdateSession(sessionId, { active_technicians: conn.technicians.length }).catch(() => {});
+                            this.io.emit('session-updated', { sessionId, active_technicians: conn.technicians.length });
+                            this.io.to(`session-${sessionId}`).emit('technician-left', {
+                                sessionId,
+                                technicianId: tech.technicianId,
+                                technicianName: tech.technicianName,
+                                technicianSocketId: tech.socketId
+                            });
+                            this.io.to(`session-${sessionId}`).emit('peer-disconnected', { role: 'technician', sessionId });
+                        }
+                    }
+                    cleanupIfEmpty(sessionId);
+                }
+
+                if (socket.sessionId === sessionId) {
+                    socket.sessionId = null;
+                    socket.role = 'unknown';
+                }
             });
 
             // WebRTC Signaling: Offer from helper
@@ -331,6 +388,7 @@ class WebSocketHandler {
                                 });
                             }
                         }
+                        cleanupIfEmpty(socket.sessionId);
                     }
                 }
             });

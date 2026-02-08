@@ -22,29 +22,87 @@ contextBridge.exposeInMainWorld('helperApi', {
   socketDisconnect: () => ipcRenderer.invoke('helper:socket-disconnect'),
 
   // Signaling event listeners
-  onWebrtcAnswer: (callback) => ipcRenderer.on('signaling:webrtc-answer', (_event, data) => callback(data)),
-  onWebrtcIceCandidate: (callback) => ipcRenderer.on('signaling:webrtc-ice-candidate', (_event, data) => callback(data)),
-  onPeerJoined: (callback) => ipcRenderer.on('signaling:peer-joined', (_event, data) => callback(data)),
-  onTechniciansPresent: (callback) => ipcRenderer.on('signaling:technicians-present', (_event, data) => callback(data)),
-  onTechnicianJoined: (callback) => ipcRenderer.on('signaling:technician-joined', (_event, data) => callback(data)),
-  onTechnicianLeft: (callback) => ipcRenderer.on('signaling:technician-left', (_event, data) => callback(data)),
+  onWebrtcAnswer: (callback) => {
+    const h = (_event, data) => callback(data);
+    ipcRenderer.on('signaling:webrtc-answer', h);
+    return () => ipcRenderer.removeListener('signaling:webrtc-answer', h);
+  },
+  onWebrtcIceCandidate: (callback) => {
+    const h = (_event, data) => callback(data);
+    ipcRenderer.on('signaling:webrtc-ice-candidate', h);
+    return () => ipcRenderer.removeListener('signaling:webrtc-ice-candidate', h);
+  },
+  onPeerJoined: (callback) => {
+    const h = (_event, data) => callback(data);
+    ipcRenderer.on('signaling:peer-joined', h);
+    return () => ipcRenderer.removeListener('signaling:peer-joined', h);
+  },
+  onTechniciansPresent: (callback) => {
+    const h = (_event, data) => callback(data);
+    ipcRenderer.on('signaling:technicians-present', h);
+    return () => ipcRenderer.removeListener('signaling:technicians-present', h);
+  },
+  onTechnicianJoined: (callback) => {
+    const h = (_event, data) => callback(data);
+    ipcRenderer.on('signaling:technician-joined', h);
+    return () => ipcRenderer.removeListener('signaling:technician-joined', h);
+  },
+  onTechnicianLeft: (callback) => {
+    const h = (_event, data) => callback(data);
+    ipcRenderer.on('signaling:technician-left', h);
+    return () => ipcRenderer.removeListener('signaling:technician-left', h);
+  },
+  onConnectionRequest: (callback) => {
+    const h = (_event, data) => callback(data);
+    ipcRenderer.on('signaling:connection-request', h);
+    return () => ipcRenderer.removeListener('signaling:connection-request', h);
+  },
+  onConnectionResponse: (callback) => {
+    const h = (_event, data) => callback(data);
+    ipcRenderer.on('signaling:connection-response', h);
+    return () => ipcRenderer.removeListener('signaling:connection-response', h);
+  },
 
   // Remote control APIs (for receiving technician input)
-  onMouseEvent: (callback) => ipcRenderer.on('signaling:remote-mouse', (_event, data) => callback(data)),
-  onKeyboardEvent: (callback) => ipcRenderer.on('signaling:remote-keyboard', (_event, data) => callback(data)),
+  onMouseEvent: (callback) => {
+    const h = (_event, data) => callback(data);
+    ipcRenderer.on('signaling:remote-mouse', h);
+    return () => ipcRenderer.removeListener('signaling:remote-mouse', h);
+  },
+  onKeyboardEvent: (callback) => {
+    const h = (_event, data) => callback(data);
+    ipcRenderer.on('signaling:remote-keyboard', h);
+    return () => ipcRenderer.removeListener('signaling:remote-keyboard', h);
+  },
 
   // Technician requested monitor switch
-  onSwitchMonitor: (callback) => ipcRenderer.on('signaling:switch-monitor', (_event, data) => callback(data)),
+  onSwitchMonitor: (callback) => {
+    const h = (_event, data) => callback(data);
+    ipcRenderer.on('signaling:switch-monitor', h);
+    return () => ipcRenderer.removeListener('signaling:switch-monitor', h);
+  },
 
   // Stream quality preset (optimize for quality vs speed)
-  onSetStreamQuality: (callback) => ipcRenderer.on('signaling:set-stream-quality', (_event, data) => callback(data)),
+  onSetStreamQuality: (callback) => {
+    const h = (_event, data) => callback(data);
+    ipcRenderer.on('signaling:set-stream-quality', h);
+    return () => ipcRenderer.removeListener('signaling:set-stream-quality', h);
+  },
 
   // Chat
   openChatWindow: () => ipcRenderer.invoke('helper:open-chat-window'),
-  onChatMessage: (callback) => ipcRenderer.on('signaling:chat-message', (_event, data) => callback(data)),
+  onChatMessage: (callback) => {
+    const h = (_event, data) => callback(data);
+    ipcRenderer.on('signaling:chat-message', h);
+    return () => ipcRenderer.removeListener('signaling:chat-message', h);
+  },
 
   // File transfer
-  onFileAvailable: (callback) => ipcRenderer.on('signaling:file-available', (_event, data) => callback(data)),
+  onFileAvailable: (callback) => {
+    const h = (_event, data) => callback(data);
+    ipcRenderer.on('signaling:file-available', h);
+    return () => ipcRenderer.removeListener('signaling:file-available', h);
+  },
   fileDownload: (url, defaultName) => ipcRenderer.invoke('helper:file-download', url, defaultName),
   filePickAndUpload: (sessionId, serverUrl) => ipcRenderer.invoke('helper:file-pick-upload', sessionId, serverUrl),
 

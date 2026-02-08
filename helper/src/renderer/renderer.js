@@ -35,6 +35,14 @@ let connectedTechnicians = [];
 let connectedSince = null; // Date when first technician connected
 let connectedTimer = null; // interval for updating connected duration
 let disconnecting = false;
+let signalingUnsubscribers = [];
+
+function clearSignalingListeners() {
+  for (const fn of signalingUnsubscribers) {
+    try { fn(); } catch (_) {}
+  }
+  signalingUnsubscribers = [];
+}
 
 function updateConnectedTechniciansUI() {
   if (!connectedTechniciansRow || !connectedTechniciansList) return;
@@ -301,10 +309,13 @@ async function connectSignaling(sessionId) {
     await window.helperApi.socketConnect(sessionId);
     log('Connected to signaling server');
 
+    // Avoid duplicated IPC listeners across reconnects.
+    clearSignalingListeners();
+
     // Emit capabilities so technician sees them immediately
     window.helperApi.socketEmit('helper-capabilities', { sessionId, capabilities });
 
-    window.helperApi.onFileAvailable((data) => {
+    signalingUnsubscribers.push(window.helperApi.onFileAvailable((data) => {
       if (data.direction === 'technician-to-user' || !data.direction) {
         receivedFiles.push({
           id: data.id,
@@ -314,9 +325,9 @@ async function connectSignaling(sessionId) {
         showFileNotification();
         log(`File received`);
       }
-    });
+    }));
 
-    window.helperApi.onSwitchMonitor(async (data) => {
+    signalingUnsubscribers.push(window.helperApi.onSwitchMonitor(async (data) => {
       const idx = data.monitorIndex;
       if (typeof idx !== 'number' || idx < 0 || !screenSources.length) return;
       if (idx >= screenSources.length) {
@@ -337,9 +348,9 @@ async function connectSignaling(sessionId) {
       } catch (e) {
         log(`Switch monitor failed: ${e.message}`);
       }
-    });
+    }));
 
-    window.helperApi.onSetStreamQuality(async (data) => {
+    signalingUnsubscribers.push(window.helperApi.onSetStreamQuality(async (data) => {
       const quality = (data && data.quality) || 'balanced';
       const pcs = peerConnectionsBySocketId.size ? Array.from(peerConnectionsBySocketId.values()) : (peerConnection ? [peerConnection] : []);
       for (const pc of pcs) {
@@ -373,10 +384,10 @@ async function connectSignaling(sessionId) {
         }
       }
       log(`Stream: ${quality}`);
-    });
+    }));
 
     // Set up event listeners for signaling (multi-viewer: route by data.from)
-    window.helperApi.onWebrtcAnswer(async (data) => {
+    signalingUnsubscribers.push(window.helperApi.onWebrtcAnswer(async (data) => {
       const pc = data.from ? peerConnectionsBySocketId.get(data.from) : peerConnection;
       if (!pc) {
         log('Received WebRTC answer but no PC for this technician');
@@ -388,9 +399,9 @@ async function connectSignaling(sessionId) {
       } catch (error) {
         log(`Error setting remote description: ${error.message}`);
       }
-    });
+    }));
 
-    window.helperApi.onWebrtcIceCandidate(async (data) => {
+    signalingUnsubscribers.push(window.helperApi.onWebrtcIceCandidate(async (data) => {
       const pc = (data.role === 'technician' && data.from) ? peerConnectionsBySocketId.get(data.from) : peerConnection;
       if (!pc) return;
       try {
@@ -398,14 +409,14 @@ async function connectSignaling(sessionId) {
       } catch (error) {
         log(`Error adding ICE candidate: ${error.message}`);
       }
-    });
+    }));
 
-    window.helperApi.onPeerJoined((data) => {
+    signalingUnsubscribers.push(window.helperApi.onPeerJoined((data) => {
       log(`Peer joined: ${data.role}`);
-    });
+    }));
 
     connectedTechnicians = [];
-    window.helperApi.onTechniciansPresent((data) => {
+    signalingUnsubscribers.push(window.helperApi.onTechniciansPresent((data) => {
       if (data.technicians && Array.isArray(data.technicians)) {
         connectedTechnicians = data.technicians.slice();
         updateConnectedTechniciansUI();
@@ -415,8 +426,8 @@ async function connectSignaling(sessionId) {
           }
         });
       }
-    });
-    window.helperApi.onTechnicianJoined((data) => {
+    }));
+    signalingUnsubscribers.push(window.helperApi.onTechnicianJoined((data) => {
       const id = data.technicianId || data.socketId;
       if (id && !connectedTechnicians.some(t => t.technicianId === id)) {
         connectedTechnicians.push({ technicianId: id, technicianName: data.technicianName || 'Technician' });
@@ -426,8 +437,8 @@ async function connectSignaling(sessionId) {
       if (socketId && !peerConnectionsBySocketId.has(socketId)) {
         createPeerConnectionForTechnician(sessionId, socketId);
       }
-    });
-    window.helperApi.onTechnicianLeft((data) => {
+    }));
+    signalingUnsubscribers.push(window.helperApi.onTechnicianLeft((data) => {
       const id = data.technicianId;
       if (id) {
         connectedTechnicians = connectedTechnicians.filter(t => t.technicianId !== id);
@@ -446,22 +457,36 @@ async function connectSignaling(sessionId) {
       if (connectedTechnicians.length === 0 && peerConnectionsBySocketId.size === 0) {
         handleAllTechniciansGone();
       }
-    });
+    }));
+
+    // Log approval events (dialog is handled in main process)
+    if (typeof window.helperApi.onConnectionRequest === 'function') {
+      signalingUnsubscribers.push(window.helperApi.onConnectionRequest((data) => {
+        if (!allowUnattended.checked) {
+          log(`Connection request from ${data?.technicianName || 'Technician'}...`);
+        }
+      }));
+    }
+    if (typeof window.helperApi.onConnectionResponse === 'function') {
+      signalingUnsubscribers.push(window.helperApi.onConnectionResponse((data) => {
+        log(data?.approved ? 'Connection approved.' : 'Connection denied.');
+      }));
+    }
 
     // Chat messages from technician — show notification, auto-open chat window
-    window.helperApi.onChatMessage((data) => {
+    signalingUnsubscribers.push(window.helperApi.onChatMessage((data) => {
       showChatNotification(data);
       window.helperApi.openChatWindow();
-    });
+    }));
 
     // Handle remote control events
-    window.helperApi.onMouseEvent((data) => {
+    signalingUnsubscribers.push(window.helperApi.onMouseEvent((data) => {
       console.log('Remote mouse event:', data);
-    });
+    }));
 
-    window.helperApi.onKeyboardEvent((data) => {
+    signalingUnsubscribers.push(window.helperApi.onKeyboardEvent((data) => {
       if (data.type === 'keydown') log(`[keyboard] received: ${data.key} (${data.code})`);
-    });
+    }));
 
   } catch (error) {
     log(`Signaling connection error: ${error.message}`);
@@ -716,6 +741,7 @@ async function disconnect() {
   disconnecting = true;
   log('Disconnecting...');
   try {
+    clearSignalingListeners();
     stopConnectedTimer();
     if (mediaStream) {
       mediaStream.getTracks().forEach(t => t.stop());

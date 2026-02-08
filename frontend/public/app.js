@@ -1,8 +1,8 @@
 // Get session ID from URL or generate
 function getSessionIdFromURL() {
     const path = window.location.pathname;
-    const match = path.match(/\/support\/([A-Z0-9-]+)/);
-    return match ? match[1] : null;
+    const match = path.match(/\/(support|connect)\/([A-Z0-9-]+)/);
+    return match ? match[2] : null;
 }
 
 function generateSessionId() {
@@ -23,8 +23,16 @@ function generateSessionId() {
 }
 
 // Initialize
-const sessionId = getSessionIdFromURL() || generateSessionId();
-document.getElementById('sessionId').textContent = sessionId;
+const sessionId = getSessionIdFromURL();
+document.getElementById('sessionId').textContent = sessionId || 'Missing';
+if (!sessionId) {
+    const status = document.getElementById('status');
+    const btn = document.getElementById('connectBtn');
+    status.className = 'status error';
+    status.textContent = '❌ Missing session ID in URL';
+    btn.disabled = true;
+    btn.textContent = 'Invalid link';
+}
 
 // Copy session ID
 function copySessionId() {
@@ -110,28 +118,26 @@ async function registerSession(sessionId, allowUnattended) {
 let approvalSocket = null;
 
 function setupConnectionApprovalListener() {
-    const serverUrl = window.location.origin.replace('http', 'ws');
-    approvalSocket = new WebSocket(`${serverUrl}/ws/approval/${sessionId}`);
-    
-    approvalSocket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        
-        if (data.type === 'connection-request') {
-            const allowUnattended = document.getElementById('allowUnattended').checked;
-            
-            if (allowUnattended) {
-                // Auto-approve
-                approveConnectionAutomatically(data);
-            } else {
-                // Show approval modal
-                showApprovalModal(data);
-            }
+    if (!sessionId) return;
+    if (approvalSocket) {
+        try { approvalSocket.disconnect(); } catch (_) {}
+        approvalSocket = null;
+    }
+
+    // Uses Socket.IO (served from /socket.io/socket.io.js).
+    approvalSocket = io(window.location.origin, { transports: ['websocket', 'polling'] });
+    approvalSocket.on('connect', () => {
+        // Join only to receive approval requests; do not mark this as a helper connection.
+        approvalSocket.emit('join-session', { sessionId, role: 'customer' });
+    });
+    approvalSocket.on('connection-request', (data) => {
+        const allowUnattended = document.getElementById('allowUnattended').checked;
+        if (allowUnattended) {
+            approveConnectionAutomatically(data);
+        } else {
+            showApprovalModal(data);
         }
-    };
-    
-    approvalSocket.onerror = (error) => {
-        console.error('Approval socket error:', error);
-    };
+    });
 }
 
 // Show approval modal
@@ -212,7 +218,8 @@ document.getElementById('allowConnection').addEventListener('change', (e) => {
         }, 2000);
     } else {
         if (approvalSocket) {
-            approvalSocket.close();
+            try { approvalSocket.disconnect(); } catch (_) {}
+            approvalSocket = null;
         }
         document.getElementById('status').className = 'status waiting';
         document.getElementById('status').textContent = '⚪ Disconnected';

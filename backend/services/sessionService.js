@@ -326,23 +326,6 @@ class SessionService {
             }
         }
     }
-    
-    static generateSessionId() {
-        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-        let id = '';
-        for (let i = 0; i < 3; i++) {
-            id += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        id += '-';
-        for (let i = 0; i < 3; i++) {
-            id += Math.floor(Math.random() * 10);
-        }
-        id += '-';
-        for (let i = 0; i < 3; i++) {
-            id += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return id;
-    }
 }
 
 module.exports = SessionService;

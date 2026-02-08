@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, desktopCapturer, screen, shell, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer, screen, shell, clipboard, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -20,6 +20,7 @@ let mainWindow;
 let chatWindow = null;
 let socket = null;
 let currentSessionId = null;
+let currentAllowUnattended = true;
 let chatHistory = [];
 
 const MOUSE_BUTTONS = ['left', 'middle', 'right'];
@@ -281,6 +282,7 @@ ipcMain.handle('helper:register-session', async (_event, payload) => {
   const config = readConfig();
   const sessionId = payload.sessionId || config.sessionId;
   const allowUnattended = payload.allowUnattended;
+  currentAllowUnattended = allowUnattended !== false;
 
   const body = {
     sessionId,
@@ -309,6 +311,20 @@ ipcMain.handle('helper:register-session', async (_event, payload) => {
 
   return res.json();
 });
+
+async function sendApprovalResponse(sessionId, approved) {
+  const config = readConfig();
+  const base = (config.server || '').replace(/\/$/, '');
+  const res = await fetch(`${base}/api/sessions/${encodeURIComponent(sessionId)}/approval`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ approved: !!approved })
+  });
+  if (!res.ok) {
+    throw new Error(`Approval failed (${res.status})`);
+  }
+  return res.json();
+}
 
 ipcMain.handle('helper:check-pending', async () => {
   const config = readConfig();
@@ -482,6 +498,40 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
       }
     });
 
+    // Manual approval flow: server emits this when session.allow_unattended is false.
+    socket.on('connection-request', async (data) => {
+      if (!currentSessionId) return;
+      if (String(data?.sessionId || '') !== String(currentSessionId)) return;
+
+      if (mainWindow) {
+        mainWindow.webContents.send('signaling:connection-request', data);
+      }
+
+      // If unattended is enabled, server auto-approves; do not prompt.
+      if (currentAllowUnattended) return;
+
+      try {
+        const techName = data?.technicianName || 'Technician';
+        const { response } = await dialog.showMessageBox(mainWindow, {
+          type: 'question',
+          buttons: ['Approve', 'Deny'],
+          defaultId: 1,
+          cancelId: 1,
+          noLink: true,
+          title: 'Remote Support Request',
+          message: `${techName} wants to connect to your computer.`,
+          detail: `Session: ${currentSessionId}\nAllow this connection?`
+        });
+        const approved = response === 0;
+        await sendApprovalResponse(currentSessionId, approved);
+        if (mainWindow) {
+          mainWindow.webContents.send('signaling:connection-response', { sessionId: currentSessionId, approved });
+        }
+      } catch (e) {
+        console.warn('Approval handling failed:', e.message);
+      }
+    });
+
     socket.on('remote-mouse', (data) => {
       injectMouse(data);
     });
@@ -542,13 +592,29 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
       }
     });
 
-    // Remote file browser: list directory on user's machine (restricted to homedir)
-    const safeBase = path.resolve(os.homedir());
+    // Remote file browser: list directory on user's machine (restricted to homedir).
+    // Use realpath to prevent escaping via symlinks.
+    const safeBase = (() => {
+      try { return fs.realpathSync(os.homedir()); } catch (_) { return path.resolve(os.homedir()); }
+    })();
+    const safeBaseNorm = process.platform === 'win32' ? safeBase.toLowerCase() : safeBase;
+    const safeBasePrefix = safeBaseNorm.endsWith(path.sep) ? safeBaseNorm : safeBaseNorm + path.sep;
+
+    function isWithinSafeBase(p) {
+      const norm = process.platform === 'win32' ? p.toLowerCase() : p;
+      return norm === safeBaseNorm || norm.startsWith(safeBasePrefix);
+    }
+
     function toSafePath(rawPath) {
       if (!rawPath || rawPath === '' || rawPath === '~') return safeBase;
-      const normalized = path.normalize(rawPath).replace(/^(\.\.(\/|\\))+/, '');
+      const normalized = path.normalize(String(rawPath));
       const resolved = path.isAbsolute(normalized) ? path.resolve(normalized) : path.resolve(safeBase, normalized);
-      return resolved.startsWith(safeBase) ? resolved : safeBase;
+      let real = resolved;
+      try {
+        // For non-existent paths (e.g. uploads), realpathSync throws. Fall back to resolved.
+        real = fs.realpathSync(resolved);
+      } catch (_) {}
+      return isWithinSafeBase(real) ? real : safeBase;
     }
 
     socket.on('list-remote-dir', (data) => {
@@ -600,7 +666,7 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
       try {
         const safeDir = toSafePath(dirPath);
         const fullPath = path.join(safeDir, path.basename(filename));
-        if (!fullPath.startsWith(safeBase)) {
+        if (!isWithinSafeBase(path.resolve(fullPath))) {
           throw new Error('Path not allowed');
         }
         const buf = Buffer.from(content, 'base64');
@@ -612,8 +678,6 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
     });
   });
 });
-
-const { dialog } = require('electron');
 
 ipcMain.handle('helper:file-download', async (_event, url, defaultName) => {
   try {

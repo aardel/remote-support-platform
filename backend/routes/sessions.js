@@ -22,15 +22,24 @@ router.post('/assign', async (req, res) => {
             lastIp: req.ip
         });
 
-        // Broadcast new/existing session to all dashboards so they update in real-time
+        // Broadcast new/existing session to all dashboards so they update in real-time.
+        // Use real status if available; do not force 'waiting' (can cause UI lockout).
         const io = req.app.get('io');
         if (io) {
+            let status = 'waiting';
+            let sessionRow = null;
+            try {
+                sessionRow = await SessionService.getSession(result.sessionId);
+                if (sessionRow?.status) status = sessionRow.status;
+            } catch (_) {}
             io.emit('session-created', {
                 sessionId: result.sessionId,
-                status: 'waiting',
+                status,
                 created_at: new Date().toISOString(),
                 device_id: deviceId,
-                client_info: { os, hostname, arch }
+                client_info: { os, hostname, arch },
+                helper_connected: sessionRow?.helper_connected,
+                active_technicians: sessionRow?.active_technicians
             });
         }
 
@@ -99,6 +108,12 @@ router.get('/:sessionId', async (req, res) => {
 router.post('/register', async (req, res) => {
     try {
         const { sessionId, clientInfo, allowUnattended, vncPort, deviceId, deviceName, capabilities } = req.body;
+
+        // Ensure session exists (prevents update() returning undefined and later crashes).
+        const existing = await SessionService.getSession(sessionId);
+        if (!existing) {
+            return res.status(404).json({ error: 'Session not found' });
+        }
 
         // Merge capabilities into clientInfo for storage
         const enrichedClientInfo = { ...clientInfo, capabilities: capabilities || {} };

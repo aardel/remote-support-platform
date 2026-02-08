@@ -22,8 +22,18 @@ app.set('approvalHandler', approvalHandler);
 
 // Middleware
 app.set('trust proxy', 1);
+const corsOrigins = (process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
 app.use(cors({
-    origin: true,
+    origin: (origin, cb) => {
+        // Allow non-browser requests (no Origin) and allow all in dev if not configured.
+        if (!origin) return cb(null, true);
+        if (corsOrigins.length === 0) return cb(null, true);
+        if (corsOrigins.includes(origin)) return cb(null, true);
+        return cb(new Error('Not allowed by CORS'));
+    },
     credentials: true
 }));
 app.use(express.json());
