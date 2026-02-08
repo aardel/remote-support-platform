@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.0.3] – 2025-02-08
+
+### Added
+
+- **Session header: responsive layout** — Two-row header on session view: top row = session ID, status + connection timer, version, control badge, Files and Disconnect; second row (when connected) = Monitor, Stream, Split view, Fullscreen. Responsive breakpoints (768px, 480px) for smaller screens; session title truncates with ellipsis; “Files” label hidden on very small viewports.
+- **Helper: connection timer shows immediately** — When a technician connects, the helper status line now shows “Connected 0:00” right away and updates every second (no longer stays on “Waiting for technician…” for the first second).
+
+### Changed
+
+- **Remote keyboard: document-level capture** — Typing is sent to the remote PC even when the video wrapper does not have focus. “Video area active” is set when the user clicks inside the video container; document-level keydown/keyup forward keys to the helper when active and not in an input/textarea. Fixes typing not working after clicking the remote screen.
+- Session view header structure: semantic groups (session-info, session-actions, session-settings) and focusable wrapper for single-view video to improve keyboard handling.
+
+### Fixed
+
+- **Remote keyboard not working** — Prevent default only on contextmenu and mousedown so the video area can receive focus; added focusable wrapper div and auto-focus on connect; keyboard relay fixed after clicking header/overlay controls.
+- **Helper: connection timer not visible** — Timer now sets status to “Connected 0:00” immediately when ICE connects, then updates every second.
+
+---
+
 ## [1.0.2] – 2025-02-07
 
 ### Added

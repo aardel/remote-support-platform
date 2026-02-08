@@ -56,6 +56,13 @@
   color: #1e293b;
 }
 
+.page-toolbar-label {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 .page-select {
   padding: 6px 10px;
   border: 1px solid #e2e8f0;

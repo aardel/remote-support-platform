@@ -1,10 +1,10 @@
 # Remote Desktop Support Platform
 
-Browser-based remote support: technicians use a web dashboard to view and control user PCs via an Electron helper app. WebRTC for screen sharing, Socket.io for signaling, full mouse/keyboard control, and two-panel file transfer. Self-hosted; no port forwarding.
+Browser-based remote support: technicians use a web dashboard to view and control user PCs via an Electron helper app. WebRTC for screen sharing, Socket.io for signaling, full mouse/keyboard control, two-panel file transfer, in-session chat, and clipboard paste to remote. Self-hosted; no port forwarding.
 
 ## Vision
 
-- **Technician**: Web dashboard (React) — sessions, devices, connect, stream quality, split view, file browser
+- **Technician**: Web dashboard (React) — widget or classic layout, sessions, devices, statistics, connect, stream quality, split view, file browser
 - **User**: Runs the helper (Electron EXE/DMG) once; session is assigned by device; minimal UI (Start/Disconnect)
 - **Screen + control**: WebRTC screen share; mouse/keyboard control via helper (robotjs)
 - **File transfer**: Two-panel (your computer ↔ remote); remote file browser (list/send/receive)
@@ -71,6 +71,9 @@ Remote Desktop Server/
 - ✅ **Multi-monitor** (technician switches display); **stream quality** (Best / Balanced / Speed); **split view** (vertical monitors: top/bottom side by side)
 - ✅ **File transfer** (upload/download, session-scoped; file-available notification to helper)
 - ✅ **Connection approval** (optional manual approval before connect)
+- ✅ **In-session chat** (text channel between technician and user; Socket.io)
+- ✅ **Clipboard paste to remote** (technician’s clipboard pasted on user PC via one click)
+- ✅ **Dashboard filters and sort** (sessions: status filter + sort by date/status/hostname; devices: sort by last seen/name/hostname)
 - ✅ **Self-hosted** (Node backend, React dashboard, Electron helper; no port forwarding)
 - ✅ **Helper builds** (GitHub Actions: Windows EXE, macOS DMG on push to main)
 
@@ -150,24 +153,22 @@ Other docs in the `docs/` folder:
 - **docs/FEASIBILITY_ASSESSMENT.md**: Project feasibility analysis
 - **docs/DOCUMENTATION_INDEX.md**: Guide to all documentation
 
-## Advantages Over TeamViewer
+## Advantages
 
-1. ✅ **No install per session** (TightVNC once vs. TeamViewer every time)
-2. ✅ **Windows XP support** (TeamViewer doesn't support XP)
-3. ✅ **Self-hosted** (full control vs. cloud dependency)
-4. ✅ **No port forwarding** (easier for users)
-5. ✅ **Customizable** (build features you need)
-6. ✅ **Cost-effective** (free vs. paid subscription)
-7. ✅ **Better workflow** (unified dashboard)
-8. ✅ **Connection approval** (extra security layer)
+1. ✅ **Self-hosted** (full control vs. cloud dependency)
+2. ✅ **No port forwarding** (easier for users)
+3. ✅ **Customizable** (build features you need)
+4. ✅ **Cost-effective** (free vs. paid subscription)
+5. ✅ **Unified dashboard** (widget or classic layout; sessions, devices, statistics)
+6. ✅ **Connection approval** (optional; allow unattended or require user approval)
 
 ## Project Status
 
 ### ✅ **Ready for testing**
 
 **What's built:**
-- Backend (Express + Socket.io), technician dashboard (React), Electron helper (WebRTC, file browser, mouse/keyboard)
-- Session-by-device, stream quality, split view, remote file transfer, multi-monitor
+- Backend (Express + Socket.io), technician dashboard (React: widget dashboard, dedicated pages for Sessions/Devices/Statistics/Templates), Electron helper (WebRTC, file browser, mouse/keyboard)
+- Session-by-device, stream quality, split view, responsive session header, remote file transfer, multi-monitor
 - Auth, connection approval, package generation, GitHub Actions (EXE/DMG builds)
 
 See `PROJECT_STATUS.md` for details; `docs/API_AND_EVENTS.md` for API and Socket.io.

@@ -2,7 +2,7 @@
 
 Candidate features for the Remote Support Platform. Aligned with current stack (WebRTC, Electron, Socket.io). Prioritized by impact and fit. Informed by common remote-support tools (TeamViewer, AnyDesk: session recording, chat, unattended access, file transfer, multi-monitor).
 
-**Last updated:** 2025-02-07 (prioritized; monitor dropdown displayCount done)
+**Last updated:** 2025-02-08 (audit: chat, unattended access, reconnect-when-unattended, and device last_seen marked done)
 
 ---
 
@@ -10,17 +10,17 @@ Candidate features for the Remote Support Platform. Aligned with current stack (
 
 - **Dashboard search and filter**: ✅ Search implemented; status filter and sort still in backlog. See `docs/UI_GUIDELINES.md`.
 - **Monitor dropdown (displayCount)**: ✅ SessionView and control panel only enable monitor options that exist on the customer’s machine (single/dual); helper sends `displayCount` in capabilities.
-- **Session/device sort**: By status, date, hostname.
-- **Clipboard sync**: Send clipboard text between technician and user (Socket event + helper paste).
-- **Reconnect on disconnect**: Auto-reconnect or one-click reconnect when WebRTC drops.
+- **Session/device sort**: ✅ Sessions: sort by date (newest), status, hostname; status filter (All / Connected / Waiting). Devices: sort by last seen, name, hostname. Implemented on SessionsPage, DevicesPage, ClassicDashboard.
+- **Clipboard sync**: ✅ Technician can paste their clipboard on the remote PC: “Paste” button in session header and overlay; `remote-clipboard` event; helper sets clipboard and injects Ctrl+V (or Cmd+V on Mac).
+- **Reconnect on disconnect**: ✅ When "Allow unattended" is on, technician can reconnect without the user clicking again (helper stays in "Waiting for technician…"). Full auto-reconnect on WebRTC network drop still in backlog.
 
 ## Medium
 
-- **Chat or session notes**: Simple text channel or notes per session (Socket.io; optional persistence). Common in TeamViewer/AnyDesk.
+- **Chat or session notes**: ✅ Simple text channel per session (Socket.io); technician and user chat in SessionView overlay; no persistence yet.
 - **Session recording**: Record screen + optional audio for compliance (helper captures; upload or store on server).
-- **Unattended access**: Remember approval per device; optional "allow unattended" flag. Common in commercial tools.
+- **Unattended access**: ✅ "Allow unattended connections" checkbox in helper; stored per session; when enabled, technician can leave and reconnect without user action; helper stays ready for next connection.
 - **Technician groups/tags**: Tag sessions or devices (e.g. "Team A", "VIP"); filter by tag.
-- **Health/uptime**: Simple "last seen" or heartbeat so dashboard shows stale sessions.
+- **Health/uptime**: Device `last_seen` is updated on register; dashboard can order by it. Session-level "last active" or heartbeat for stale-session display still in backlog.
 
 ## Larger
 

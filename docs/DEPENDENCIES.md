@@ -26,4 +26,4 @@ cd ../helper && npm install
 
 ## Audit
 
-Run `npm audit` and fix high/critical. See `docs/SECURITY.md` for current notes and mitigation.
+Run `npm audit` in root (and `frontend/` if needed). **Current (2025-02-08):** Root has 3 high (tar → @mapbox/node-pre-gyp → bcrypt); frontend has 2 moderate. Fix for root may require `npm audit fix --force` (bcrypt major upgrade — test auth after). See `docs/SECURITY.md` for practices and backlog.

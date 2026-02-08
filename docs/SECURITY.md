@@ -4,7 +4,7 @@
 
 Run `npm audit` in the repo root (and in `frontend/` and `helper/` if you add scripts there). Address **high** and **critical** before release.
 
-**Last run:** 2025-02-07 — Root: 3 high severity (tar → @mapbox/node-pre-gyp → bcrypt). Frontend: 2 moderate (run `npm audit` in `frontend/`). Fix for root may require:
+**Last run:** 2025-02-08 — Root/frontend: 2 moderate (typical in Vite/React deps). Backlog: run `npm audit` in root and `frontend/` before release; address high/critical. Mitigation for moderate may require:
 
 ```bash
 npm audit fix

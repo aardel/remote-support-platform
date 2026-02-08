@@ -47,7 +47,14 @@ Single source of truth for REST routes and Socket.io events. Keep this in sync w
 | POST | /api/devices/register | No | Register device (helper) |
 | GET | /api/devices/pending/:deviceId | No | Pending session for device |
 | GET | /api/devices | Yes | List devices |
+| DELETE | /api/devices/:deviceId | Yes | Deregister device |
+| PATCH | /api/devices/:deviceId | Yes | Update device (customerName, machineName) |
 | POST | /api/devices/:deviceId/request | Yes | Request session for device |
+| **Preferences** | | | |
+| GET | /api/preferences | Yes | Get technician preferences (dashboard layout, session history retention) |
+| PUT | /api/preferences | Yes | Update preferences (body: dashboardLayout?, sessionHistoryRetentionDays?) |
+| **Statistics** | | | |
+| GET | /api/statistics/sessions | Yes | List sessions with filters (from, to, customer, deviceId, status); for stats page |
 | **Websocket** | | | |
 | GET | /api/websocket/info | No | Socket.io connection info |
 | **Helper update** | | | |
@@ -73,6 +80,7 @@ All events are scoped by session: clients join `session-${sessionId}` via `join-
 | webrtc-ice-candidate | Both | Other peer | sessionId, candidate, role | ICE candidate |
 | remote-mouse | Technician | Helper | sessionId, type, x, y, button | Mouse event (0–1 coords) |
 | remote-keyboard | Technician | Helper | sessionId, type, key, code, ctrlKey, … | Keyboard event |
+| remote-clipboard | Technician | Helper | sessionId, text | Paste technician’s clipboard on user PC (helper sets clipboard + Ctrl/Cmd+V) |
 | set-stream-quality | Technician | Helper | sessionId, quality | quality \| balanced \| speed |
 | list-remote-dir | Technician | Helper | sessionId, path, requestId | List dir on user PC |
 | list-remote-dir-result | Helper | Technician | sessionId, requestId, list, error? | Dir listing |
@@ -94,4 +102,4 @@ All events are scoped by session: clients join `session-${sessionId}` via `join-
 - **SessionView**: Same socket events for active session; GET /api/files/session/:id, POST /api/files/upload, GET /api/monitors/session/:id/switch (POST).
 - **Helper**: POST /api/sessions/assign, POST /api/sessions/register, Socket: join-session (helper), helper-capabilities (sessionId, capabilities: robotjs, platform, displayCount), webrtc-offer, webrtc-ice-candidate, receives remote-mouse, remote-keyboard, set-stream-quality, list-remote-dir, get-remote-file, put-remote-file, switch-monitor, file-available, technicians-present, technician-joined, technician-left (to show “Connected: Technician (Name)” list).
 
-Last updated: 2025-02-07
+Last updated: 2025-02-08

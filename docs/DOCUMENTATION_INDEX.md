@@ -1,161 +1,75 @@
-# Documentation Index: Final Architecture
+# Documentation Index
 
-## ✅ Documents We Kept (Final Decisions)
-
-### Core Architecture
-1. **FINAL_ARCHITECTURE.md** ⭐
-   - Complete overview of final decisions
-   - Architecture diagram
-   - Implementation phases
-   - Summary of all features
-
-2. **VNC_HYBRID_SOLUTION.md** ⭐
-   - VNC implementation details
-   - TightVNC Portable setup
-   - Windows XP support
-   - websockify bridge configuration
-
-3. **NETWORKING_NO_PORT_FORWARD.md** ⭐
-   - Reverse VNC connection setup
-   - No port forwarding required
-   - How it works technically
-   - Implementation code
-
-### User Experience
-4. **SIMPLE_CUSTOMER_UI.md** ⭐
-   - Simple UI design (2 checkboxes + Session ID)
-   - HTML/CSS/JavaScript code
-   - Auto-connect logic
-   - Status indicators
-
-5. **AUTOMATED_PACKAGE_SYSTEM.md** ⭐
-   - Package generation system
-   - Server creates downloadable package
-   - Auto-configuration scripts
-   - One-click setup
-
-6. **CONNECTION_APPROVAL_SECURITY.md** ⭐
-   - Security approval feature
-   - Unattended vs manual approval
-   - Approval modal implementation
-   - Server-side approval handler
-
-### Features
-7. **MULTI_MONITOR_SUPPORT.md** ⭐
-   - Monitor selection UI
-   - Monitor switching capability
-   - Portrait/landscape handling
-   - Dual monitor support
-
-8. **FILE_TRANSFER_SUPPORT.md** ⭐
-   - File transfer implementation
-   - WebRTC Data Channel approach
-   - HTTP fallback method
-   - Bidirectional transfer
-
-### Reference
-9. **COMPATIBILITY.md**
-   - Windows version support (XP+)
-   - Browser compatibility
-   - Extension requirements
-   - Market share data
-
-10. **FEASIBILITY_ASSESSMENT.md**
-    - Project feasibility analysis
-    - Similar solutions research
-    - Risk assessment
-    - Success probability
-
-11. **README.md**
-    - Project overview
-    - Quick start guide
-    - Key features summary
-    - Links to all documentation
+Entry point for all project documentation. The app uses **WebRTC + Electron** for screen sharing and control; some older docs reference a VNC approach and are kept for reference only.
 
 ---
 
-## ❌ Documents We Removed (Outdated)
+## Start here
 
-1. **ARCHITECTURE.md** - Old WebRTC + Extension approach (replaced by FINAL_ARCHITECTURE.md)
-2. **COMPARISON.md** - Technology comparison (decision made, no longer needed)
-3. **PROOF_OF_CONCEPT.md** - Old WebRTC implementation (replaced by VNC_HYBRID_SOLUTION.md)
-4. **ALTERNATIVE_CONTROL_SOLUTIONS.md** - Alternative approaches (we chose VNC)
-
----
-
-## Final Architecture Summary
-
-### Solution: VNC Hybrid Approach
-- **User**: TightVNC Portable (one-time install)
-- **Server**: websockify bridge
-- **Technician**: noVNC browser client
-
-### Key Features
-- ✅ Simple UI (2 checkboxes + Session ID)
-- ✅ Connection approval security
-- ✅ Multi-monitor support
-- ✅ File transfer (hybrid)
-- ✅ Windows XP support
-- ✅ No port forwarding
-
-### Implementation Timeline
-- **Phase 1**: Core infrastructure (2-3 weeks)
-- **Phase 2**: User experience (2 weeks)
-- **Phase 3**: Features (2 weeks)
-- **Phase 4**: Polish (1 week)
-- **Total**: ~7-8 weeks
+| Doc | Purpose |
+|-----|---------|
+| **README.md** (root) | Project overview, quick start, key features |
+| **QUICK_START.md** | Detailed setup and first run |
+| **CONTRIBUTING.md** | Clone, install, run, test, where to change what, PR flow |
 
 ---
 
-## Quick Reference
+## Current stack (WebRTC + Electron)
 
-**Start Here**: `docs/FINAL_ARCHITECTURE.md` - Complete overview
-
-**Implementation Guides**:
-- VNC Setup: `docs/VNC_HYBRID_SOLUTION.md`
-- Networking: `docs/NETWORKING_NO_PORT_FORWARD.md`
-- UI Design: `docs/SIMPLE_CUSTOMER_UI.md`
-- Package System: `docs/AUTOMATED_PACKAGE_SYSTEM.md`
-
-**Feature Guides**:
-- Security: `docs/CONNECTION_APPROVAL_SECURITY.md`
-- Monitors: `docs/MULTI_MONITOR_SUPPORT.md`
-- Files: `docs/FILE_TRANSFER_SUPPORT.md`
-
-**Reference**:
-- Compatibility: `docs/COMPATIBILITY.md`
-- Feasibility: `docs/FEASIBILITY_ASSESSMENT.md`
-
-### Dashboard redesign (planned)
-
-- **Dashboard redesign plan**: `docs/DASHBOARD_REDESIGN_PLAN.md` — Widget dashboard as landing, hamburger + dedicated pages (Statistics, Devices, Sessions, Helper Templates), Classic dashboard kept, Generate modal in header, device customer/machine name and per-technician layout.
-
-### Session UI (fullscreen viewer + control panel)
-
-- **New interface spec**: `docs/NEW_INTERFACE.md` — Two-window session UI: fullscreen viewer + floating control panel (BroadcastChannel, chat, files, minimize).
-
-### Current stack (WebRTC + Electron)
-
-- **API and Socket.io contract**: `docs/API_AND_EVENTS.md` — REST routes and Socket.io events (single source of truth).
-- **Deployment**: `docs/DEPLOYMENT.md` — Production deploy, PM2, nginx.
-- **Helper updates**: `docs/HELPER_UPDATES.md` — Customer prompt (Upgrade now / Next session), server requirements, API. Includes troubleshooting (e.g. macOS “Could not start video source” / Screen Recording permission).
-- **UI guidelines**: `docs/UI_GUIDELINES.md` — Dashboard/session UI principles and backlog (minimalistic, scale-friendly).
-- **Roadmap**: `docs/ROADMAP.md` — Future feature ideas (search, chat, recording, etc.).
-- **Security**: `docs/SECURITY.md` — npm audit and security practices.
-- **Dependencies**: `docs/DEPENDENCIES.md` — Node version and package layout.
-- **Contributing**: `CONTRIBUTING.md` (repo root) — How to run, where to change what, PR flow.
-- **Agents and automation**: `docs/AGENTS_AUTOMATION.md` — What runs on push (CI), when agents run (Cursor chat), full automation options.
-- **Changelog**: `CHANGELOG.md` (repo root) — Release history and Unreleased changes.
-- **Versioning**: `docs/VERSIONING.md` — Single canonical version (root), sync to helper and web app, bump and release flow.
+| Doc | Purpose |
+|-----|---------|
+| **API_AND_EVENTS.md** | REST routes and Socket.io events (single source of truth) |
+| **DEPLOYMENT.md** | Production deploy, PM2, nginx |
+| **HELPER_UPDATES.md** | Helper upgrade prompt (Upgrade now / Next session), API, troubleshooting (e.g. macOS Screen Recording) |
+| **UI_GUIDELINES.md** | Dashboard and session UI principles, responsive header, backlog (search, filter, scale) |
+| **ROADMAP.md** | Future feature ideas (quick wins, medium, larger) |
+| **VERSIONING.md** | Single canonical version (root package.json), sync, bump and release |
+| **NEW_INTERFACE.md** | Session UI: in-page overlay, fullscreen, control panel |
+| **DASHBOARD_REDESIGN_PLAN.md** | Widget dashboard, dedicated pages (Statistics, Devices, Sessions, Templates), Generate modal |
+| **AGENTS_AUTOMATION.md** | CI on push, when agents run (Cursor chat), automation options |
+| **DEPENDENCIES.md** | Node version, package layout |
+| **SECURITY.md** | npm audit, security practices |
+| **CODE_REVIEW_NOTES.md** | Short code-review notes from agents (recent changes) |
 
 ---
 
-## Next Steps
+## Feature and reference (current)
 
-1. ✅ **Architecture finalized** - All documents reviewed and consolidated
-2. ⏭️ **Start Implementation** - Begin with Phase 1 (Core Infrastructure)
-3. ⏭️ **Set up VPS** - Install Node.js, PostgreSQL, websockify
-4. ⏭️ **Build Package Generator** - Create downloadable packages
-5. ⏭️ **Implement websockify Bridge** - Connect VNC to WebSocket
+| Doc | Purpose |
+|-----|---------|
+| **CONNECTION_APPROVAL_SECURITY.md** | Approval flow, unattended vs manual |
+| **MULTI_MONITOR_SUPPORT.md** | Monitor selection and switching |
+| **FILE_TRANSFER_SUPPORT.md** | File transfer implementation (two-panel, remote browser) |
+| **AUTOMATED_PACKAGE_SYSTEM.md** | Package generation, templates |
+| **COMPATIBILITY.md** | Windows/browser compatibility |
+| **GITHUB_ACTIONS_HELPER.md** | Helper build (EXE/DMG) via GitHub Actions |
 
-All documentation is ready for implementation! 🚀
+---
+
+## Legacy / reference (VNC-era)
+
+These docs describe an older or alternative design. The **current** path is WebRTC + Electron helper; use the “Current stack” section above for implementation.
+
+| Doc | Note |
+|-----|------|
+| **FINAL_ARCHITECTURE.md** | Historical; architecture has evolved to WebRTC + Electron |
+| **VNC_HYBRID_SOLUTION.md** | VNC/TightVNC; not used in current WebRTC flow |
+| **NETWORKING_NO_PORT_FORWARD.md** | VNC reverse connection; current app uses WebRTC + server signaling |
+| **SIMPLE_CUSTOMER_UI.md** | Old customer UI; current customer flow is support page + helper app |
+| **FEASIBILITY_ASSESSMENT.md** | Early feasibility; kept for reference |
+
+---
+
+## Changelog and version
+
+- **CHANGELOG.md** (root) — Release history, Unreleased section
+- **docs/VERSIONING.md** — How to bump and sync version
+
+---
+
+## Next steps for new developers
+
+1. Read **README.md** and **QUICK_START.md**.
+2. Run the app: `npm install`, `npm run dev` (see CONTRIBUTING.md).
+3. Use **docs/API_AND_EVENTS.md** for any API or Socket.io work.
+4. Use **docs/UI_GUIDELINES.md** and **docs/ROADMAP.md** for UI and roadmap context.

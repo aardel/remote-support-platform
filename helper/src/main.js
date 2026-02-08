@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, desktopCapturer, screen, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer, screen, shell, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -492,6 +492,19 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
         mainWindow.webContents.send('signaling:remote-keyboard', data);
       }
       injectKeyboard(data);
+    });
+
+    socket.on('remote-clipboard', (data) => {
+      if (typeof data.text !== 'string') return;
+      try {
+        clipboard.writeText(data.text);
+        if (robot) {
+          const mods = process.platform === 'darwin' ? ['command'] : ['control'];
+          robot.keyTap('v', mods);
+        }
+      } catch (e) {
+        console.warn('Clipboard paste failed:', e.message);
+      }
     });
 
     socket.on('switch-monitor', (data) => {

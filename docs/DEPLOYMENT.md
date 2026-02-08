@@ -1,8 +1,16 @@
 # Deployment Guide: Local Development → GitHub → Server
 
+## Restart after code change (canonical)
+
+- **Backend:** `pm2 restart remote-support-backend-backend` (PM2 process name is `remote-support-backend`).
+- **Frontend:** After changing frontend code, run `npm run build` from repo root; the backend serves `frontend/dist/`, so restart the backend to serve new assets: `pm2 restart remote-support-backend-backend`.
+- **Logs:** `pm2 logs remote-support-backend`.
+
+---
+
 ## Development workflow options
 
-**Same-machine (SSH):** Development and the running app are on the same server. You edit, commit, and push from that host; after backend changes, restart the process (e.g. `pm2 restart remote-support-backend`). No separate deploy or pull step. Helper builds (EXE/DMG) still run on GitHub Actions when you push to `main`.
+**Same-machine (SSH):** Development and the running app are on the same server. You edit, commit, and push from that host; after backend changes, restart the process (e.g. `pm2 restart remote-support-backend-backend`). No separate deploy or pull step. Helper builds (EXE/DMG) still run on GitHub Actions when you push to `main`.
 
 **Separate local + server:** Use the phases below (develop locally, then deploy to server).
 
@@ -63,7 +71,7 @@ git pull origin main
 npm install
 
 # Restart services
-pm2 restart remote-support
+pm2 restart remote-support-backend
 ```
 
 **Option B: Automated Deployment (GitHub Actions)**
@@ -162,7 +170,7 @@ jobs:
           cd /var/www/remote-support
           git pull origin main
           npm install --production
-          pm2 restart remote-support
+          pm2 restart remote-support-backend
           sudo systemctl reload nginx
 ```
 
@@ -288,7 +296,7 @@ pm2 status
 pm2 logs remote-support-backend
 
 # Restart
-pm2 restart remote-support-backend
+pm2 restart remote-support-backend-backend
 
 # Stop
 pm2 stop remote-support-backend
@@ -473,7 +481,7 @@ npm run migrate
 
 # Restart services
 echo "🔄 Restarting services..."
-pm2 restart remote-support-backend
+pm2 restart remote-support-backend-backend
 pm2 restart websockify-bridge
 
 # Reload Nginx
@@ -534,7 +542,7 @@ git log --oneline  # Find previous commit
 git checkout <previous-commit-hash>
 
 # Restart services
-pm2 restart remote-support-backend
+pm2 restart remote-support-backend-backend
 pm2 restart websockify-bridge
 ```
 

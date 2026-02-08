@@ -34,7 +34,7 @@ npm run build
 |-----------------|-----------|
 | Add/change an API route | `backend/routes/` and mount in `backend/server.js` |
 | Add/change a Socket.io event | `backend/services/websocketHandler.js`; then frontend + helper |
-| Change dashboard (sessions, devices, packages) | `frontend/src/pages/Dashboard.jsx` |
+| Change dashboard (widget/classic, sessions, devices, packages) | `frontend/src/pages/WidgetDashboard.jsx`, `ClassicDashboard.jsx`, `DevicesPage.jsx`, `SessionsPage.jsx`, etc. |
 | Change session view (video, files, controls) | `frontend/src/pages/SessionView.jsx` |
 | Change helper app (capture, IPC, socket) | `helper/src/main.js`, `renderer/renderer.js`, `preload.js` |
 | Update API/event contract doc | `docs/API_AND_EVENTS.md` |
@@ -64,7 +64,7 @@ If no tests exist yet, add them for critical paths (auth, sessions, file upload)
 
 ## More
 
-- **Deployment:** `docs/DEPLOYMENT.md`, `DEPLOY_TO_SERVER.md`
+- **Deployment:** `docs/DEPLOYMENT.md` — PM2 process name: `remote-support-backend`; restart with `pm2 restart remote-support-backend`.
 - **API and Socket.io:** `docs/API_AND_EVENTS.md`
 - **Quick start:** `QUICK_START.md`
-- **Agents and automation:** Agents and skills live in `.cursor/` (committed to the repo). See `.cursor/agents/README.md` for the agent list and `docs/AGENTS_AUTOMATION.md` for what runs on push vs in Cursor chat.
+- **Agents and automation:** Agents and skills live in **`.cursor/`** (committed to the repo). See `.cursor/agents/README.md` for the agent list and `docs/AGENTS_AUTOMATION.md` for what runs on push vs in Cursor chat. Use "run all agents" or "put agents to work" in Cursor to get an approval todo list.

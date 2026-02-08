@@ -7,23 +7,40 @@
 
 .session-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 15px 20px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px;
   background: #16213e;
   border-bottom: 1px solid #0f3460;
+  flex-shrink: 0;
+}
+
+.session-header-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .session-info {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
-.session-info h2 {
+.session-title {
   margin: 0;
   color: #fff;
-  font-size: 18px;
+  font-size: clamp(14px, 2.5vw, 18px);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .status-indicator {
@@ -49,6 +66,15 @@
   font-weight: 600;
   margin-left: 4px;
   opacity: 0.85;
+}
+
+.version-tag {
+  font-size: 11px;
+  color: #64748b;
+  background: rgba(100, 116, 139, 0.12);
+  padding: 2px 8px;
+  border-radius: 8px;
+  cursor: default;
 }
 
 .capability-badge {
@@ -78,50 +104,73 @@
   50% { opacity: 0.7; }
 }
 
-.session-controls {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.monitor-switch {
+.session-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
-.monitor-switch label {
-  color: #e2e8f0;
-  font-size: 14px;
+.session-settings {
+  display: flex;
+  align-items: center;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+  border-top: 1px solid rgba(15, 52, 96, 0.6);
+}
+
+.monitor-switch,
+.stream-quality-switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.monitor-switch label,
+.stream-quality-switch label {
+  color: #94a3b8;
+  font-size: 13px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .monitor-switch select,
 .stream-quality-switch select {
-  padding: 6px 10px;
+  padding: 5px 8px;
   background: #1e293b;
   color: #fff;
   border: 1px solid #475569;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 13px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.stream-quality-switch select {
+  min-width: 5.5em;
+}
+
+.split-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #e2e8f0;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.split-view-toggle input {
+  margin: 0;
   cursor: pointer;
 }
 
-.stream-quality-switch {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.stream-quality-switch label {
-  color: #e2e8f0;
-  font-size: 14px;
-  font-weight: 500;
-}
-
 .files-header-btn {
-  padding: 6px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
   background: #1e293b;
   color: #e2e8f0;
   border: 1px solid #475569;
@@ -136,19 +185,109 @@
   color: #fff;
 }
 
+.session-btn-caret {
+  font-size: 10px;
+  opacity: 0.8;
+}
+
 .disconnect-btn {
-  padding: 8px 20px;
+  padding: 6px 14px;
   background: #dc2626;
   color: white;
   border: none;
   border-radius: 6px;
   cursor: pointer;
   font-size: 14px;
+  font-weight: 500;
   transition: background 0.2s;
 }
 
 .disconnect-btn:hover {
   background: #b91c1c;
+}
+
+/* Responsive: smaller screens — compact header */
+@media (max-width: 768px) {
+  .session-header {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .session-header-main {
+    gap: 8px;
+  }
+
+  .session-info {
+    gap: 8px 10px;
+  }
+
+  .session-title {
+    font-size: 14px;
+    max-width: 180px;
+  }
+
+  .status-indicator {
+    padding: 4px 10px;
+    font-size: 13px;
+  }
+
+  .connected-timer {
+    font-size: 12px;
+  }
+
+  .version-tag {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+
+  .capability-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+
+  .session-settings {
+    gap: 8px 10px;
+    padding-top: 6px;
+  }
+
+  .monitor-switch label,
+  .stream-quality-switch label {
+    font-size: 12px;
+  }
+
+  .monitor-switch select,
+  .stream-quality-switch select {
+    padding: 4px 6px;
+    font-size: 12px;
+  }
+
+  .split-view-toggle {
+    font-size: 12px;
+  }
+
+  .files-header-btn {
+    padding: 5px 10px;
+    font-size: 13px;
+  }
+
+  .disconnect-btn {
+    padding: 5px 12px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  .session-title {
+    max-width: 140px;
+  }
+
+  .session-settings {
+    gap: 6px 8px;
+  }
+
+  .session-btn-label {
+    display: none;
+  }
 }
 
 /* File transfer modal — full-screen overlay */

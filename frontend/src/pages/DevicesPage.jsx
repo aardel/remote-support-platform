@@ -6,6 +6,7 @@ function DevicesPage() {
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState('last_seen');
   const [editingId, setEditingId] = useState(null);
   const [editCustomer, setEditCustomer] = useState('');
   const [editMachine, setEditMachine] = useState('');
@@ -64,12 +65,27 @@ function DevicesPage() {
     }
   };
 
-  const filtered = devices.filter(d => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return [d.customer_name, d.machine_name, d.display_name, d.hostname, d.device_id, d.os, d.last_ip, d.last_city, d.last_country]
-      .some(v => (v || '').toLowerCase().includes(q));
-  });
+  const filtered = devices
+    .filter(d => {
+      if (!search) return true;
+      const q = search.toLowerCase();
+      return [d.customer_name, d.machine_name, d.display_name, d.hostname, d.device_id, d.os, d.last_ip, d.last_city, d.last_country]
+        .some(v => (v || '').toLowerCase().includes(q));
+    })
+    .sort((a, b) => {
+      if (sortBy === 'last_seen') return new Date(b.last_seen || 0) - new Date(a.last_seen || 0);
+      if (sortBy === 'name') {
+        const na = (a.customer_name || a.machine_name || a.hostname || a.device_id || '').toLowerCase();
+        const nb = (b.customer_name || b.machine_name || b.hostname || b.device_id || '').toLowerCase();
+        return na.localeCompare(nb, undefined, { sensitivity: 'base' });
+      }
+      if (sortBy === 'hostname') {
+        const ha = (a.hostname || a.device_id || '').toLowerCase();
+        const hb = (b.hostname || b.device_id || '').toLowerCase();
+        return ha.localeCompare(hb, undefined, { sensitivity: 'base' });
+      }
+      return 0;
+    });
 
   const countryFlag = (country) => {
     if (!country) return '';
@@ -99,6 +115,12 @@ function DevicesPage() {
           onChange={e => setSearch(e.target.value)}
           className="page-search"
         />
+        <label className="page-toolbar-label">Sort</label>
+        <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="page-select" aria-label="Sort devices by">
+          <option value="last_seen">Last seen</option>
+          <option value="name">Name</option>
+          <option value="hostname">Hostname</option>
+        </select>
       </div>
       {loading ? (
         <div className="page-empty">Loading...</div>

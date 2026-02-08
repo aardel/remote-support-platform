@@ -103,25 +103,8 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Socket.io connection handling
-io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
-    
-    socket.on('disconnect', () => {
-        console.log('Client disconnected:', socket.id);
-    });
-    
-    // Session management events
-    socket.on('join-session', (data) => {
-        socket.join(`session-${data.sessionId}`);
-        console.log(`Socket ${socket.id} joined session ${data.sessionId}`);
-    });
-    
-    socket.on('leave-session', (data) => {
-        socket.leave(`session-${data.sessionId}`);
-        console.log(`Socket ${socket.id} left session ${data.sessionId}`);
-    });
-});
+// Socket.io connection handling is in websocketHandler.js (wsHandler above)
+// Do NOT add duplicate io.on('connection') handlers here
 
 // Make io and services available to routes
 app.set('io', io);

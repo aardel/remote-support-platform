@@ -320,8 +320,15 @@ function SessionView({ user }) {
     };
 
     const onKey = (e) => {
-      if (!videoAreaActiveRef.current) return;
-      if (isEditable(e.target)) return; // don't steal keys from chat input, etc.
+      if (!videoAreaActiveRef.current) {
+        if (e.type === 'keydown') console.log('[kbd] BLOCKED: videoAreaActive=false, key=', e.key);
+        return;
+      }
+      if (isEditable(e.target)) {
+        if (e.type === 'keydown') console.log('[kbd] BLOCKED: editable target=', e.target.tagName, e.target.type, 'key=', e.key);
+        return;
+      }
+      if (e.type === 'keydown') console.log('[kbd] SENT:', e.key, e.code);
       e.preventDefault();
       e.stopPropagation();
       socket.emit('remote-keyboard', {
@@ -336,6 +343,7 @@ function SessionView({ user }) {
       });
     };
 
+    console.log('[kbd] Document key listeners ATTACHED (connected=%s, socket=%s, sessionId=%s)', connected, !!socket, sessionId);
     document.addEventListener('keydown', onKey, true);
     document.addEventListener('keyup', onKey, true);
     return () => {
@@ -745,6 +753,16 @@ function SessionView({ user }) {
     return entries.length ? entries : null;
   }
 
+  const pasteFromClipboard = async () => {
+    if (!socket || !sessionId || !connected) return;
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) socket.emit('remote-clipboard', { sessionId, text });
+    } catch (e) {
+      console.warn('Clipboard read failed:', e.message);
+    }
+  };
+
   const switchMonitor = async (index) => {
     if (index === monitorIndex || switchingMonitor) return;
     setSwitchingMonitor(true);
@@ -768,100 +786,113 @@ function SessionView({ user }) {
   return (
     <div className="session-view">
       <div className="session-header">
-        <div className="session-info">
-          <h2>Session: {sessionId}</h2>
-          <span className={`status-indicator ${connected ? 'connected' : 'disconnected'}`}>
-            {connected ? '🟢 ' : '⚪ '}{status}
-            {connected && connectedDuration && (
-              <span className="connected-timer" title="Connected duration"> {connectedDuration}</span>
-            )}
-          </span>
-          {connected && helperCapabilities && (
-            <span className={`capability-badge ${helperCapabilities.robotjs ? 'cap-ok' : 'cap-warn'}`}
-              title={helperCapabilities.robotjs
-                ? 'Remote mouse/keyboard control is available'
-                : helperCapabilities.platform === 'darwin'
-                  ? 'Remote control disabled — ask user to grant Accessibility permission in System Settings → Privacy & Security → Accessibility'
-                  : 'Remote control disabled — robotjs not available on helper'
-              }
-            >
-              {helperCapabilities.robotjs ? '🖱 Control: ON' : '🖱 Control: OFF'}
+        <div className="session-header-main">
+          <div className="session-info">
+            <h2 className="session-title">Session: {sessionId}</h2>
+            <span className={`status-indicator ${connected ? 'connected' : 'disconnected'}`}>
+              {connected ? '🟢 ' : '⚪ '}{status}
+              {connected && connectedDuration && (
+                <span className="connected-timer" title="Connected duration"> {connectedDuration}</span>
+              )}
             </span>
-          )}
+            <span className="version-tag" title={typeof __BUILD_TIME__ !== 'undefined' ? `Build: ${__BUILD_TIME__}` : 'Version'}>
+              v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '?'}
+            </span>
+            {connected && helperCapabilities && (
+              <span className={`capability-badge ${helperCapabilities.robotjs ? 'cap-ok' : 'cap-warn'}`}
+                title={helperCapabilities.robotjs
+                  ? 'Remote mouse/keyboard control is available'
+                  : helperCapabilities.platform === 'darwin'
+                    ? 'Remote control disabled — ask user to grant Accessibility permission in System Settings → Privacy & Security → Accessibility'
+                    : 'Remote control disabled — robotjs not available on helper'
+                }
+              >
+                {helperCapabilities.robotjs ? '🖱 Control: ON' : '🖱 Control: OFF'}
+              </span>
+            )}
+          </div>
+          <div className="session-actions">
+            <button
+              type="button"
+              className={`files-header-btn ${filesOpen ? 'open' : ''}`}
+              onClick={() => setFilesOpen(!filesOpen)}
+              title="Send or download files"
+            >
+              <span className="session-btn-icon">📁</span>
+              <span className="session-btn-label">Files</span>
+              <span className="session-btn-caret">{filesOpen ? '▼' : '▶'}</span>
+            </button>
+            {connected && (
+              <button type="button" className="files-header-btn" onClick={pasteFromClipboard} title="Paste your clipboard on the remote computer">
+                <span className="session-btn-icon">📋</span>
+                <span className="session-btn-label">Paste</span>
+              </button>
+            )}
+            <button type="button" onClick={disconnect} className="disconnect-btn">
+              Disconnect
+            </button>
+          </div>
         </div>
-        <div className="session-controls">
-          {connected && (
-            <>
-              <div className="monitor-switch">
-                <label htmlFor="session-monitor">Monitor:</label>
-                <select
-                  id="session-monitor"
-                  value={monitorIndex}
-                  onChange={(e) => switchMonitor(Number(e.target.value))}
-                  disabled={switchingMonitor}
-                  title="Switch which display the user is sharing"
-                >
-                  {MONITOR_OPTIONS.map((n) => {
-                    const value = n - 1;
-                    const displayCount = helperCapabilities?.displayCount;
-                    const isActive = displayCount == null || value < displayCount;
-                    return (
-                      <option key={n} value={value} disabled={!isActive}>
-                        Monitor {n}{!isActive ? ' (not available)' : ''}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-              <div className="stream-quality-switch">
-                <label htmlFor="session-stream-quality">Stream:</label>
-                <select
-                  id="session-stream-quality"
-                  value={streamQuality}
-                  onChange={(e) => {
-                    const q = e.target.value;
-                    setStreamQuality(q);
-                    if (socket && sessionId) socket.emit('set-stream-quality', { sessionId, quality: q });
-                  }}
-                  title="Optimize for picture quality or for speed (lower bandwidth)"
-                >
-                  <option value="quality">Best quality</option>
-                  <option value="balanced">Balanced</option>
-                  <option value="speed">Optimize for speed</option>
-                </select>
-              </div>
-              <label className="split-view-toggle">
-                <input
-                  type="checkbox"
-                  checked={splitView}
-                  onChange={(e) => setSplitView(e.target.checked)}
-                  title="Split vertical screen: show top and bottom halves side by side"
-                />
-                <span>Split view</span>
-              </label>
-              <label className="split-view-toggle">
-                <input
-                  type="checkbox"
-                  checked={isFullscreen}
-                  onChange={handleFullscreenToggle}
-                  title="Fullscreen viewer and open control panel"
-                />
-                <span>Fullscreen</span>
-              </label>
-            </>
-          )}
-          <button
-            type="button"
-            className={`files-header-btn ${filesOpen ? 'open' : ''}`}
-            onClick={() => setFilesOpen(!filesOpen)}
-            title="Send or download files"
-          >
-            📁 Files {filesOpen ? '▼' : '▶'}
-          </button>
-          <button onClick={disconnect} className="disconnect-btn">
-            Disconnect
-          </button>
-        </div>
+        {connected && (
+          <div className="session-settings">
+            <div className="monitor-switch">
+              <label htmlFor="session-monitor">Monitor</label>
+              <select
+                id="session-monitor"
+                value={monitorIndex}
+                onChange={(e) => switchMonitor(Number(e.target.value))}
+                disabled={switchingMonitor}
+                title="Switch which display the user is sharing"
+              >
+                {MONITOR_OPTIONS.map((n) => {
+                  const value = n - 1;
+                  const displayCount = helperCapabilities?.displayCount;
+                  const isActive = displayCount == null || value < displayCount;
+                  return (
+                    <option key={n} value={value} disabled={!isActive}>
+                      Monitor {n}{!isActive ? ' (n/a)' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+            <div className="stream-quality-switch">
+              <label htmlFor="session-stream-quality">Stream</label>
+              <select
+                id="session-stream-quality"
+                value={streamQuality}
+                onChange={(e) => {
+                  const q = e.target.value;
+                  setStreamQuality(q);
+                  if (socket && sessionId) socket.emit('set-stream-quality', { sessionId, quality: q });
+                }}
+                title="Optimize for picture quality or for speed (lower bandwidth)"
+              >
+                <option value="quality">Best quality</option>
+                <option value="balanced">Balanced</option>
+                <option value="speed">Optimize for speed</option>
+              </select>
+            </div>
+            <label className="split-view-toggle">
+              <input
+                type="checkbox"
+                checked={splitView}
+                onChange={(e) => setSplitView(e.target.checked)}
+                title="Split vertical screen: show top and bottom halves side by side"
+              />
+              <span>Split view</span>
+            </label>
+            <label className="split-view-toggle">
+              <input
+                type="checkbox"
+                checked={isFullscreen}
+                onChange={handleFullscreenToggle}
+                title="Fullscreen viewer and open control panel"
+              />
+              <span>Fullscreen</span>
+            </label>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -1164,6 +1195,9 @@ function SessionView({ user }) {
             <div className="overlay-section">
               <button type="button" className="overlay-btn-files" onClick={() => { setFilesOpen(!filesOpen); setOverlayOpen(false); }}>
                 📁 Files
+              </button>
+              <button type="button" className="overlay-btn-files" onClick={pasteFromClipboard} title="Paste your clipboard on the remote computer">
+                📋 Paste
               </button>
             </div>
             <div className="overlay-section">
