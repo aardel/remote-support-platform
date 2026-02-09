@@ -3,6 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import WidgetCard from './WidgetCard';
 
+function daysLeft(expiresAt) {
+  if (!expiresAt) return null;
+  const ts = new Date(expiresAt).getTime();
+  if (!Number.isFinite(ts)) return null;
+  const ms = ts - Date.now();
+  const days = Math.ceil(ms / (24 * 60 * 60 * 1000));
+  return days;
+}
+
 function RecentActivityWidget({ size }) {
   const [sessions, setSessions] = useState([]);
   const navigate = useNavigate();
@@ -28,9 +37,14 @@ function RecentActivityWidget({ size }) {
           const sid = s.session_id || s.sessionId;
           const ready = s.status === 'connected' || s.helper_connected === true;
           const unassigned = !(s.device_id || s.deviceId) && !ready;
+          const dleft = unassigned ? daysLeft(s.expires_at || s.expiresAt) : null;
           const customer = s.customer_name || s.customerName || '';
           const machine = s.machine_name || s.machineName || '';
-          const label = (customer || machine) ? `${customer || '—'}${machine ? ` / ${machine}` : ''}` : unassigned ? 'Invite link (unassigned)' : '';
+          const label = (customer || machine)
+            ? `${customer || '—'}${machine ? ` / ${machine}` : ''}`
+            : unassigned
+              ? `Invite link (unassigned)${typeof dleft === 'number' ? ` • ${Math.max(0, dleft)} day${Math.max(0, dleft) === 1 ? '' : 's'} left` : ''}`
+              : '';
           return (
             <div key={sid} className="widget-row">
               <span className="widget-row-id">
