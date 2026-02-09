@@ -77,6 +77,7 @@ app.use('/api/helper', require('./routes/helper'));
 app.use('/api/websocket', require('./routes/websocket'));
 app.use('/api/preferences', require('./routes/preferences'));
 app.use('/api/statistics', require('./routes/statistics'));
+app.use('/api/whats-new', require('./routes/whatsNew'));
 
 // Customer support page route (download page with instructions)
 app.get('/support/:sessionId', (req, res) => {

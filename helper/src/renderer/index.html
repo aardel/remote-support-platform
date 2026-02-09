@@ -47,7 +47,12 @@
           <button type="button" id="updateNowBtn" class="update-btn update-btn-primary">Upgrade now</button>
           <button type="button" id="updateNextSessionBtn" class="update-btn update-btn-secondary">Next session</button>
         </div>
-        <div id="updateProgress" class="update-progress" style="display: none;">Downloading...</div>
+        <div id="updateProgressWrap" class="update-progress-wrap" style="display: none;">
+          <div class="update-progress-bar-track">
+            <div id="updateProgressBarFill" class="update-progress-bar-fill"></div>
+          </div>
+          <span id="updateProgressText" class="update-progress-text">Downloading...</span>
+        </div>
       </div>
 
       <div id="fileNotification" class="file-notification" style="display: none;">
@@ -65,7 +70,12 @@
       </div>
       <div class="log" id="log" style="display: none;"></div>
 
-      <p class="helper-version" id="helperVersion"></p>
+      <div class="helper-version-row">
+        <span class="helper-version" id="helperVersion"></span>
+        <button type="button" id="checkUpdateBtn" class="check-update-btn">Check for updates</button>
+        <button type="button" id="createShortcutBtn" class="check-update-btn">Create desktop shortcut</button>
+      </div>
+      <p id="shortcutMessage" class="shortcut-message" style="display: none;"></p>
       <p class="helper-mac-hint" id="helperMacHint" style="display: none;">On Mac: Screen Recording permission is required for sharing (System Settings → Privacy & Security → Screen Recording).</p>
     </div>
     <script src="renderer.js"></script>

@@ -12,10 +12,22 @@ function HelperTemplatesPage() {
 
   useEffect(() => { loadStatus(); }, []);
 
+  const computeLatestTs = (templates) => {
+    const ts = ['exe', 'dmg']
+      .map(k => templates?.[k]?.updatedAt)
+      .filter(Boolean)
+      .map(v => new Date(v).getTime())
+      .filter(n => Number.isFinite(n));
+    return ts.length ? Math.max(...ts) : 0;
+  };
+
   const loadStatus = async () => {
     try {
       const res = await axios.get('/api/packages/templates');
-      setTemplateStatus(res.data?.templates || null);
+      const t = res.data?.templates || null;
+      setTemplateStatus(t);
+      const latest = computeLatestTs(t);
+      if (latest) localStorage.setItem('rs_templates_seen_ts', String(latest));
     } catch (e) {
       console.error('Error loading templates:', e);
     }

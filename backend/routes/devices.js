@@ -3,7 +3,18 @@ const router = express.Router();
 const Device = require('../models/Device');
 const SessionService = require('../services/sessionService');
 const { requireAuth } = require('../middleware/sessionAuth');
-const { geolocate } = require('../services/geolocate');
+const { geolocate, normalizeIp } = require('../services/geolocate');
+
+function extractClientIp(req) {
+    // Prefer x-forwarded-for when behind a proxy/load balancer.
+    const xf = req.headers['x-forwarded-for'];
+    if (xf) {
+        const first = Array.isArray(xf) ? xf[0] : String(xf);
+        const ip = normalizeIp(first);
+        if (ip) return ip;
+    }
+    return normalizeIp(req.ip);
+}
 
 // Register or update device (called by helper)
 router.post('/register', async (req, res) => {
@@ -22,6 +33,7 @@ router.post('/register', async (req, res) => {
             return res.status(400).json({ error: 'deviceId required' });
         }
 
+        const clientIp = extractClientIp(req);
         const device = await Device.upsert({
             deviceId,
             technicianId,
@@ -30,14 +42,25 @@ router.post('/register', async (req, res) => {
             hostname,
             arch,
             allowUnattended,
-            lastIp: req.ip
+            lastIp: clientIp
         });
 
         // Async geolocation — don't block the response
-        const clientIp = req.ip || req.headers['x-forwarded-for'];
         if (clientIp) {
             geolocate(clientIp).then(geo => {
-                if (geo) Device.updateGeo(deviceId, geo).catch(() => {});
+                if (!geo) return;
+                Device.updateGeo(deviceId, geo).then((updated) => {
+                    const io = req.app.get('io');
+                    if (io && updated) {
+                        io.emit('device-updated', {
+                            deviceId,
+                            last_ip: updated.last_ip,
+                            last_country: updated.last_country,
+                            last_region: updated.last_region,
+                            last_city: updated.last_city
+                        });
+                    }
+                }).catch(() => {});
             }).catch(() => {});
         }
 

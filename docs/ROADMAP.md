@@ -6,6 +6,40 @@ Candidate features for the Remote Support Platform. Aligned with current stack (
 
 ---
 
+## Dashboard Task List (UI + Data Quality)
+
+- [ ] **Devices: Fix geolocation from IP**
+- [ ] Add server-side logging/metrics for geolocation failures and confirm correct client IP extraction behind proxies (`x-forwarded-for` parsing, strip port, pick first public IP).
+- [ ] If outbound plain HTTP is blocked, add/replace a geolocation provider that supports HTTPS on free tier (keep cache).
+- [ ] Persist geo on device register and refresh it when `last_ip` changes.
+- [ ] **Devices: Actions button layout**
+- [ ] Make `Edit`, `Request`, `Remove` buttons sit on one row, same height, same width, consistent spacing.
+- [ ] Apply the same visual rules for `Save`/`Cancel` when editing.
+
+- [ ] **Active Sessions: Show Customer + Machine**
+- [ ] Update active session cards to render `Customer / Machine` next to the session ID, bold.
+- [ ] Ensure the active sessions API includes `customer_name`, `machine_name`, and `location` (join devices) so frontend does not guess from hostname.
+- [ ] Snapshot customer/machine into `sessions.customer_name` / `sessions.machine_name` at connect time when possible (device lookup) so stats remain stable even if device names later change.
+
+- [ ] **Statistics: Duration and Correct Fields**
+- [ ] Fix session duration calculation so it never goes negative (do not overwrite `connected_at` after first set; or compute from a stable start timestamp).
+- [ ] Ensure `ended_at` is set only when the session truly ends; do not set it for transient states.
+- [ ] Fix statistics row mapping:
+- [ ] `Customer` must come from `sessions.customer_name` or `devices.customer_name` (not hostname).
+- [ ] `Machine` must come from `sessions.machine_name` or `devices.machine_name` (not hostname).
+- [ ] `Location` must come from device geo (`devices.last_city/region/country`).
+- [ ] Fix summary cards: `Total Duration` must always show computed sum (show `0s` when zero instead of `—`).
+
+- [ ] **Templates: New Upload Badges + One-Time Dismiss**
+- [ ] After template upload, show a "New" badge in the Helper Templates section.
+- [ ] Show a balloon/badge next to toolbar `Generate Support Package` when new templates are available.
+- [ ] Persist "seen" state per technician (preferences table or localStorage) so badges clear after the user views/dismisses them.
+- [ ] Add a realtime event (Socket.IO) `templates-updated` emitted on template upload so the dashboard updates instantly.
+
+- [ ] **Dashboard: "What's New" from GitHub**
+- [ ] Add backend endpoint to fetch latest GitHub release notes (cache server-side with TTL; support offline/failure).
+- [ ] Add dashboard UI surface: small "What's New" banner/modal with one-time dismiss per version.
+
 ## Quick wins
 
 - **Manual approval (unattended OFF) end-to-end**: ✅ Helper now handles `connection-request` (Socket.IO), prompts user (Approve/Deny), and posts `/api/sessions/:sessionId/approval`.

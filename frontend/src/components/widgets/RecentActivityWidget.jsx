@@ -27,9 +27,14 @@ function RecentActivityWidget({ size }) {
         sessions.slice(0, limit).map(s => {
           const sid = s.session_id || s.sessionId;
           const ready = s.status === 'connected' || s.helper_connected === true;
+          const customer = s.customer_name || s.customerName || '';
+          const machine = s.machine_name || s.machineName || '';
+          const label = (customer || machine) ? `${customer || '—'}${machine ? ` / ${machine}` : ''}` : '';
           return (
             <div key={sid} className="widget-row">
-              <span className="widget-row-id">{sid}</span>
+              <span className="widget-row-id">
+                {sid}{label ? <span style={{ marginLeft: 8, fontWeight: 800 }}>{label}</span> : null}
+              </span>
               <span className={`widget-badge ${s.status === 'connected' ? 'wb-ok' : 'wb-warn'}`}>{s.status}</span>
               <span className="widget-row-meta">{new Date(s.created_at).toLocaleTimeString()}</span>
               {ready && <button className="widget-link-btn" onClick={() => connect(sid)}>Connect</button>}

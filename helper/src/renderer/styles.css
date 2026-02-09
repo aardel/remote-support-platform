@@ -155,6 +155,7 @@ body {
 
 /* Update available banner */
 .update-banner {
+  margin-top: 16px;
   margin-bottom: 14px;
   padding: 12px 14px;
   background: #eff6ff;
@@ -202,11 +203,62 @@ body {
   background: #f1f5f9;
 }
 
+.update-progress-wrap {
+  margin-top: 10px;
+}
+
+.update-progress-bar-track {
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.update-progress-bar-fill {
+  height: 100%;
+  background: #2563eb;
+  border-radius: 4px;
+  width: 0%;
+  transition: width 0.15s ease;
+}
+
+.update-progress-text {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
 .update-progress {
   margin-top: 8px;
   font-size: 12px;
   color: #64748b;
 }
+
+.check-update-btn {
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: #64748b;
+  background: transparent;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.check-update-btn:hover {
+  color: #475569;
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.shortcut-message {
+  margin-top: 6px;
+  font-size: 12px;
+  text-align: center;
+}
+.shortcut-message-ok { color: #0f766e; }
+.shortcut-message-error { color: #b91c1c; }
 
 /* Settings */
 .settings {
@@ -403,11 +455,22 @@ body {
 }
 
 /* Version */
-.helper-version {
+.helper-version-row {
   margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.helper-version {
   font-size: 11px;
   color: #94a3b8;
-  text-align: center;
+}
+
+.helper-version-row .helper-version {
+  margin-top: 0;
 }
 
 .helper-mac-hint {

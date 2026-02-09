@@ -55,6 +55,8 @@ function WidgetDashboard() {
   const [editing, setEditing] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [generateOpen, setGenerateOpen] = useState(false);
+  const [whatsNew, setWhatsNew] = useState(null);
+  const [whatsNewVisible, setWhatsNewVisible] = useState(false);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -71,6 +73,18 @@ function WidgetDashboard() {
         setLayout(merged);
       }
     }).catch(() => {}).finally(() => setLoaded(true));
+  }, []);
+
+  // GitHub "What's New" banner (cached by backend).
+  useEffect(() => {
+    const seenKey = 'rs_whatsnew_seen_tag';
+    axios.get('/api/whats-new').then(r => {
+      const data = r.data || null;
+      if (!data || !data.tag) return;
+      const seen = localStorage.getItem(seenKey);
+      setWhatsNew(data);
+      setWhatsNewVisible(seen !== data.tag);
+    }).catch(() => {});
   }, []);
 
   const saveLayout = useCallback(async (newLayout) => {
@@ -112,6 +126,30 @@ function WidgetDashboard() {
 
   return (
     <div className="wd-container">
+      {whatsNewVisible && whatsNew?.tag && (
+        <div className="wd-whatsnew">
+          <div className="wd-whatsnew-main">
+            <div className="wd-whatsnew-title">
+              What's New: {whatsNew.name || whatsNew.tag}
+            </div>
+            {whatsNew.body && (
+              <div className="wd-whatsnew-body">
+                {String(whatsNew.body).split('\n').filter(Boolean).slice(0, 2).join(' ')}
+              </div>
+            )}
+          </div>
+          <button
+            className="wd-whatsnew-btn"
+            type="button"
+            onClick={() => {
+              localStorage.setItem('rs_whatsnew_seen_tag', whatsNew.tag);
+              setWhatsNewVisible(false);
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       <div className="wd-header">
         <h2>Dashboard</h2>
         <button className={`wd-customize-btn ${editing ? 'active' : ''}`} onClick={() => setEditing(!editing)}>

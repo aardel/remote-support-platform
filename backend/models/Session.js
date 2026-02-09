@@ -76,7 +76,17 @@ class Session {
 
     static async findAllActive() {
         const query = `
-            SELECT * FROM sessions
+            SELECT s.*,
+                   COALESCE(s.customer_name, d.customer_name) AS customer_name,
+                   COALESCE(s.machine_name, d.machine_name, d.display_name) AS machine_name,
+                   d.hostname AS device_hostname,
+                   d.os AS device_os,
+                   d.last_ip AS device_ip,
+                   d.last_country AS device_country,
+                   d.last_region AS device_region,
+                   d.last_city AS device_city
+            FROM sessions s
+            LEFT JOIN devices d ON s.device_id = d.device_id
             WHERE expires_at > NOW()
             ORDER BY created_at DESC
         `;
@@ -126,12 +136,20 @@ class Session {
         let i = 1;
         if (from) { conditions.push(`created_at >= $${i++}`); values.push(from); }
         if (to) { conditions.push(`created_at <= $${i++}`); values.push(to); }
-        if (customer) { conditions.push(`(customer_name ILIKE $${i} OR machine_name ILIKE $${i})`); values.push(`%${customer}%`); i++; }
+        if (customer) {
+            conditions.push(`(\n+                s.customer_name ILIKE $${i} OR s.machine_name ILIKE $${i} OR\n+                d.customer_name ILIKE $${i} OR d.machine_name ILIKE $${i} OR d.hostname ILIKE $${i}\n+            )`);
+            values.push(`%${customer}%`);
+            i++;
+        }
         if (deviceId) { conditions.push(`device_id = $${i++}`); values.push(deviceId); }
         if (status) { conditions.push(`status = $${i++}`); values.push(status); }
         const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
         const query = `
-            SELECT s.*, d.display_name AS device_display_name, d.hostname AS device_hostname,
+            SELECT s.*,
+                   d.customer_name AS device_customer_name,
+                   d.machine_name AS device_machine_name,
+                   d.display_name AS device_display_name,
+                   d.hostname AS device_hostname,
                    d.os AS device_os, d.last_ip AS device_ip,
                    d.last_country AS device_country, d.last_region AS device_region, d.last_city AS device_city
             FROM sessions s

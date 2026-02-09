@@ -3,7 +3,8 @@ import axios from 'axios';
 import './PageStyles.css';
 
 function formatDuration(ms) {
-  if (!ms || ms <= 0) return '—';
+  if (ms == null) return '—';
+  if (ms <= 0) return '0s';
   const s = Math.floor(ms / 1000);
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
@@ -107,7 +108,7 @@ function StatisticsPage() {
                   <td>{s.endedAt ? new Date(s.endedAt).toLocaleString() : '—'}</td>
                   <td>{formatDuration(s.durationMs)}</td>
                   <td>{s.customerName || '—'}</td>
-                  <td>{s.machineName || s.hostname || '—'}</td>
+                  <td>{s.machineName || '—'}</td>
                   <td>{s.os || '—'}</td>
                   <td className="mono">{s.ip || '—'}</td>
                   <td>{[s.city, s.region, s.country].filter(Boolean).join(', ') || '—'}</td>

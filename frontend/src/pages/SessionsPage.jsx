@@ -129,10 +129,15 @@ function SessionsPage() {
         <div className="page-cards">
           {filtered.map(s => {
             const sid = s.session_id || s.sessionId;
+            const customer = s.customer_name || s.customerName || '—';
+            const machine = s.machine_name || s.machineName || s.hostname || '—';
             return (
               <div key={sid} className="page-card">
                 <div className="card-top">
-                  <span className="card-id mono">{sid}</span>
+                  <span className="card-id">
+                    <span className="mono">{sid}</span>
+                    <span className="card-title-extra"><strong>{customer}</strong>{machine && machine !== '—' ? ` / ${machine}` : ''}</span>
+                  </span>
                   <span className={`badge ${s.status === 'connected' ? 'badge-ok' : 'badge-warn'}`}>{s.status}</span>
                 </div>
                 {s.client_info && (

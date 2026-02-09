@@ -15,6 +15,8 @@ function ClassicDashboard({ user, onLogout }) {
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [templateStatus, setTemplateStatus] = useState(null);
+  const [templatesNew, setTemplatesNew] = useState(false);
+  const [templatesLatestTs, setTemplatesLatestTs] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [sessionStatusFilter, setSessionStatusFilter] = useState('all');
   const [sessionSortBy, setSessionSortBy] = useState('date');
@@ -30,6 +32,34 @@ function ClassicDashboard({ user, onLogout }) {
     setupWebSocket();
     axios.get('/api/version').then(r => setAppVersion(r.data.version)).catch(() => {});
   }, []);
+
+  const templatesSeenKey = 'rs_templates_seen_ts';
+  const computeLatestTemplateTs = (templates) => {
+    if (!templates) return 0;
+    const ts = ['exe', 'dmg']
+      .map(k => templates?.[k]?.updatedAt)
+      .filter(Boolean)
+      .map(v => new Date(v).getTime())
+      .filter(n => Number.isFinite(n));
+    return ts.length ? Math.max(...ts) : 0;
+  };
+
+  const refreshTemplatesNew = (templatesOverride) => {
+    const t = templatesOverride || templateStatus;
+    const latest = computeLatestTemplateTs(t);
+    setTemplatesLatestTs(latest);
+    const seen = Number(localStorage.getItem(templatesSeenKey) || 0);
+    setTemplatesNew(latest > seen);
+  };
+
+  // One-time badge: once shown, auto-clear.
+  useEffect(() => {
+    if (!templatesNew) return;
+    const latest = templatesLatestTs || computeLatestTemplateTs(templateStatus);
+    if (latest) localStorage.setItem(templatesSeenKey, String(latest));
+    const t = setTimeout(() => setTemplatesNew(false), 2500);
+    return () => clearTimeout(t);
+  }, [templatesNew, templatesLatestTs, templateStatus]);
 
   const setupWebSocket = () => {
     const socket = io(window.location.origin);
@@ -112,6 +142,23 @@ function ClassicDashboard({ user, onLogout }) {
       }));
     });
 
+    socket.on('device-updated', (data) => {
+      if (!data?.deviceId) return;
+      setDevices(prev => prev.map(d => d.device_id === data.deviceId ? {
+        ...d,
+        last_ip: data.last_ip ?? d.last_ip,
+        last_country: data.last_country ?? d.last_country,
+        last_region: data.last_region ?? d.last_region,
+        last_city: data.last_city ?? d.last_city
+      } : d));
+    });
+
+    socket.on('templates-updated', (data) => {
+      const t = data?.templates || null;
+      setTemplateStatus(t);
+      refreshTemplatesNew(t);
+    });
+
     return () => socket.disconnect();
   };
 
@@ -160,7 +207,9 @@ function ClassicDashboard({ user, onLogout }) {
   const loadTemplateStatus = async () => {
     try {
       const response = await axios.get('/api/packages/templates');
-      setTemplateStatus(response.data?.templates || null);
+      const t = response.data?.templates || null;
+      setTemplateStatus(t);
+      refreshTemplatesNew(t);
     } catch (error) {
       console.error('Error loading template status:', error);
     }
@@ -381,15 +430,6 @@ function ClassicDashboard({ user, onLogout }) {
                     <button
                       onClick={() => deregisterDevice(device.device_id, device.display_name || device.hostname || device.device_id)}
                       className="delete-btn"
-                      style={{
-                        marginLeft: '10px',
-                        padding: '8px 16px',
-                        background: '#dc2626',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer'
-                      }}
                     >
                       Deregister
                     </button>
@@ -410,7 +450,22 @@ function ClassicDashboard({ user, onLogout }) {
           </button>
 
             <div className="template-card">
-              <div className="template-title">Helper Templates</div>
+              <div className="template-title-row">
+                <div className="template-title">Helper Templates</div>
+                {templatesNew && (
+                  <div
+                    className="template-new-badge"
+                    title="New templates uploaded"
+                    onClick={() => {
+                      const latest = templatesLatestTs || computeLatestTemplateTs(templateStatus);
+                      if (latest) localStorage.setItem(templatesSeenKey, String(latest));
+                      setTemplatesNew(false);
+                    }}
+                  >
+                    New
+                  </div>
+                )}
+              </div>
               <div className="template-status">
                 <div className={`template-status-item ${templateStatus?.exe?.available ? 'ready' : 'missing'}`}>
                   EXE: {templateStatus?.exe?.available ? 'Installed' : 'Missing'}
@@ -551,7 +606,14 @@ function ClassicDashboard({ user, onLogout }) {
                 .map(session => (
                 <div key={session.session_id} className="session-card">
                   <div className="session-header">
-                    <span className="session-id">{session.session_id}</span>
+                    <span className="session-id">
+                      {session.session_id}
+                      {(session.customer_name || session.machine_name) && (
+                        <span style={{ marginLeft: 10, fontWeight: 700 }}>
+                          {(session.customer_name || '—')}{session.machine_name ? ` / ${session.machine_name}` : ''}
+                        </span>
+                      )}
+                    </span>
                     <span className={`status-badge ${session.status}`}>
                       {session.status}
                     </span>
@@ -626,15 +688,6 @@ function ClassicDashboard({ user, onLogout }) {
                     <button
                       onClick={() => deleteSession(session.session_id || session.sessionId)}
                       className="delete-btn"
-                      style={{
-                        marginLeft: '10px',
-                        padding: '8px 16px',
-                        background: '#dc2626',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer'
-                      }}
                     >
                       Delete
                     </button>

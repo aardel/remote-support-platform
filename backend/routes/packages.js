@@ -82,6 +82,14 @@ router.post('/templates', requireAuth, upload.single('file'), async (req, res) =
         const targetPath = path.join(packagesDir, `support-template.${type}`);
         fs.renameSync(req.file.path, targetPath);
 
+        // Notify dashboards in realtime that templates changed.
+        try {
+            const io = req.app.get('io');
+            if (io) {
+                io.emit('templates-updated', { templates: getTemplateStatus() });
+            }
+        } catch (_) {}
+
         res.json({
             success: true,
             type,

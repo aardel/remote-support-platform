@@ -109,5 +109,12 @@ contextBridge.exposeInMainWorld('helperApi', {
   // Update
   checkForUpdate: () => ipcRenderer.invoke('helper:check-for-update'),
   downloadUpdate: (downloadUrl) => ipcRenderer.invoke('helper:download-update', downloadUrl),
-  installUpdateAndQuit: (installerPath) => ipcRenderer.invoke('helper:install-update-and-quit', installerPath)
+  installUpdateAndQuit: (installerPath) => ipcRenderer.invoke('helper:install-update-and-quit', installerPath),
+  onUpdateDownloadProgress: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('update-download-progress', handler);
+    return () => ipcRenderer.removeListener('update-download-progress', handler);
+  },
+
+  createDesktopShortcut: () => ipcRenderer.invoke('helper:create-desktop-shortcut')
 });

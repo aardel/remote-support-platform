@@ -4,6 +4,17 @@ const SessionService = require('../services/sessionService');
 const Session = require('../models/Session');
 const Device = require('../models/Device');
 const { requireAuth } = require('../middleware/sessionAuth');
+const { geolocate, normalizeIp } = require('../services/geolocate');
+
+function extractClientIp(req) {
+    const xf = req.headers['x-forwarded-for'];
+    if (xf) {
+        const first = Array.isArray(xf) ? xf[0] : String(xf);
+        const ip = normalizeIp(first);
+        if (ip) return ip;
+    }
+    return normalizeIp(req.ip);
+}
 
 // Assign session for device (helper calls on launch – no auth)
 router.post('/assign', async (req, res) => {
@@ -12,6 +23,7 @@ router.post('/assign', async (req, res) => {
         if (!deviceId) {
             return res.status(400).json({ error: 'deviceId required' });
         }
+        const clientIp = extractClientIp(req);
         const result = await SessionService.assignSessionForDevice({
             deviceId,
             deviceName: deviceName || req.body.clientInfo?.hostname,
@@ -19,8 +31,27 @@ router.post('/assign', async (req, res) => {
             hostname: hostname || req.body.clientInfo?.hostname,
             arch: arch || req.body.clientInfo?.arch,
             allowUnattended: allowUnattended !== false,
-            lastIp: req.ip
+            lastIp: clientIp
         });
+
+        // Async geolocation update for device list
+        if (clientIp) {
+            geolocate(clientIp).then(geo => {
+                if (!geo) return;
+                Device.updateGeo(deviceId, geo).then((updated) => {
+                    const io = req.app.get('io');
+                    if (io && updated) {
+                        io.emit('device-updated', {
+                            deviceId,
+                            last_ip: updated.last_ip,
+                            last_country: updated.last_country,
+                            last_region: updated.last_region,
+                            last_city: updated.last_city
+                        });
+                    }
+                }).catch(() => {});
+            }).catch(() => {});
+        }
 
         // Broadcast new/existing session to all dashboards so they update in real-time.
         // Use real status if available; do not force 'waiting' (can cause UI lockout).
@@ -123,12 +154,24 @@ router.post('/register', async (req, res) => {
             vnc_port: vncPort || 5900,
             device_id: deviceId || null,
             status: 'connected',
-            connected_at: new Date(),
+            // Only set connected_at once per session so statistics duration stays stable.
+            connected_at: existing.connected_at || new Date(),
             // Clear end markers on reconnect so stats and dashboards do not treat it as ended.
             ended_at: null
         };
         if (typeof allowUnattended === 'boolean') {
             sessionUpdate.allow_unattended = allowUnattended;
+        }
+
+        // Snapshot customer/machine name from device record so dashboards and statistics show stable labels.
+        if (deviceId) {
+            try {
+                const device = await Device.findByDeviceId(deviceId);
+                if (device) {
+                    if (!existing.customer_name && device.customer_name) sessionUpdate.customer_name = device.customer_name;
+                    if (!existing.machine_name && (device.machine_name || device.display_name)) sessionUpdate.machine_name = device.machine_name || device.display_name;
+                }
+            } catch (_) {}
         }
 
         const session = await SessionService.registerSession(sessionId, sessionUpdate);

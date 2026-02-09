@@ -18,7 +18,12 @@ const updateBanner = document.getElementById('updateBanner');
 const updateLatestVersion = document.getElementById('updateLatestVersion');
 const updateNowBtn = document.getElementById('updateNowBtn');
 const updateNextSessionBtn = document.getElementById('updateNextSessionBtn');
-const updateProgress = document.getElementById('updateProgress');
+const updateProgressWrap = document.getElementById('updateProgressWrap');
+const updateProgressBarFill = document.getElementById('updateProgressBarFill');
+const updateProgressText = document.getElementById('updateProgressText');
+const checkUpdateBtn = document.getElementById('checkUpdateBtn');
+const createShortcutBtn = document.getElementById('createShortcutBtn');
+const shortcutMessage = document.getElementById('shortcutMessage');
 
 let peerConnection = null;
 let updateInfo = null; // { updateAvailable, latestVersion, downloadUrl } // kept for switch-monitor/set-stream-quality (first PC or any)
@@ -119,6 +124,51 @@ detailsToggle.addEventListener('click', () => {
   logEl.style.display = logVisible ? 'block' : 'none';
   detailsToggle.textContent = logVisible ? 'Hide details' : 'Show details';
 });
+
+// Check for updates (manual)
+if (checkUpdateBtn) {
+  checkUpdateBtn.addEventListener('click', async () => {
+    const origText = checkUpdateBtn.textContent;
+    checkUpdateBtn.textContent = 'Checking...';
+    checkUpdateBtn.disabled = true;
+    try {
+      await checkForUpdateAndShowBanner();
+    } finally {
+      checkUpdateBtn.textContent = origText;
+      checkUpdateBtn.disabled = false;
+    }
+  });
+}
+
+// Create desktop shortcut (Windows .lnk, macOS alias)
+function showShortcutMessage(text, isError) {
+  if (!shortcutMessage) return;
+  shortcutMessage.textContent = text;
+  shortcutMessage.style.display = 'block';
+  shortcutMessage.className = 'shortcut-message' + (isError ? ' shortcut-message-error' : ' shortcut-message-ok');
+}
+if (createShortcutBtn) {
+  createShortcutBtn.addEventListener('click', async () => {
+    if (!window.helperApi || !window.helperApi.createDesktopShortcut) return;
+    const origText = createShortcutBtn.textContent;
+    createShortcutBtn.textContent = 'Creating...';
+    createShortcutBtn.disabled = true;
+    if (shortcutMessage) shortcutMessage.style.display = 'none';
+    try {
+      const result = await window.helperApi.createDesktopShortcut();
+      if (result && result.success) {
+        showShortcutMessage('Desktop shortcut created.', false);
+      } else {
+        showShortcutMessage(result && result.error ? result.error : 'Could not create shortcut.', true);
+      }
+    } catch (e) {
+      showShortcutMessage(e.message || 'Could not create shortcut.', true);
+    } finally {
+      createShortcutBtn.textContent = origText;
+      createShortcutBtn.disabled = false;
+    }
+  });
+}
 
 // Chat notification + popup
 function showChatNotification(msg) {
@@ -230,18 +280,29 @@ async function checkForUpdateAndShowBanner() {
 }
 
 async function handleUpgradeNow() {
-  if (!updateInfo?.downloadUrl || !updateNowBtn || !updateProgress) return;
+  if (!updateInfo?.downloadUrl || !updateNowBtn || !updateProgressWrap) return;
   updateNowBtn.disabled = true;
   if (updateNextSessionBtn) updateNextSessionBtn.disabled = true;
-  updateProgress.style.display = 'block';
-  updateProgress.textContent = 'Downloading...';
+  updateProgressWrap.style.display = 'block';
+  if (updateProgressBarFill) updateProgressBarFill.style.width = '0%';
+  if (updateProgressText) updateProgressText.textContent = 'Downloading...';
+  const removeProgressListener = window.helperApi.onUpdateDownloadProgress && window.helperApi.onUpdateDownloadProgress((data) => {
+    if (updateProgressBarFill) updateProgressBarFill.style.width = `${data.percent || 0}%`;
+    if (updateProgressText) {
+      if (data.percent >= 100) updateProgressText.textContent = 'Complete. Opening installer...';
+      else if (data.total) updateProgressText.textContent = `Downloading... ${data.percent}%`;
+      else updateProgressText.textContent = 'Downloading...';
+    }
+  });
   try {
     const installerPath = await window.helperApi.downloadUpdate(updateInfo.downloadUrl);
-    updateProgress.textContent = 'Opening installer...';
+    if (updateProgressText) updateProgressText.textContent = 'Opening installer...';
+    if (removeProgressListener) removeProgressListener();
     await window.helperApi.installUpdateAndQuit(installerPath);
   } catch (e) {
     log(`Update failed: ${e.message}`);
-    updateProgress.textContent = `Failed: ${e.message}`;
+    if (removeProgressListener) removeProgressListener();
+    if (updateProgressText) updateProgressText.textContent = `Failed: ${e.message}`;
     updateNowBtn.disabled = false;
     if (updateNextSessionBtn) updateNextSessionBtn.disabled = false;
   }

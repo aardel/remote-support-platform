@@ -136,8 +136,14 @@
 
 .actions-cell {
   display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.actions-cell .btn-sm {
+  width: 90px;
+  text-align: center;
 }
 
 .inline-edit {
@@ -173,6 +179,15 @@
 .card-id {
   font-weight: 600;
   color: #1e293b;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.card-title-extra {
+  font-weight: 600;
+  color: #0f172a;
 }
 
 .card-meta {

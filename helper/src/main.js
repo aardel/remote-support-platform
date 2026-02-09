@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const https = require('https');
 const http = require('http');
+const { execSync } = require('child_process');
 const { io } = require('socket.io-client');
 
 let robot = null;
@@ -249,10 +250,25 @@ ipcMain.handle('helper:download-update', async (_event, downloadUrl) => {
         reject(new Error(`Download failed: ${res.statusCode}`));
         return;
       }
+      const totalBytes = parseInt(res.headers['content-length'], 10) || 0;
+      let receivedBytes = 0;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-download-progress', { percent: 0, received: 0, total: totalBytes });
+      }
       const file = fs.createWriteStream(destPath);
+      res.on('data', (chunk) => {
+        receivedBytes += chunk.length;
+        const percent = totalBytes ? Math.min(100, Math.round((100 * receivedBytes) / totalBytes)) : 0;
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('update-download-progress', { percent, received: receivedBytes, total: totalBytes });
+        }
+      });
       res.pipe(file);
       file.on('finish', () => {
         file.close();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('update-download-progress', { percent: 100 });
+        }
         resolve(destPath);
       });
       file.on('error', reject);
@@ -266,6 +282,60 @@ ipcMain.handle('helper:install-update-and-quit', async (_event, installerPath) =
   if (!installerPath || !fs.existsSync(installerPath)) return;
   shell.openPath(installerPath);
   setTimeout(() => app.quit(), 1000);
+});
+
+// Create a desktop shortcut (Windows .lnk or macOS alias). Only works when app is packaged.
+function createDesktopShortcut() {
+  const platform = process.platform;
+  const desktopPath = app.getPath('desktop');
+  const shortcutName = 'Remote Support';
+
+  if (platform === 'win32') {
+    const exePath = app.getPath('exe');
+    if (!exePath || !fs.existsSync(exePath)) return { success: false, error: 'Executable not found' };
+    const lnkPath = path.join(desktopPath, `${shortcutName}.lnk`);
+    const workDir = path.dirname(exePath);
+    const psScript = `
+$WshShell = New-Object -ComObject WScript.Shell
+$s = $WshShell.CreateShortcut($args[0])
+$s.TargetPath = $args[1]
+$s.WorkingDirectory = $args[2]
+$s.Save()
+`.trim();
+    try {
+      const scriptPath = path.join(app.getPath('temp'), 'create-shortcut.ps1');
+      fs.writeFileSync(scriptPath, psScript, 'utf8');
+      execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" "${lnkPath}" "${exePath}" "${workDir}"`, { stdio: 'pipe', windowsHide: true });
+      try { fs.unlinkSync(scriptPath); } catch (_) {}
+      return { success: true, path: lnkPath };
+    } catch (e) {
+      return { success: false, error: e.message || 'Failed to create shortcut' };
+    }
+  }
+
+  if (platform === 'darwin') {
+    // process.execPath is .../App.app/Contents/MacOS/App, so .app is 3 levels up
+    const appPath = app.isPackaged
+      ? path.dirname(path.dirname(path.dirname(process.execPath)))
+      : process.execPath;
+    if (!appPath || !fs.existsSync(appPath)) return { success: false, error: 'App not found' };
+    try {
+      const esc = (s) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      execSync(`osascript -e 'tell application "Finder" to make alias file at (path to desktop) to (POSIX file "${esc(appPath)}"); set name of result to "${esc(shortcutName)}"'`, { stdio: 'pipe' });
+      return { success: true, path: path.join(desktopPath, shortcutName) };
+    } catch (e) {
+      return { success: false, error: e.message || 'Failed to create alias' };
+    }
+  }
+
+  return { success: false, error: 'Unsupported platform' };
+}
+
+ipcMain.handle('helper:create-desktop-shortcut', async () => {
+  if (!app.isPackaged) {
+    return { success: false, error: 'Shortcut can only be created for the installed app (not in development).' };
+  }
+  return createDesktopShortcut();
 });
 
 ipcMain.handle('helper:get-capabilities', () => {

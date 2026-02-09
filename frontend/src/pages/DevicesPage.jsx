@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import io from 'socket.io-client';
 import './PageStyles.css';
 
 function DevicesPage() {
@@ -14,6 +15,18 @@ function DevicesPage() {
 
   useEffect(() => {
     loadDevices();
+    const socket = io(window.location.origin);
+    socket.on('device-updated', (data) => {
+      if (!data?.deviceId) return;
+      setDevices(prev => prev.map(d => d.device_id === data.deviceId ? {
+        ...d,
+        last_ip: data.last_ip ?? d.last_ip,
+        last_country: data.last_country ?? d.last_country,
+        last_region: data.last_region ?? d.last_region,
+        last_city: data.last_city ?? d.last_city
+      } : d));
+    });
+    return () => socket.disconnect();
   }, []);
 
   const loadDevices = async () => {
