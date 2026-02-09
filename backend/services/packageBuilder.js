@@ -54,6 +54,12 @@ class PackageBuilder {
             path.join(packageDir, 'register-session.ps1'),
             windowsRegister
         );
+
+        const windowsRegisterVbs = this.createWindowsRegistrationVbs(config);
+        fs.writeFileSync(
+            path.join(packageDir, 'register-session.vbs'),
+            windowsRegisterVbs
+        );
         
         // macOS/Linux scripts
         const unixLauncher = this.createUnixLauncher(config);
@@ -121,7 +127,8 @@ REM Check if TightVNC exists
 if exist "tightvnc\\tvnserver.exe" (
     echo Starting TightVNC Server...
     start "" "tightvnc\\tvnserver.exe"
-    timeout /t 3 /nobreak >nul
+    REM XP does not have "timeout" by default; use ping as a delay.
+    ping -n 4 127.0.0.1 >nul
     call connect.bat
 ) else (
     echo TightVNC not found in package.
@@ -134,13 +141,16 @@ if exist "tightvnc\\tvnserver.exe" (
     exit /b 1
 )
 
-REM Register session (PowerShell 2.0+ required, works on XP SP3+)
-where powershell >nul 2>&1
-if %ERRORLEVEL% EQU 0 (
-    echo Registering session...
-    powershell -ExecutionPolicy Bypass -File register-session.ps1
+REM Register session (optional, for showing status in dashboard).
+REM Prefer PowerShell if available; fall back to VBScript (works on XP).
+if exist "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" (
+    echo Registering session (PowerShell)...
+    "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -ExecutionPolicy Bypass -File register-session.ps1
+) else if exist "register-session.vbs" (
+    echo Registering session (VBScript)...
+    cscript //nologo register-session.vbs
 ) else (
-    echo PowerShell not found. Registration skipped.
+    echo Registration skipped (no PowerShell/VBScript).
     echo Session may still work without registration.
 )
 
@@ -218,28 +228,46 @@ if (Test-Path $deviceFile) {
     $deviceId | Out-File -FilePath $deviceFile -Encoding ascii
 }
 
+# Escape JSON string values (PowerShell 2 compatible, no ConvertTo-Json required)
+function Escape-Json([string]$s) {
+    if ($s -eq $null) { return "" }
+    $s = $s -replace '\\\\', '\\\\\\\\'
+    $s = $s -replace '\"', '\\\\\"'
+    $s = $s -replace \"\\r\", \"\\\\r\"
+    $s = $s -replace \"\\n\", \"\\\\n\"
+    $s = $s -replace \"\\t\", \"\\\\t\"
+    return $s
+}
+
+# Simple HTTP helpers (PowerShell 2 compatible: no Invoke-RestMethod)
+function Http-Get([string]$url) {
+    $wc = New-Object System.Net.WebClient
+    $wc.Headers['User-Agent'] = 'RemoteSupport-Helper'
+    return $wc.DownloadString($url)
+}
+
+function Http-PostJson([string]$url, [string]$json) {
+    $wc = New-Object System.Net.WebClient
+    $wc.Headers['User-Agent'] = 'RemoteSupport-Helper'
+    $wc.Headers['Content-Type'] = 'application/json'
+    return $wc.UploadString($url, 'POST', $json)
+}
+
 # Check for pending session
 try {
-    $pending = Invoke-RestMethod -Uri "$Protocol://$Server/api/devices/pending/$deviceId" -Method GET -ErrorAction Stop
-    if ($pending.pending -eq $true -and $pending.sessionId) {
-        $SessionId = $pending.sessionId
+    $pendingJson = Http-Get "$Protocol://$Server/api/devices/pending/$deviceId"
+    if ($pendingJson -match '\"pending\"\\s*:\\s*true' -and $pendingJson -match '\"sessionId\"\\s*:\\s*\"([^\"]+)\"') {
+        $SessionId = $matches[1]
     }
 } catch {
     # Ignore pending lookup errors
 }
 
-$body = @{
-    sessionId = $SessionId
-    clientInfo = $clientInfo
-    vncPort = 5900
-    status = "connected"
-    deviceId = $deviceId
-    deviceName = $env:COMPUTERNAME
-} | ConvertTo-Json
+$body = "{""sessionId"":""$(Escape-Json $SessionId)"",""clientInfo"":{""os"":""$(Escape-Json $clientInfo.os)"",""arch"":""$(Escape-Json $clientInfo.arch)"",""hostname"":""$(Escape-Json $clientInfo.hostname)"",""username"":""$(Escape-Json $clientInfo.username)""},""vncPort"":5900,""status"":""connected"",""deviceId"":""$(Escape-Json $deviceId)"",""deviceName"":""$(Escape-Json $env:COMPUTERNAME)""}"
 
 try {
     $uri = "$Protocol" + "://" + "$Server/api/sessions/register"
-    $response = Invoke-RestMethod -Uri $uri -Method POST -Body $body -ContentType "application/json" -ErrorAction Stop
+    $response = Http-PostJson $uri $body
     
     Write-Host "Session registered successfully!" -ForegroundColor Green
     Write-Host "Session ID: $SessionId" -ForegroundColor Cyan
@@ -247,6 +275,108 @@ try {
     Write-Host "Registration error: $_" -ForegroundColor Yellow
     Write-Host "Session may still work, but registration failed." -ForegroundColor Yellow
 }
+`;
+    }
+
+    // Windows registration script (VBScript) for XP (no PowerShell required)
+    createWindowsRegistrationVbs(config) {
+        const serverHost = new URL(config.server).host;
+        const serverProtocol = new URL(config.server).protocol === 'https:' ? 'https' : 'http';
+        // Note: VBScript uses very simple JSON parsing; registration is best-effort.
+        return `' Remote Support Helper registration (VBScript; works on Windows XP)
+Option Explicit
+
+Dim SessionId, Server, Protocol
+SessionId = "${config.sessionId}"
+Server = "${serverHost}"
+Protocol = "${serverProtocol}"
+
+Dim appData, deviceDir, deviceFile, deviceId
+appData = CreateObject("WScript.Shell").ExpandEnvironmentStrings("%APPDATA%")
+If Len(appData) = 0 Then appData = CreateObject("WScript.Shell").ExpandEnvironmentStrings("%USERPROFILE%") & "\\Application Data"
+deviceDir = appData & "\\RemoteSupport"
+deviceFile = deviceDir & "\\device_id.txt"
+
+Dim fso: Set fso = CreateObject("Scripting.FileSystemObject")
+If Not fso.FolderExists(deviceDir) Then fso.CreateFolder(deviceDir)
+
+If fso.FileExists(deviceFile) Then
+  deviceId = Trim(ReadAllText(deviceFile))
+Else
+  deviceId = Replace(Replace(CreateObject("Scriptlet.TypeLib").Guid, "{", ""), "}", "")
+  WriteAllText deviceFile, deviceId
+End If
+
+' Check pending session
+On Error Resume Next
+Dim pendingJson: pendingJson = HttpGet(Protocol & "://" & Server & "/api/devices/pending/" & deviceId)
+If InStr(1, pendingJson, """pending"":true", vbTextCompare) > 0 Then
+  Dim psid: psid = JsonGetString(pendingJson, "sessionId")
+  If Len(psid) > 0 Then SessionId = psid
+End If
+On Error GoTo 0
+
+Dim osName, osVer, arch, host, user
+osName = "Windows"
+osVer = ""
+arch = CreateObject("WScript.Shell").ExpandEnvironmentStrings("%PROCESSOR_ARCHITECTURE%")
+host = CreateObject("WScript.Shell").ExpandEnvironmentStrings("%COMPUTERNAME%")
+user = CreateObject("WScript.Shell").ExpandEnvironmentStrings("%USERNAME%")
+
+Dim payload
+payload = "{""sessionId"":""" & EscapeJson(SessionId) & """,""clientInfo"":{""os"":""" & EscapeJson(osName) & """,""arch"":""" & EscapeJson(arch) & """,""hostname"":""" & EscapeJson(host) & """,""username"":""" & EscapeJson(user) & """},""vncPort"":5900,""status"":""connected"",""deviceId"":""" & EscapeJson(deviceId) & """,""deviceName"":""" & EscapeJson(host) & """}"
+
+On Error Resume Next
+Call HttpPostJson(Protocol & "://" & Server & "/api/sessions/register", payload)
+On Error GoTo 0
+
+Sub WriteAllText(path, text)
+  Dim ts: Set ts = fso.OpenTextFile(path, 2, True)
+  ts.Write text
+  ts.Close
+End Sub
+
+Function ReadAllText(path)
+  Dim ts: Set ts = fso.OpenTextFile(path, 1, False)
+  ReadAllText = ts.ReadAll
+  ts.Close
+End Function
+
+Function EscapeJson(s)
+  Dim t: t = s
+  t = Replace(t, "\\", "\\\\")
+  t = Replace(t, """", "\\\"")
+  t = Replace(t, vbCr, "\\r")
+  t = Replace(t, vbLf, "\\n")
+  t = Replace(t, vbTab, "\\t")
+  EscapeJson = t
+End Function
+
+Function HttpGet(url)
+  Dim x: Set x = CreateObject("MSXML2.XMLHTTP")
+  x.Open "GET", url, False
+  x.Send
+  HttpGet = x.responseText
+End Function
+
+Sub HttpPostJson(url, json)
+  Dim x: Set x = CreateObject("MSXML2.XMLHTTP")
+  x.Open "POST", url, False
+  x.setRequestHeader "Content-Type", "application/json"
+  x.Send json
+End Sub
+
+Function JsonGetString(json, key)
+  ' Very small extractor for: "key":"value"
+  Dim pat, p, startPos, endPos
+  pat = """" & key & """:"""
+  p = InStr(1, json, pat, vbTextCompare)
+  If p = 0 Then JsonGetString = "" : Exit Function
+  startPos = p + Len(pat)
+  endPos = InStr(startPos, json, """")
+  If endPos = 0 Then JsonGetString = "" : Exit Function
+  JsonGetString = Mid(json, startPos, endPos - startPos)
+End Function
 `;
     }
     
