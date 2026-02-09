@@ -186,23 +186,17 @@ exit /b 1
 REM Register session (optional, for showing status in dashboard).
 REM Prefer PowerShell if available; fall back to VBScript (works on XP).
 :register
-if exist "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" goto reg_ps
-if exist "register-session.vbs" goto reg_vbs
-goto reg_done
-
-:reg_ps
-echo Registering session (PowerShell)...
-"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -ExecutionPolicy Bypass -File register-session.ps1
-goto reg_done
-
-:reg_vbs
-echo Registering session (VBScript)...
-cscript //nologo register-session.vbs
-
-:reg_done
-if not exist "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" if not exist "register-session.vbs" (
-    echo Registration skipped (no PowerShell/VBScript).
-    echo Session may still work without registration.
+if exist "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" (
+    echo Registering session (PowerShell)...
+    "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -ExecutionPolicy Bypass -File register-session.ps1
+) else (
+    if exist "register-session.vbs" (
+        echo Registering session (VBScript)...
+        cscript //nologo register-session.vbs
+    ) else (
+        echo Registration skipped (no PowerShell/VBScript).
+        echo Session may still work without registration.
+    )
 )
 
 call connect.bat
