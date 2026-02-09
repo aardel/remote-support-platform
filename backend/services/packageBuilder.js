@@ -60,6 +60,16 @@ class PackageBuilder {
             path.join(packageDir, 'register-session.vbs'),
             windowsRegisterVbs
         );
+
+        // Optional bundles (portable apps) for best compatibility, especially XP.
+        // Drop files into:
+        //   packages/bundles/windows/tightvnc/    -> copied to <package>/tightvnc/
+        //   packages/bundles/windows/tightvnc64/  -> copied to <package>/tightvnc64/
+        //   packages/bundles/windows/mypal/       -> copied to <package>/mypal/
+        // If absent, the ZIP will still generate (but the user must provide VNC server).
+        this.copyOptionalBundle(path.join(this.packagesDir, 'bundles', 'windows', 'tightvnc'), path.join(packageDir, 'tightvnc'));
+        this.copyOptionalBundle(path.join(this.packagesDir, 'bundles', 'windows', 'tightvnc64'), path.join(packageDir, 'tightvnc64'));
+        this.copyOptionalBundle(path.join(this.packagesDir, 'bundles', 'windows', 'mypal'), path.join(packageDir, 'mypal'));
         
         // macOS/Linux scripts
         const unixLauncher = this.createUnixLauncher(config);
@@ -108,6 +118,18 @@ class PackageBuilder {
             config
         };
     }
+
+    copyOptionalBundle(srcDir, destDir) {
+        try {
+            if (!fs.existsSync(srcDir)) return false;
+            fs.mkdirSync(destDir, { recursive: true });
+            // Node 16+ supports cpSync; repo runs on modern Node.
+            fs.cpSync(srcDir, destDir, { recursive: true, force: true });
+            return true;
+        } catch (_) {
+            return false;
+        }
+    }
     
     // Windows launcher (compatible with Windows XP and later)
     createWindowsLauncher(config) {
@@ -124,9 +146,13 @@ echo ========================================
 echo.
 
 REM Check if TightVNC exists
-if exist "tightvnc\\tvnserver.exe" (
+set VNC_DIR=tightvnc
+if /I "%PROCESSOR_ARCHITECTURE%"=="AMD64" if exist "tightvnc64\\tvnserver.exe" set VNC_DIR=tightvnc64
+if defined PROCESSOR_ARCHITEW6432 if exist "tightvnc64\\tvnserver.exe" set VNC_DIR=tightvnc64
+
+if exist "%VNC_DIR%\\tvnserver.exe" (
     echo Starting TightVNC Server...
-    start "" "tightvnc\\tvnserver.exe"
+    start "" "%VNC_DIR%\\tvnserver.exe"
     REM XP does not have "timeout" by default; use ping as a delay.
     ping -n 4 127.0.0.1 >nul
     call connect.bat
@@ -134,6 +160,11 @@ if exist "tightvnc\\tvnserver.exe" (
     echo TightVNC not found in package.
     echo Please ensure TightVNC Portable is included.
     echo.
+    if exist "mypal\\mypal.exe" (
+        echo Tip: If this link was opened in Internet Explorer on Windows XP,
+        echo you can run "mypal\\mypal.exe" from this folder for better compatibility.
+        echo.
+    )
     echo For manual setup:
     echo 1. Install TightVNC Server
     echo 2. Run: tvnserver.exe -controlapp -connect ${new URL(config.server).hostname}:5500
@@ -176,9 +207,13 @@ REM Connect TightVNC to server (reverse connection)
 
 cd /d "%~dp0"
 
-if exist "tightvnc\\tvnserver.exe" (
+set VNC_DIR=tightvnc
+if /I "%PROCESSOR_ARCHITECTURE%"=="AMD64" if exist "tightvnc64\\tvnserver.exe" set VNC_DIR=tightvnc64
+if defined PROCESSOR_ARCHITEW6432 if exist "tightvnc64\\tvnserver.exe" set VNC_DIR=tightvnc64
+
+if exist "%VNC_DIR%\\tvnserver.exe" (
     echo Connecting to ${serverHost}:${serverPort}...
-    "tightvnc\\tvnserver.exe" -controlapp -connect ${serverHost}:${serverPort}
+    "%VNC_DIR%\\tvnserver.exe" -controlapp -connect ${serverHost}:${serverPort}
     if %ERRORLEVEL% EQU 0 (
         echo Connected successfully!
     ) else (
@@ -670,6 +705,8 @@ Windows (XP, Vista, 7, 8, 10, 11):
   1. Double-click "launch.bat" to start
   2. Or run: start-support (auto-detects Windows)
   3. Keep the window open while receiving support
+  4. If you are on Windows XP and the support link opened in Internet Explorer,
+     use the "Universal ZIP (Fallback/XP)" and run the included MyPal browser (if present).
 
 macOS:
   1. Open Terminal

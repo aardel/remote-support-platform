@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Remote Support (Legacy Browser)</title>
+  <style type="text/css">
+    body { font-family: Arial, Helvetica, sans-serif; background: #f4f6f8; color: #1e293b; }
+    .wrap { width: 640px; margin: 30px auto; background: #fff; border: 1px solid #d9e2ec; padding: 18px; }
+    h1 { font-size: 18px; margin: 0 0 8px 0; }
+    .sid { font-family: "Courier New", monospace; font-weight: bold; font-size: 22px; letter-spacing: 1px; margin: 10px 0; }
+    .note { background: #fff3cd; border: 1px solid #ffeeba; padding: 10px; color: #856404; font-size: 12px; }
+    .steps { margin-top: 14px; font-size: 13px; line-height: 1.5; }
+    .btn { display: inline-block; padding: 10px 14px; background: #2563eb; color: #fff; text-decoration: none; font-weight: bold; border-radius: 4px; }
+    .btn:hover { background: #1d4ed8; }
+    .links { margin-top: 12px; font-size: 12px; }
+    .links a { color: #2563eb; }
+    .muted { color: #64748b; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Remote Support</h1>
+    <div class="note">
+      You are using Internet Explorer (or a legacy browser). This page is a compatibility version.
+      For best results on Windows XP, use the included <strong>MyPal</strong> browser from the support package.
+    </div>
+
+    <div class="steps">
+      <div><strong>Session ID:</strong></div>
+      <div class="sid">___SESSID___</div>
+
+      <div style="margin-top: 12px;">
+        <a class="btn" href="/api/packages/download/___SESSID___?type=zip">Download Support Helper (ZIP)</a>
+      </div>
+
+      <ol style="margin-top: 12px; padding-left: 18px;">
+        <li>Download the ZIP file.</li>
+        <li>Extract it (right-click, Extract All).</li>
+        <li>Run <strong>launch.bat</strong>.</li>
+        <li>Keep the window open while your technician connects.</li>
+      </ol>
+
+      <div class="links">
+        <div class="muted">Optional downloads:</div>
+        <div><a href="/api/packages/download/___SESSID___?type=exe">Windows EXE (if available)</a></div>
+        <div><a href="/api/packages/download/___SESSID___?type=dmg">macOS DMG (if available)</a></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+

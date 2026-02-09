@@ -83,6 +83,19 @@ app.use('/api/whats-new', require('./routes/whatsNew'));
 
 // Customer support page route (download page with instructions)
 app.get('/support/:sessionId', (req, res) => {
+    const ua = String(req.headers['user-agent'] || '').toLowerCase();
+    const isIE = ua.includes('msie') || ua.includes('trident/');
+    if (isIE) {
+        // Serve a minimal page that works on IE (XP-era), with static links.
+        try {
+            const p = path.join(__dirname, '../frontend/public/support-ie.html');
+            const html = fs.readFileSync(p, 'utf8').replace(/___SESSID___/g, req.params.sessionId);
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            return res.send(html);
+        } catch (_) {
+            // Fall back to the modern page if something goes wrong.
+        }
+    }
     res.sendFile(path.join(__dirname, '../frontend/public/support.html'));
 });
 
