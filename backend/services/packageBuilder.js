@@ -32,7 +32,7 @@ class PackageBuilder {
         
         fs.writeFileSync(
             path.join(packageDir, 'config.json'),
-            JSON.stringify(config, null, 2)
+            this.toCrlf(JSON.stringify(config, null, 2))
         );
         
         // Create platform-specific scripts
@@ -161,36 +161,46 @@ set VNC_DIR=tightvnc
 if /I "%PROCESSOR_ARCHITECTURE%"=="AMD64" if exist "tightvnc64\\tvnserver.exe" set VNC_DIR=tightvnc64
 if defined PROCESSOR_ARCHITEW6432 if exist "tightvnc64\\tvnserver.exe" set VNC_DIR=tightvnc64
 
-if exist "%VNC_DIR%\\tvnserver.exe" (
-    echo Starting TightVNC Server...
-    start "" "%VNC_DIR%\\tvnserver.exe"
-    REM XP does not have "timeout" by default; use ping as a delay.
-    ping -n 4 127.0.0.1 >nul
-) else (
-    echo TightVNC not found in package.
-    echo Please ensure TightVNC Portable is included.
+if not exist "%VNC_DIR%\\tvnserver.exe" goto no_vnc
+echo Starting TightVNC Server...
+start "" "%VNC_DIR%\\tvnserver.exe"
+REM XP does not have "timeout" by default; use ping as a delay.
+ping -n 4 127.0.0.1 >nul
+goto register
+
+:no_vnc
+echo TightVNC not found in package.
+echo Please ensure TightVNC Portable is included.
+echo.
+if exist "mypal\\mypal.exe" (
+    echo Tip: If this link was opened in Internet Explorer on Windows XP,
+    echo you can run "mypal\\mypal.exe" from this folder for better compatibility.
     echo.
-    if exist "mypal\\mypal.exe" (
-        echo Tip: If this link was opened in Internet Explorer on Windows XP,
-        echo you can run "mypal\\mypal.exe" from this folder for better compatibility.
-        echo.
-    )
-    echo For manual setup:
-    echo 1. Install TightVNC Server
-    echo 2. Run: tvnserver.exe -controlapp -connect ${new URL(config.server).hostname}:5500
-    pause
-    exit /b 1
 )
+echo For manual setup:
+echo 1. Install TightVNC Server
+echo 2. Run: tvnserver.exe -controlapp -connect ${new URL(config.server).hostname}:5500
+pause
+exit /b 1
 
 REM Register session (optional, for showing status in dashboard).
 REM Prefer PowerShell if available; fall back to VBScript (works on XP).
-if exist "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" (
-    echo Registering session (PowerShell)...
-    "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -ExecutionPolicy Bypass -File register-session.ps1
-) else if exist "register-session.vbs" (
-    echo Registering session (VBScript)...
-    cscript //nologo register-session.vbs
-) else (
+:register
+if exist "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" goto reg_ps
+if exist "register-session.vbs" goto reg_vbs
+goto reg_done
+
+:reg_ps
+echo Registering session (PowerShell)...
+"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -ExecutionPolicy Bypass -File register-session.ps1
+goto reg_done
+
+:reg_vbs
+echo Registering session (VBScript)...
+cscript //nologo register-session.vbs
+
+:reg_done
+if not exist "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" if not exist "register-session.vbs" (
     echo Registration skipped (no PowerShell/VBScript).
     echo Session may still work without registration.
 )
@@ -223,28 +233,30 @@ set VNC_DIR=tightvnc
 if /I "%PROCESSOR_ARCHITECTURE%"=="AMD64" if exist "tightvnc64\\tvnserver.exe" set VNC_DIR=tightvnc64
 if defined PROCESSOR_ARCHITEW6432 if exist "tightvnc64\\tvnserver.exe" set VNC_DIR=tightvnc64
 
-if exist "%VNC_DIR%\\tvnserver.exe" (
-    REM Basic network check (HTTP to server) for clearer error messages
-    if exist "netcheck.vbs" (
-        cscript //nologo netcheck.vbs >nul
-        if errorlevel 1 (
-            echo.
-            echo WARNING: Cannot reach the server over HTTP.
-            echo This may indicate no internet connection or a firewall/proxy issue.
-            echo.
-        )
-    )
-    echo Connecting to ${serverHost}:${serverPort}...
-    "%VNC_DIR%\\tvnserver.exe" -controlapp -connect ${serverHost}:${serverPort}
+if not exist "%VNC_DIR%\\tvnserver.exe" goto no_vnc
+REM Basic network check (HTTP to server) for clearer error messages
+if exist "netcheck.vbs" (
+    cscript //nologo netcheck.vbs >nul
     if errorlevel 1 (
-        echo Connection failed. Please check your internet connection.
-        echo If internet works, a firewall may be blocking port ${serverPort}.
-    ) else (
-        echo Connected successfully!
+        echo.
+        echo WARNING: Cannot reach the server over HTTP.
+        echo This may indicate no internet connection or a firewall/proxy issue.
+        echo.
     )
-) else (
-    echo TightVNC not found. Cannot connect.
 )
+echo Connecting to ${serverHost}:${serverPort}...
+"%VNC_DIR%\\tvnserver.exe" -controlapp -connect ${serverHost}:${serverPort}
+if errorlevel 1 (
+    echo Connection failed. Please check your internet connection.
+    echo If internet works, a firewall may be blocking port ${serverPort}.
+) else (
+    echo Connected successfully!
+)
+goto done
+
+:no_vnc
+echo TightVNC not found. Cannot connect.
+:done
 `;
     }
 
@@ -426,7 +438,7 @@ End Function
 Function EscapeJson(s)
   Dim t: t = s
   t = Replace(t, "\\", "\\\\")
-  t = Replace(t, """", "\\\"")
+  t = Replace(t, """", "\\""")
   t = Replace(t, vbCr, "\\r")
   t = Replace(t, vbLf, "\\n")
   t = Replace(t, vbTab, "\\t")
