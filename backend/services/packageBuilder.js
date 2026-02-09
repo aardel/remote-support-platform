@@ -40,25 +40,25 @@ class PackageBuilder {
         const windowsLauncher = this.createWindowsLauncher(config);
         fs.writeFileSync(
             path.join(packageDir, 'launch.bat'),
-            windowsLauncher
+            this.toCrlf(windowsLauncher)
         );
         
         const windowsConnect = this.createWindowsConnect(config);
         fs.writeFileSync(
             path.join(packageDir, 'connect.bat'),
-            windowsConnect
+            this.toCrlf(windowsConnect)
         );
         
         const windowsRegister = this.createWindowsRegistration(config);
         fs.writeFileSync(
             path.join(packageDir, 'register-session.ps1'),
-            windowsRegister
+            this.toCrlf(windowsRegister)
         );
 
         const windowsRegisterVbs = this.createWindowsRegistrationVbs(config);
         fs.writeFileSync(
             path.join(packageDir, 'register-session.vbs'),
-            windowsRegisterVbs
+            this.toCrlf(windowsRegisterVbs)
         );
 
         // Optional bundles (portable apps) for best compatibility, especially XP.
@@ -106,7 +106,7 @@ class PackageBuilder {
         const readme = this.createReadme(config);
         fs.writeFileSync(
             path.join(packageDir, 'README.txt'),
-            readme
+            this.toCrlf(readme)
         );
         
         // Create ZIP package
@@ -117,6 +117,11 @@ class PackageBuilder {
             file: zipPath,
             config
         };
+    }
+
+    toCrlf(s) {
+        // XP Notepad (and some Windows tooling) requires CRLF to display newlines correctly.
+        return String(s || '').replace(/\r?\n/g, '\r\n');
     }
 
     copyOptionalBundle(srcDir, destDir) {
@@ -694,19 +699,31 @@ fi
     }
     
     createReadme(config) {
+        const supportLink = `${String(config.server).replace(/\/$/, '')}/support/${config.sessionId}`;
         return `Remote Support Helper
 ====================
 
 Session ID: ${config.sessionId}
+Support Link: ${supportLink}
 
-PLATFORM-SPECIFIC INSTRUCTIONS:
+WINDOWS XP QUICK START (recommended for XP):
+  1. Extract this ZIP to your Desktop (or any folder).
+  2. Double-click "launch.bat" (shown as "launch" if file extensions are hidden).
+  3. If Windows Firewall asks, click "Unblock" / "Allow".
+  4. Keep the black window open until your technician finishes.
+  5. If the technician asks you to reconnect, double-click "connect.bat".
+
+  Notes for XP:
+  - Ignore the *.sh files (they are for macOS/Linux).
+  - If your browser cannot open the support link, run: mypal\\mypal.exe (if included)
+    and paste the Support Link above into MyPal.
+
+PLATFORM NOTES:
 
 Windows (XP, Vista, 7, 8, 10, 11):
-  1. Double-click "launch.bat" to start
-  2. Or run: start-support (auto-detects Windows)
-  3. Keep the window open while receiving support
-  4. If you are on Windows XP and the support link opened in Internet Explorer,
-     use the "Universal ZIP (Fallback/XP)" and run the included MyPal browser (if present).
+  - Start: double-click "launch.bat"
+  - Reconnect only: double-click "connect.bat"
+  - Keep the window open while receiving support
 
 macOS:
   1. Open Terminal
