@@ -9,7 +9,12 @@ function RecentActivityWidget({ size }) {
   const limit = size === 'large' ? 7 : 5;
 
   useEffect(() => {
-    axios.get('/api/sessions').then(r => setSessions(r.data.sessions || [])).catch(() => {});
+    axios.get('/api/sessions').then(r => {
+      const all = r.data.sessions || [];
+      // Hide unassigned "generated link" sessions from this tile (they don't represent an actual machine yet).
+      const filtered = all.filter(s => (s.device_id || s.deviceId) || s.helper_connected === true || s.status === 'connected');
+      setSessions(filtered);
+    }).catch(() => {});
   }, []);
 
   const connect = async (sid) => {
