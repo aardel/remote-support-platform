@@ -914,6 +914,140 @@
   }
 }
 
+/* ── Case report modal (required after disconnect) ── */
+.case-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  z-index: 9999;
+}
+
+.case-modal {
+  width: min(760px, 100%);
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.22);
+  overflow: hidden;
+}
+
+.case-modal-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.case-modal-title {
+  font-weight: 800;
+  font-size: 16px;
+  color: #0f172a;
+}
+
+.case-modal-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.case-modal-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.case-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.case-textarea {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.case-textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+}
+
+.case-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.case-field {
+  flex: 1;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.case-input {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 14px;
+}
+
+.case-input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+}
+
+.case-error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.case-actions {
+  margin-top: 6px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.case-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* Minimal shared button styles for the modal (SessionView doesn't import PageStyles.css) */
+.btn-sm {
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+}
+.btn-sm.btn-primary { background: #2563eb; color: #fff; }
+.btn-sm.btn-primary:hover { background: #1d4ed8; }
+.btn-sm.btn-secondary { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+.btn-sm.btn-secondary:hover { background: #e2e8f0; }
+.btn-sm:disabled { opacity: 0.6; cursor: not-allowed; }
+
 /* Chat button */
 .chat-header-btn {
   padding: 6px 14px;

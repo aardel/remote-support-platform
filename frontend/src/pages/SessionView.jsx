@@ -86,6 +86,23 @@ function SessionView({ user }) {
   const userRef = useRef(user);
   userRef.current = user;
 
+  // Case/report modal (required after disconnect)
+  const [caseModalOpen, setCaseModalOpen] = useState(false);
+  const [caseDescription, setCaseDescription] = useState('');
+  const [phoneHours, setPhoneHours] = useState('');
+  const [whatsappHours, setWhatsappHours] = useState('');
+  const [caseSaving, setCaseSaving] = useState(false);
+  const [caseError, setCaseError] = useState(null);
+  const [createdCase, setCreatedCase] = useState(null);
+  const disconnectAfterReportRef = useRef(false);
+
+  const openCaseModal = (disconnectAfter = false) => {
+    disconnectAfterReportRef.current = disconnectAfterReportRef.current || disconnectAfter;
+    setCaseError(null);
+    setCreatedCase(null);
+    setCaseModalOpen(true);
+  };
+
   const toggleOverlay = () => setOverlayOpen(prev => !prev);
 
   const sendChatMessage = () => {
@@ -212,6 +229,7 @@ function SessionView({ user }) {
           } catch (_) {}
           viewerActiveRef.current = false;
         }
+        openCaseModal(false);
       }
     });
 
@@ -588,7 +606,7 @@ function SessionView({ user }) {
     });
   };
 
-  const disconnect = () => {
+  const finalizeDisconnect = (redirectTo = '/dashboard') => {
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
@@ -603,7 +621,26 @@ function SessionView({ user }) {
       }
       socket.disconnect();
     }
-    navigate('/dashboard');
+    navigate(redirectTo);
+  };
+
+  const requestDisconnect = () => {
+    // Enforce case report entry before leaving (billable).
+    // Stop viewing immediately so billable time does not continue while filling the report.
+    if (peerConnectionRef.current) {
+      try { peerConnectionRef.current.close(); } catch (_) {}
+      peerConnectionRef.current = null;
+    }
+    if (socket && viewerActiveRef.current) {
+      try {
+        const ti = technicianInfoRef.current;
+        socket.emit('viewer-state', { sessionId, viewing: false, technicianId: ti.id, technicianName: ti.name });
+      } catch (_) {}
+      viewerActiveRef.current = false;
+    }
+    setConnected(false);
+    setStatus('Disconnected');
+    openCaseModal(true);
   };
 
   // If the tab closes while viewing, ensure we stop billable viewing.
@@ -828,8 +865,132 @@ function SessionView({ user }) {
     }
   };
 
+  const submitCaseReport = async () => {
+    if (caseSaving) return;
+    const desc = String(caseDescription || '').trim();
+    if (!desc) {
+      setCaseError('Problem description is required.');
+      return;
+    }
+    const ph = phoneHours === '' ? 0 : Number(phoneHours);
+    const wh = whatsappHours === '' ? 0 : Number(whatsappHours);
+    if (!Number.isFinite(ph) || ph < 0) {
+      setCaseError('Phone support hours must be a number >= 0.');
+      return;
+    }
+    if (!Number.isFinite(wh) || wh < 0) {
+      setCaseError('WhatsApp support hours must be a number >= 0.');
+      return;
+    }
+
+    setCaseSaving(true);
+    setCaseError(null);
+    try {
+      const res = await fetch('/api/cases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          sessionId,
+          problemDescription: desc,
+          phoneSupportHours: ph,
+          whatsappSupportHours: wh
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `Failed to save report (${res.status})`);
+      setCreatedCase(data.case);
+
+      // If the technician requested disconnect, do it after the report is saved.
+      if (disconnectAfterReportRef.current) {
+        disconnectAfterReportRef.current = false;
+        finalizeDisconnect('/cases');
+      } else {
+        navigate('/cases');
+      }
+    } catch (e) {
+      setCaseError(e.message || 'Failed to save report.');
+    } finally {
+      setCaseSaving(false);
+    }
+  };
+
   return (
     <div className="session-view">
+      {caseModalOpen && (
+        <div className="case-modal-overlay" role="dialog" aria-modal="true" aria-label="Case report">
+          <div className="case-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="case-modal-header">
+              <div>
+                <div className="case-modal-title">Case Report</div>
+                <div className="case-modal-subtitle">
+                  Session <span className="mono">{sessionId}</span>{connectedDuration ? ` | Remote viewing: ${connectedDuration}` : ''}
+                </div>
+              </div>
+            </div>
+
+            <div className="case-modal-body">
+              <label className="case-label">Problem description (required)</label>
+              <textarea
+                className="case-textarea"
+                value={caseDescription}
+                onChange={(e) => setCaseDescription(e.target.value)}
+                placeholder="Describe the problem, what you observed, and what was done."
+                rows={6}
+              />
+
+              <div className="case-row">
+                <div className="case-field">
+                  <label className="case-label">Phone support (hours)</label>
+                  <input
+                    className="case-input"
+                    type="number"
+                    min="0"
+                    step="0.25"
+                    value={phoneHours}
+                    onChange={(e) => setPhoneHours(e.target.value)}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="case-field">
+                  <label className="case-label">WhatsApp support (hours)</label>
+                  <input
+                    className="case-input"
+                    type="number"
+                    min="0"
+                    step="0.25"
+                    value={whatsappHours}
+                    onChange={(e) => setWhatsappHours(e.target.value)}
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              {caseError && <div className="case-error">{caseError}</div>}
+
+              <div className="case-actions">
+                {createdCase?.id && (
+                  <button
+                    type="button"
+                    className="btn-sm btn-secondary"
+                    onClick={() => window.open(`/api/cases/${encodeURIComponent(createdCase.id)}/pdf`, '_blank')}
+                  >
+                    Download PDF
+                  </button>
+                )}
+                <button type="button" className="btn-sm btn-primary" disabled={caseSaving} onClick={submitCaseReport}>
+                  {caseSaving ? 'Saving…' : 'Save Report'}
+                </button>
+              </div>
+
+              <div className="case-hint">
+                This report is required after a disconnect and will be attached to the device record for billing.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="session-header">
         <div className="session-header-main">
           <div className="session-info">
@@ -873,7 +1034,7 @@ function SessionView({ user }) {
                 <span className="session-btn-label">Paste</span>
               </button>
             )}
-            <button type="button" onClick={disconnect} className="disconnect-btn">
+            <button type="button" onClick={requestDisconnect} className="disconnect-btn">
               Disconnect
             </button>
           </div>
@@ -1246,7 +1407,7 @@ function SessionView({ user }) {
               </button>
             </div>
             <div className="overlay-section">
-              <button type="button" className="overlay-btn-disconnect" onClick={disconnect}>
+              <button type="button" className="overlay-btn-disconnect" onClick={requestDisconnect}>
                 Disconnect
               </button>
             </div>

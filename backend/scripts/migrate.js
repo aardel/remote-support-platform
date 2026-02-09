@@ -128,6 +128,28 @@ async function migrate() {
             )
         `);
 
+        // Cases / reports (billing + problem description)
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS cases (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                case_number BIGSERIAL UNIQUE,
+                session_id VARCHAR(255),
+                device_id VARCHAR(255),
+                customer_name VARCHAR(255),
+                machine_name VARCHAR(255),
+                technician_id VARCHAR(255),
+                technician_name VARCHAR(255),
+                status VARCHAR(20) DEFAULT 'closed',
+                problem_description TEXT NOT NULL,
+                remote_viewing_seconds INTEGER DEFAULT 0,
+                phone_support_minutes INTEGER DEFAULT 0,
+                whatsapp_support_minutes INTEGER DEFAULT 0,
+                billable_total_seconds INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+
         // Create indexes
         await client.query('CREATE INDEX IF NOT EXISTS idx_sessions_technician ON sessions(technician_id)');
         await client.query('CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)');
@@ -136,6 +158,8 @@ async function migrate() {
         await client.query('CREATE INDEX IF NOT EXISTS idx_monitors_session ON session_monitors(session_id)');
         await client.query('CREATE INDEX IF NOT EXISTS idx_devices_technician ON devices(technician_id)');
         await client.query('CREATE INDEX IF NOT EXISTS idx_devices_pending ON devices(pending_session_id)');
+        await client.query('CREATE INDEX IF NOT EXISTS idx_cases_device ON cases(device_id)');
+        await client.query('CREATE INDEX IF NOT EXISTS idx_cases_created ON cases(created_at)');
         
         await client.query('COMMIT');
         console.log('✅ Database migration completed successfully');

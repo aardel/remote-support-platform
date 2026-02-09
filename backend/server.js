@@ -65,6 +65,7 @@ const packagesRouter = require('./routes/packages');
 const filesRouter = require('./routes/files');
 const monitorsRouter = require('./routes/monitors');
 const devicesRouter = require('./routes/devices');
+const casesRouter = require('./routes/cases');
 
 app.use('/api/auth', authRouter);
 app.use('/api/sessions', sessionsRouter);
@@ -72,6 +73,7 @@ app.use('/api/packages', packagesRouter);
 app.use('/api/files', filesRouter);
 app.use('/api/monitors', monitorsRouter);
 app.use('/api/devices', devicesRouter);
+app.use('/api/cases', casesRouter);
 app.use('/api/version', require('./routes/version'));
 app.use('/api/helper', require('./routes/helper'));
 app.use('/api/websocket', require('./routes/websocket'));

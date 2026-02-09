@@ -10,6 +10,7 @@ import DevicesPage from './pages/DevicesPage';
 import SessionsPage from './pages/SessionsPage';
 import StatisticsPage from './pages/StatisticsPage';
 import HelperTemplatesPage from './pages/HelperTemplatesPage';
+import CasesPage from './pages/CasesPage';
 import SessionView from './pages/SessionView';
 import PreferencesPage from './pages/PreferencesPage';
 import GenerateModal from './components/GenerateModal';
@@ -89,6 +90,7 @@ function App() {
           <Route path="/dashboard/classic" element={<ClassicDashboard user={user} onLogout={handleLogout} />} />
           <Route path="/devices" element={<DevicesPage />} />
           <Route path="/sessions" element={<SessionsPage />} />
+          <Route path="/cases" element={<CasesPage />} />
           <Route path="/statistics" element={<StatisticsPage />} />
           <Route path="/helper-templates" element={<HelperTemplatesPage />} />
           <Route path="/preferences" element={<PreferencesPage />} />
