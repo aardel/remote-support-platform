@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import './PageStyles.css';
 
@@ -15,6 +16,9 @@ function CasesPage() {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('all');
+  const [deviceId, setDeviceId] = useState('');
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const load = async (opts = {}) => {
     setLoading(true);
@@ -22,8 +26,10 @@ function CasesPage() {
       const params = {};
       const qq = (opts.q ?? q).trim();
       const st = opts.status ?? status;
+      const dev = (opts.deviceId ?? deviceId).trim();
       if (qq) params.q = qq;
       if (st !== 'all') params.status = st;
+      if (dev) params.deviceId = dev;
       const res = await axios.get('/api/cases', { params });
       setCases(res.data.cases || []);
     } catch (e) {
@@ -35,11 +41,21 @@ function CasesPage() {
   };
 
   useEffect(() => {
-    load();
+    const sp = new URLSearchParams(location.search);
+    const dev = sp.get('deviceId') || '';
+    if (dev) setDeviceId(dev);
+    load({ deviceId: dev });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onApply = () => load();
+  const clearDevice = () => {
+    setDeviceId('');
+    const sp = new URLSearchParams(location.search);
+    sp.delete('deviceId');
+    navigate({ pathname: '/cases', search: sp.toString() ? `?${sp.toString()}` : '' }, { replace: true });
+    load({ deviceId: '' });
+  };
 
   const downloadPdf = (caseId) => {
     window.open(`/api/cases/${encodeURIComponent(caseId)}/pdf`, '_blank');
@@ -60,6 +76,16 @@ function CasesPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
+        <input
+          type="text"
+          className="page-input"
+          placeholder="Device ID (optional)"
+          value={deviceId}
+          onChange={(e) => setDeviceId(e.target.value)}
+        />
+        {deviceId && (
+          <button className="btn-sm btn-secondary" onClick={clearDevice}>Clear device</button>
+        )}
         <label className="page-toolbar-label">Status</label>
         <select className="page-select" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="all">All</option>
@@ -122,4 +148,3 @@ function CasesPage() {
 }
 
 export default CasesPage;
-

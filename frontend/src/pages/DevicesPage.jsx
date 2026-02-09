@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import io from 'socket.io-client';
 import './PageStyles.css';
@@ -12,6 +13,7 @@ function DevicesPage() {
   const [editCustomer, setEditCustomer] = useState('');
   const [editMachine, setEditMachine] = useState('');
   const [requestingDevice, setRequestingDevice] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadDevices();
@@ -193,6 +195,9 @@ function DevicesPage() {
                         <button className="btn-sm btn-secondary" onClick={() => startEdit(d)}>Edit</button>
                         <button className="btn-sm btn-primary" onClick={() => requestSession(d.device_id)} disabled={requestingDevice === d.device_id}>
                           {requestingDevice === d.device_id ? '...' : 'Request'}
+                        </button>
+                        <button className="btn-sm btn-secondary" onClick={() => navigate(`/cases?deviceId=${encodeURIComponent(d.device_id)}`)}>
+                          Cases
                         </button>
                         <button className="btn-sm btn-danger" onClick={() => deregister(d.device_id, d.customer_name || d.hostname || d.device_id)}>Remove</button>
                       </>
