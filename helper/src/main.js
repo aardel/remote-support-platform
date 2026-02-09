@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, desktopCapturer, screen, shell, clipboard, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer, screen, shell, clipboard, dialog, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -23,6 +23,8 @@ let socket = null;
 let currentSessionId = null;
 let currentAllowUnattended = true;
 let chatHistory = [];
+let tray = null;
+let isQuitting = false;
 
 const MOUSE_BUTTONS = ['left', 'middle', 'right'];
 
@@ -111,6 +113,30 @@ function getAppDataDir() {
   return path.join(base, 'RemoteSupport');
 }
 
+function getPrefsPath() {
+  return path.join(getAppDataDir(), 'prefs.json');
+}
+
+function readPrefs() {
+  try {
+    const p = getPrefsPath();
+    if (!fs.existsSync(p)) return {};
+    const raw = fs.readFileSync(p, 'utf8');
+    const obj = JSON.parse(raw);
+    return obj && typeof obj === 'object' ? obj : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function writePrefs(next) {
+  try {
+    const dir = getAppDataDir();
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(getPrefsPath(), JSON.stringify(next || {}, null, 2), 'utf8');
+  } catch (_) {}
+}
+
 function getDeviceId() {
   const dir = getAppDataDir();
   const file = path.join(dir, 'device_id.txt');
@@ -143,13 +169,111 @@ function readConfig() {
   };
 }
 
+function getIconImage() {
+  // Reuse the existing helper logo; Electron can resize at runtime for tray usage.
+  const logoPath = path.join(__dirname, 'renderer', 'logo.png');
+  const img = nativeImage.createFromPath(logoPath);
+  return img && !img.isEmpty() ? img : null;
+}
+
+function ensureTray() {
+  if (tray) return tray;
+  const img = getIconImage();
+  // Tray requires an image on most platforms; if missing, skip tray creation.
+  if (!img) return null;
+
+  // Keep the tray icon small and consistent.
+  const trayImg =
+    process.platform === 'darwin'
+      ? img.resize({ width: 18, height: 18 })
+      : img.resize({ width: 16, height: 16 });
+
+  tray = new Tray(trayImg);
+  tray.setToolTip('Remote Support Helper');
+
+  const menu = Menu.buildFromTemplate([
+    {
+      label: 'Show Remote Support Helper',
+      click: () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit',
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      }
+    }
+  ]);
+  tray.setContextMenu(menu);
+
+  tray.on('click', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+
+  return tray;
+}
+
+async function handleCloseRequested() {
+  const prefs = readPrefs();
+  const remembered = prefs && typeof prefs.closeBehavior === 'string' ? prefs.closeBehavior : null;
+  if (remembered === 'quit') {
+    isQuitting = true;
+    app.quit();
+    return;
+  }
+  if (remembered === 'background') {
+    ensureTray();
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+    return;
+  }
+
+  const result = await dialog.showMessageBox(mainWindow, {
+    type: 'question',
+    title: 'Remote Support Helper',
+    message: 'Close Remote Support Helper?',
+    detail: 'Do you want to quit the helper or keep it running in the background?',
+    buttons: ['Quit', 'Keep Running'],
+    defaultId: 1,
+    cancelId: 1,
+    checkboxLabel: 'Remember my choice',
+    checkboxChecked: false,
+    noLink: true
+  });
+
+  if (result.checkboxChecked) {
+    const next = { ...prefs, closeBehavior: result.response === 0 ? 'quit' : 'background' };
+    writePrefs(next);
+  }
+
+  if (result.response === 0) {
+    isQuitting = true;
+    app.quit();
+    return;
+  }
+
+  ensureTray();
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+}
+
 function createWindow() {
+  const iconImg = getIconImage();
   mainWindow = new BrowserWindow({
     width: 520,
     height: 680,
     minWidth: 400,
     minHeight: 500,
     resizable: true,
+    // Has effect on Windows/Linux window icon. macOS uses the app bundle icon.
+    icon: iconImg || undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js')
     }
@@ -172,9 +296,33 @@ function createWindow() {
       }
     }).catch(() => {});
   });
+
+  mainWindow.on('close', (e) => {
+    // If the user explicitly quits (tray menu, Cmd+Q), allow normal shutdown.
+    if (isQuitting) return;
+    e.preventDefault();
+    // Defer to async dialog; avoid re-entrancy by disabling close until resolved.
+    handleCloseRequested().catch(() => {
+      // If something goes wrong, default to hiding to avoid accidental termination.
+      try { ensureTray(); } catch (_) {}
+      try { mainWindow.hide(); } catch (_) {}
+    });
+  });
 }
 
-app.whenReady().then(createWindow);
+app.on('before-quit', () => { isQuitting = true; });
+
+app.whenReady().then(() => {
+  createWindow();
+});
+
+app.on('activate', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+    return;
+  }
+  mainWindow.show();
+});
 
 ipcMain.handle('helper:get-info', () => {
   return {
