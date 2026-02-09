@@ -9,12 +9,7 @@ function ActiveSessionsWidget({ size }) {
   const limit = size === 'large' ? 5 : size === 'medium' ? 3 : 0;
 
   useEffect(() => {
-    axios.get('/api/sessions').then(r => {
-      const all = r.data.sessions || [];
-      // Hide unassigned "generated link" sessions from this tile (they don't represent an actual machine yet).
-      const filtered = all.filter(s => (s.device_id || s.deviceId) || s.helper_connected === true || s.status === 'connected');
-      setSessions(filtered);
-    }).catch(() => {});
+    axios.get('/api/sessions').then(r => setSessions(r.data.sessions || [])).catch(() => {});
   }, []);
 
   const connect = async (sid) => {
@@ -30,9 +25,10 @@ function ActiveSessionsWidget({ size }) {
       {limit > 0 && sessions.slice(0, limit).map(s => {
         const sid = s.session_id || s.sessionId;
         const ready = s.status === 'connected' || s.helper_connected === true;
+        const unassigned = !(s.device_id || s.deviceId) && !ready;
         const customer = s.customer_name || s.customerName || '';
         const machine = s.machine_name || s.machineName || '';
-        const label = (customer || machine) ? `${customer || '—'}${machine ? ` / ${machine}` : ''}` : '';
+        const label = (customer || machine) ? `${customer || '—'}${machine ? ` / ${machine}` : ''}` : unassigned ? 'Invite link (unassigned)' : '';
         return (
           <div key={sid} className="widget-row">
             <span className="widget-row-id">

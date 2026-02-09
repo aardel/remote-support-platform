@@ -109,9 +109,11 @@ router.post('/generate', requireAuth, async (req, res) => {
         
         // Create session first
         const SessionService = require('../services/sessionService');
+        const ttlDays = Math.max(1, Math.floor(Number(process.env.GENERATED_SESSION_TTL_DAYS || 20) || 20));
+        const expiresIn = ttlDays * 24 * 60 * 60;
         const session = await SessionService.createSession({
             technicianId,
-            expiresIn: 3600
+            expiresIn
         });
         
         // Generate package
