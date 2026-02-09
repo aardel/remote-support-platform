@@ -107,6 +107,29 @@
             background: linear-gradient(135deg, #10b981 0%, #059669 100%);
             box-shadow: 0 2px 8px rgba(16,185,129,0.25);
         }
+        .progress-wrap {
+            margin-top: 10px;
+            display: none;
+        }
+        .progress-bar {
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 999px;
+            overflow: hidden;
+            border: 1px solid #cbd5e1;
+        }
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            transition: width 0.15s ease;
+        }
+        .progress-text {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #64748b;
+            text-align: center;
+        }
 
         .os-row {
             display: flex;
@@ -228,6 +251,10 @@
                 <a id="downloadBtn" href="#" class="download-btn" onclick="downloadPackage(event)">
                     Download Support Helper
                 </a>
+                <div id="progressWrap" class="progress-wrap">
+                    <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+                    <div id="progressText" class="progress-text">Downloading...</div>
+                </div>
                 <div class="os-row">
                     <label for="osSelect">OS:</label>
                     <select id="osSelect"></select>
@@ -401,25 +428,55 @@
             if (event) event.preventDefault();
             var btn = document.getElementById('downloadBtn');
             var href = btn.href;
+            var progressWrap = document.getElementById('progressWrap');
+            var progressFill = document.getElementById('progressFill');
+            var progressText = document.getElementById('progressText');
             btn.textContent = 'Downloading...';
             btn.classList.add('disabled');
+            progressWrap.style.display = 'block';
+            progressFill.style.width = '0%';
+            progressText.textContent = 'Downloading...';
 
-            var link = document.createElement('a');
-            link.href = href;
-            link.download = '';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-
-            setTimeout(function () {
-                btn.textContent = 'Downloaded';
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', href, true);
+            xhr.responseType = 'blob';
+            xhr.onprogress = function (e) {
+                if (e.lengthComputable) {
+                    var pct = Math.round((e.loaded / e.total) * 100);
+                    progressFill.style.width = pct + '%';
+                    progressText.textContent = 'Downloading... ' + pct + '%';
+                } else {
+                    progressText.textContent = 'Downloading...';
+                }
+            };
+            xhr.onload = function () {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    var blob = xhr.response;
+                    var url = window.URL.createObjectURL(blob);
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = href.split('/').pop();
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                    btn.textContent = 'Download Complete';
+                    btn.classList.remove('disabled');
+                    btn.classList.add('success');
+                    progressText.textContent = 'Download complete';
+                    progressFill.style.width = '100%';
+                } else {
+                    btn.textContent = 'Download Failed';
+                    btn.classList.remove('disabled');
+                    progressText.textContent = 'Download failed';
+                }
+            };
+            xhr.onerror = function () {
+                btn.textContent = 'Download Failed';
                 btn.classList.remove('disabled');
-                btn.classList.add('success');
-                setTimeout(function () {
-                    btn.textContent = 'Download Support Helper';
-                    btn.classList.remove('success');
-                }, 3000);
-            }, 1500);
+                progressText.textContent = 'Download failed';
+            };
+            xhr.send();
         }
     </script>
 </body>
