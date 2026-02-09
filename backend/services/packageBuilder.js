@@ -819,6 +819,18 @@ For support, contact your technician.
 
         const packages = [];
         for (const variant of variants) {
+            if (variant.type === 'zip') {
+                // ZIP is generated on-demand, so it should always be selectable.
+                packages.push({
+                    type: variant.type,
+                    label: variant.label,
+                    available: true,
+                    size: null,
+                    downloadUrl: `/api/packages/download/${sessionId}?type=${variant.type}`
+                });
+                continue;
+            }
+
             const path = await this.getPackagePath(sessionId, variant.type);
             const available = !!path;
             const size = available ? fs.statSync(path).size : null;
