@@ -1,6 +1,7 @@
 // Cleanup expired sessions and files periodically
 const Session = require('../models/Session');
 const FileTransfer = require('../models/FileTransfer');
+const PackageArtifacts = require('./packageArtifacts');
 
 class CleanupService {
     constructor() {
@@ -26,10 +27,19 @@ class CleanupService {
             // Cleanup expired sessions
             const deletedSessions = await Session.cleanupExpired();
             console.log(`   Deleted ${deletedSessions} expired sessions`);
-            
+
             // Cleanup expired files
             const deletedFiles = await FileTransfer.cleanupExpired();
             console.log(`   Deleted ${deletedFiles} expired files`);
+
+            // Cleanup orphaned support package artifacts on disk (best-effort)
+            try {
+                const validSessionIds = await Session.listSessionIds();
+                const stats = await PackageArtifacts.cleanupOrphanArtifacts({ validSessionIds });
+                console.log(`   Deleted ${stats.deletedDirs} orphan session dirs and ${stats.deletedFiles} orphan support files`);
+            } catch (e) {
+                console.warn('   Skipped package artifact cleanup:', e.message);
+            }
             
         } catch (error) {
             console.error('❌ Cleanup error:', error);

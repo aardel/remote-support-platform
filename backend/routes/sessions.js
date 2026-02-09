@@ -336,6 +336,7 @@ router.get('/', requireAuth, async (req, res) => {
 router.delete('/:sessionId', requireAuth, async (req, res) => {
     try {
         const { sessionId } = req.params;
+        const PackageArtifacts = require('../services/packageArtifacts');
 
         // Try database first
         try {
@@ -344,6 +345,11 @@ router.delete('/:sessionId', requireAuth, async (req, res) => {
             // Fallback to in-memory
             SessionService.inMemorySessions.delete(sessionId);
         }
+
+        // Best-effort: delete any generated package artifacts for this session on disk.
+        try {
+            await PackageArtifacts.deleteArtifactsForSession({ sessionId });
+        } catch (_) {}
 
         // Notify via WebSocket (broadcast globally so all dashboards update)
         const io = req.app.get('io');

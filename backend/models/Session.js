@@ -129,6 +129,12 @@ class Session {
         return result.rowCount;
     }
 
+    static async listSessionIds() {
+        const query = 'SELECT session_id FROM sessions';
+        const result = await pool.query(query);
+        return result.rows.map(r => r.session_id);
+    }
+
     /** Find all sessions (including ended) for statistics, with optional filters */
     static async findForStatistics({ from, to, customer, deviceId, status } = {}) {
         const conditions = [];
