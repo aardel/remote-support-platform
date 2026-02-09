@@ -61,6 +61,12 @@ class PackageBuilder {
             this.toCrlf(windowsRegisterVbs)
         );
 
+        const windowsNetCheckVbs = this.createWindowsNetworkCheckVbs(config);
+        fs.writeFileSync(
+            path.join(packageDir, 'netcheck.vbs'),
+            this.toCrlf(windowsNetCheckVbs)
+        );
+
         // Optional bundles (portable apps) for best compatibility, especially XP.
         // Drop files into:
         //   packages/bundles/windows/tightvnc/    -> copied to <package>/tightvnc/
@@ -218,16 +224,50 @@ if /I "%PROCESSOR_ARCHITECTURE%"=="AMD64" if exist "tightvnc64\\tvnserver.exe" s
 if defined PROCESSOR_ARCHITEW6432 if exist "tightvnc64\\tvnserver.exe" set VNC_DIR=tightvnc64
 
 if exist "%VNC_DIR%\\tvnserver.exe" (
+    REM Basic network check (HTTP to server) for clearer error messages
+    if exist "netcheck.vbs" (
+        cscript //nologo netcheck.vbs >nul
+        if errorlevel 1 (
+            echo.
+            echo WARNING: Cannot reach the server over HTTP.
+            echo This may indicate no internet connection or a firewall/proxy issue.
+            echo.
+        )
+    )
     echo Connecting to ${serverHost}:${serverPort}...
     "%VNC_DIR%\\tvnserver.exe" -controlapp -connect ${serverHost}:${serverPort}
     if errorlevel 1 (
         echo Connection failed. Please check your internet connection.
+        echo If internet works, a firewall may be blocking port ${serverPort}.
     ) else (
         echo Connected successfully!
     )
 ) else (
     echo TightVNC not found. Cannot connect.
 )
+`;
+    }
+
+    // Windows network check (VBScript, XP compatible)
+    createWindowsNetworkCheckVbs(config) {
+        const serverHost = new URL(config.server).host;
+        const serverProtocol = new URL(config.server).protocol === 'https:' ? 'https' : 'http';
+        return `On Error Resume Next
+Dim url: url = "${serverProtocol}://${serverHost}/api/health"
+Dim http: Set http = CreateObject("MSXML2.ServerXMLHTTP")
+http.setTimeouts 3000, 3000, 3000, 3000
+http.open "GET", url, False
+http.send
+
+If Err.Number <> 0 Then
+    WScript.Quit 1
+End If
+
+If http.status >= 200 And http.status < 400 Then
+    WScript.Quit 0
+Else
+    WScript.Quit 1
+End If
 `;
     }
     
