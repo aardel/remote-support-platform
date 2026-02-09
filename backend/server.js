@@ -66,6 +66,7 @@ const filesRouter = require('./routes/files');
 const monitorsRouter = require('./routes/monitors');
 const devicesRouter = require('./routes/devices');
 const casesRouter = require('./routes/cases');
+const supportRouter = require('./routes/support');
 
 app.use('/api/auth', authRouter);
 app.use('/api/sessions', sessionsRouter);
@@ -74,6 +75,7 @@ app.use('/api/files', filesRouter);
 app.use('/api/monitors', monitorsRouter);
 app.use('/api/devices', devicesRouter);
 app.use('/api/cases', casesRouter);
+app.use('/api/support', supportRouter);
 app.use('/api/version', require('./routes/version'));
 app.use('/api/helper', require('./routes/helper'));
 app.use('/api/websocket', require('./routes/websocket'));
@@ -82,6 +84,10 @@ app.use('/api/statistics', require('./routes/statistics'));
 app.use('/api/whats-new', require('./routes/whatsNew'));
 
 // Customer support page route (download page with instructions)
+app.get(['/support', '/support/'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/public/support-landing.html'));
+});
+
 app.get('/support/:sessionId', (req, res) => {
     const ua = String(req.headers['user-agent'] || '').toLowerCase();
     const isIE = ua.includes('msie') || ua.includes('trident/');
