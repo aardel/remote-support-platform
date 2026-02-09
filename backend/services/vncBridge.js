@@ -6,6 +6,7 @@ class VNCBridge {
     constructor(httpServer) {
         this.vncConnections = new Map(); // sessionId -> VNC connection
         this.wsConnections = new Map(); // sessionId -> WebSocket connection
+        this.pendingByIp = new Map(); // ip -> { sessionId, ts }
         this.vncListener = null;
         this.wss = null;
         this.httpServer = httpServer || null;
@@ -162,8 +163,17 @@ class VNCBridge {
     }
     
     extractSessionIdFromConnection(socket) {
-        // Try to get session ID from connection metadata
-        // In production, you might send session ID in initial handshake
+        // Try to get session ID from recent registration by client IP first.
+        const ip = this.normalizeIp(socket.remoteAddress);
+        const now = Date.now();
+        const ttlMs = 10 * 60 * 1000; // 10 minutes
+        const pending = ip ? this.pendingByIp.get(ip) : null;
+        if (pending && now - pending.ts <= ttlMs) {
+            this.pendingByIp.delete(ip);
+            return pending.sessionId;
+        }
+
+        // Fallback: try connection-specific mapping (rarely used currently)
         const connectionId = `${socket.remoteAddress}:${socket.remotePort}`;
         return sessionMapper.getSessionId(connectionId);
     }
@@ -179,7 +189,20 @@ class VNCBridge {
         // When user registers, we store the mapping
         // When VNC reverse connection arrives, we match it to the session
         // This is a simplified approach - in production, you'd use a more robust method
-        console.log(`Session ${sessionId} mapped, waiting for VNC connection`);
+        const ip = this.normalizeIp(connectionInfo?.clientIp);
+        if (ip) {
+            this.pendingByIp.set(ip, { sessionId, ts: Date.now() });
+            console.log(`Session ${sessionId} mapped to IP ${ip}, waiting for VNC connection`);
+        } else {
+            console.log(`Session ${sessionId} mapped (no client IP), waiting for VNC connection`);
+        }
+    }
+
+    normalizeIp(ip) {
+        if (!ip) return null;
+        // Strip IPv6 mapped IPv4 prefix
+        if (ip.startsWith('::ffff:')) return ip.slice(7);
+        return ip;
     }
     
     getVNCConnection(sessionId) {

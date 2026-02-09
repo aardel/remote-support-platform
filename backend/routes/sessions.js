@@ -203,10 +203,13 @@ router.post('/register', async (req, res) => {
         // Map VNC connection if bridge is available
         const vncBridge = req.app.get('vncBridge');
         if (vncBridge) {
+            const forwarded = req.headers['x-forwarded-for'];
+            const clientIp = (Array.isArray(forwarded) ? forwarded[0] : (forwarded || '')).split(',')[0].trim() || req.ip;
             // Store session mapping for VNC connections
             vncBridge.mapSessionToConnection(sessionId, {
                 clientInfo,
-                vncPort: vncPort || 5900
+                vncPort: vncPort || 5900,
+                clientIp
             });
             console.log(`Session ${sessionId} registered, waiting for VNC connection`);
         }

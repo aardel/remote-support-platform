@@ -160,7 +160,6 @@ if exist "%VNC_DIR%\\tvnserver.exe" (
     start "" "%VNC_DIR%\\tvnserver.exe"
     REM XP does not have "timeout" by default; use ping as a delay.
     ping -n 4 127.0.0.1 >nul
-    call connect.bat
 ) else (
     echo TightVNC not found in package.
     echo Please ensure TightVNC Portable is included.
@@ -189,6 +188,8 @@ if exist "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" (
     echo Registration skipped (no PowerShell/VBScript).
     echo Session may still work without registration.
 )
+
+call connect.bat
 
 echo.
 echo ========================================
@@ -219,10 +220,10 @@ if defined PROCESSOR_ARCHITEW6432 if exist "tightvnc64\\tvnserver.exe" set VNC_D
 if exist "%VNC_DIR%\\tvnserver.exe" (
     echo Connecting to ${serverHost}:${serverPort}...
     "%VNC_DIR%\\tvnserver.exe" -controlapp -connect ${serverHost}:${serverPort}
-    if %ERRORLEVEL% EQU 0 (
-        echo Connected successfully!
-    ) else (
+    if errorlevel 1 (
         echo Connection failed. Please check your internet connection.
+    ) else (
+        echo Connected successfully!
     )
 ) else (
     echo TightVNC not found. Cannot connect.
