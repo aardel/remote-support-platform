@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const https = require('https');
 const http = require('http');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const { io } = require('socket.io-client');
 
 let robot = null;
@@ -320,9 +320,17 @@ $s.Save()
       : process.execPath;
     if (!appPath || !fs.existsSync(appPath)) return { success: false, error: 'App not found' };
     try {
-      const esc = (s) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      execSync(`osascript -e 'tell application "Finder" to make alias file at (path to desktop) to (POSIX file "${esc(appPath)}"); set name of result to "${esc(shortcutName)}"'`, { stdio: 'pipe' });
-      return { success: true, path: path.join(desktopPath, shortcutName) };
+      // Use execFileSync to avoid shell quoting issues.
+      // Finder syntax: make new alias file to <target> at <container> with properties {name:"..."}.
+      const appPathEsc = appPath.replace(/"/g, '\\"');
+      const nameEsc = shortcutName.replace(/"/g, '\\"');
+      const aliasPath = path.join(desktopPath, shortcutName);
+      try { if (fs.existsSync(aliasPath)) fs.unlinkSync(aliasPath); } catch (_) {}
+
+      // Keep AppleScript as a single -e to avoid multi-line parsing edge cases.
+      const script = `tell application "Finder" to make new alias file to (POSIX file "${appPathEsc}") at (path to desktop folder) with properties {name:"${nameEsc}"}`;
+      execFileSync('osascript', ['-e', script], { stdio: 'pipe' });
+      return { success: true, path: aliasPath };
     } catch (e) {
       return { success: false, error: e.message || 'Failed to create alias' };
     }
