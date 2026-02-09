@@ -303,6 +303,14 @@
   color: #155724;
 }
 
+.status-badges {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
 .session-info {
   margin-bottom: 15px;
 }

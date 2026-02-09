@@ -111,6 +111,10 @@ async function migrate() {
         // Sessions: live presence (helper socket + tech count) to prevent UI lockout if status drifts
         await client.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS helper_connected BOOLEAN DEFAULT false`);
         await client.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS active_technicians INTEGER DEFAULT 0`);
+        // Sessions: billable/viewing presence (actual viewer connected, not just socket connected)
+        await client.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS viewing_technicians INTEGER DEFAULT 0`);
+        await client.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS billable_started_at TIMESTAMP`);
+        await client.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS billable_seconds INTEGER DEFAULT 0`);
 
         // Technician preferences (widget layout, retention)
         await client.query(`

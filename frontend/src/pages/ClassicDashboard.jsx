@@ -614,8 +614,13 @@ function ClassicDashboard({ user, onLogout }) {
                         </span>
                       )}
                     </span>
-                    <span className={`status-badge ${session.status}`}>
-                      {session.status}
+                    <span className="status-badges">
+                      <span className={`status-badge ${(session.helper_connected === true || session.status === 'connected') ? 'connected' : 'waiting'}`}>
+                        {(session.helper_connected === true || session.status === 'connected') ? 'helper online' : 'helper offline'}
+                      </span>
+                      <span className={`status-badge ${(Number(session.viewing_technicians || 0) > 0) ? 'connected' : 'waiting'}`}>
+                        {Number(session.viewing_technicians || 0) > 0 ? `tech viewing${Number(session.viewing_technicians || 0) > 1 ? ` (${Number(session.viewing_technicians || 0)})` : ''}` : 'not viewing'}
+                      </span>
                     </span>
                   </div>
                   

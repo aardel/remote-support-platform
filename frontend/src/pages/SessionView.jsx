@@ -46,6 +46,8 @@ function SessionView({ user }) {
   const [draggingSplit, setDraggingSplit] = useState(false);
   const splitContainerRef = useRef(null);
   const videoAreaActiveRef = useRef(false); // true after user clicked video area → send keys to remote even if focus didn't move
+  const technicianInfoRef = useRef({ id: 'technician', name: 'Technician' });
+  const viewerActiveRef = useRef(false);
   const [helperCapabilities, setHelperCapabilities] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const [files, setFiles] = useState([]);
@@ -145,6 +147,7 @@ function SessionView({ user }) {
       const u = userRef.current;
       const technicianName = (u?.username || u?.displayName || u?.email || (u?.id && String(u.id)) || 'Technician').trim() || 'Technician';
       const technicianId = u?.id ?? u?.nextcloudId ?? 'technician';
+      technicianInfoRef.current = { id: technicianId, name: technicianName };
       newSocket.emit('join-session', { sessionId, role: 'technician', technicianId, technicianName });
     });
 
@@ -202,6 +205,13 @@ function SessionView({ user }) {
       if (data.role === 'helper') {
         setStatus('Helper disconnected');
         setConnected(false);
+        if (viewerActiveRef.current) {
+          try {
+            const ti = technicianInfoRef.current;
+            newSocket.emit('viewer-state', { sessionId, viewing: false, technicianId: ti.id, technicianName: ti.name });
+          } catch (_) {}
+          viewerActiveRef.current = false;
+        }
       }
     });
 
@@ -465,6 +475,11 @@ function SessionView({ user }) {
         if (videoRef.current) videoRef.current.srcObject = event.streams[0];
         setConnected(true);
         setStatus('Connected');
+        if (!viewerActiveRef.current) {
+          const ti = technicianInfoRef.current;
+          socket.emit('viewer-state', { sessionId, viewing: true, technicianId: ti.id, technicianName: ti.name });
+          viewerActiveRef.current = true;
+        }
       }
     };
 
@@ -484,9 +499,19 @@ function SessionView({ user }) {
       if (pc.iceConnectionState === 'connected') {
         setConnected(true);
         setStatus('Connected');
+        if (!viewerActiveRef.current) {
+          const ti = technicianInfoRef.current;
+          socket.emit('viewer-state', { sessionId, viewing: true, technicianId: ti.id, technicianName: ti.name });
+          viewerActiveRef.current = true;
+        }
       } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
         setConnected(false);
         setStatus('Disconnected');
+        if (viewerActiveRef.current) {
+          const ti = technicianInfoRef.current;
+          socket.emit('viewer-state', { sessionId, viewing: false, technicianId: ti.id, technicianName: ti.name });
+          viewerActiveRef.current = false;
+        }
       }
     };
 
@@ -569,10 +594,30 @@ function SessionView({ user }) {
       peerConnectionRef.current = null;
     }
     if (socket) {
+      if (viewerActiveRef.current) {
+        try {
+          const ti = technicianInfoRef.current;
+          socket.emit('viewer-state', { sessionId, viewing: false, technicianId: ti.id, technicianName: ti.name });
+        } catch (_) {}
+        viewerActiveRef.current = false;
+      }
       socket.disconnect();
     }
     navigate('/dashboard');
   };
+
+  // If the tab closes while viewing, ensure we stop billable viewing.
+  useEffect(() => {
+    return () => {
+      try {
+        if (socket && viewerActiveRef.current) {
+          const ti = technicianInfoRef.current;
+          socket.emit('viewer-state', { sessionId, viewing: false, technicianId: ti.id, technicianName: ti.name });
+        }
+      } catch (_) {}
+      viewerActiveRef.current = false;
+    };
+  }, [socket, sessionId]);
 
   const addFilesToSend = (e) => {
     const chosen = e.target.files;

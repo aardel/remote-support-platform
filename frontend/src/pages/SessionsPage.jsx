@@ -138,7 +138,14 @@ function SessionsPage() {
                     <span className="mono">{sid}</span>
                     <span className="card-title-extra"><strong>{customer}</strong>{machine && machine !== '—' ? ` / ${machine}` : ''}</span>
                   </span>
-                  <span className={`badge ${s.status === 'connected' ? 'badge-ok' : 'badge-warn'}`}>{s.status}</span>
+                  <span style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                    <span className={`badge ${(s.helper_connected === true || s.status === 'connected') ? 'badge-ok' : 'badge-warn'}`}>
+                      {(s.helper_connected === true || s.status === 'connected') ? 'helper online' : 'helper offline'}
+                    </span>
+                    <span className={`badge ${(Number(s.viewing_technicians || 0) > 0) ? 'badge-ok' : 'badge-warn'}`}>
+                      {Number(s.viewing_technicians || 0) > 0 ? `tech viewing${Number(s.viewing_technicians || 0) > 1 ? ` (${Number(s.viewing_technicians || 0)})` : ''}` : 'not viewing'}
+                    </span>
+                  </span>
                 </div>
                 {s.client_info && (
                   <div className="card-meta">

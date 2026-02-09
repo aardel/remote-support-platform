@@ -172,7 +172,10 @@
   // Socket for quality + chat
   socket = io(window.location.origin);
   socket.on('connect', () => {
-    socket.emit('join-session', { sessionId, role: 'technician' });
+    // Control panel is not the actual viewer. Track as technician presence only.
+    const technicianId = params.get('technicianId') || undefined;
+    const technicianName = params.get('technicianName') || undefined;
+    socket.emit('join-session', { sessionId, role: 'technician-panel', technicianId, technicianName });
   });
 
   function addChatMessage(msg) {

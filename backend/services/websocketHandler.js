@@ -33,8 +33,11 @@ class WebSocketHandler {
             }
         });
 
-        // Track connections by session: helper = single socketId; technicians = array of { socketId, technicianId, technicianName }
-        this.sessionConnections = new Map(); // sessionId -> { helper: socketId, technicians: [...] }
+        // Track connections by session.
+        // helper: single socketId
+        // technicians: array of { socketId, technicianId, technicianName } (presence, not necessarily viewing)
+        // viewingCounts: Map(technicianId -> number) for actual billable viewers (WebRTC connected)
+        this.sessionConnections = new Map(); // sessionId -> { helper: socketId, technicians: [...], viewingCounts: Map }
 
         // Cache offers and ICE candidates for late-joining technicians
         this.pendingOffers = new Map(); // sessionId -> { offer, from, iceCandidates }
@@ -45,6 +48,64 @@ class WebSocketHandler {
     setupHandlers() {
         this.io.on('connection', (socket) => {
             console.log('Client connected:', socket.id);
+
+            const ensureConn = (sessionId) => {
+                if (!this.sessionConnections.has(sessionId)) {
+                    this.sessionConnections.set(sessionId, { helper: null, technicians: [], viewingCounts: new Map() });
+                } else {
+                    const c = this.sessionConnections.get(sessionId);
+                    if (c && !c.viewingCounts) c.viewingCounts = new Map();
+                }
+                return this.sessionConnections.get(sessionId);
+            };
+
+            const countUniqueTechnicians = (conn) => {
+                if (!conn || !Array.isArray(conn.technicians)) return 0;
+                const ids = new Set(conn.technicians.map(t => t.technicianId || t.socketId).filter(Boolean));
+                return ids.size;
+            };
+
+            const countViewingTechnicians = (conn) => {
+                if (!conn || !conn.viewingCounts) return 0;
+                return conn.viewingCounts.size;
+            };
+
+            const recomputeBillable = async (sessionId, conn, reason) => {
+                // Best-effort: keep DB fields in sync if columns exist. If not, safeUpdateSession will drop them.
+                const viewing = countViewingTechnicians(conn);
+                try {
+                    const session = await SessionService.getSession(sessionId);
+                    if (!session) return;
+
+                    const started = session.billable_started_at ? new Date(session.billable_started_at) : null;
+                    const seconds = Number(session.billable_seconds || 0) || 0;
+
+                    if (viewing > 0) {
+                        if (!started) {
+                            const now = new Date();
+                            await safeUpdateSession(sessionId, { viewing_technicians: viewing, billable_started_at: now });
+                            this.io.emit('session-updated', { sessionId, viewing_technicians: viewing, billable_started_at: now, billable_seconds: seconds, reason });
+                        } else {
+                            await safeUpdateSession(sessionId, { viewing_technicians: viewing });
+                            this.io.emit('session-updated', { sessionId, viewing_technicians: viewing, billable_started_at: session.billable_started_at, billable_seconds: seconds, reason });
+                        }
+                        return;
+                    }
+
+                    // viewing === 0
+                    if (started) {
+                        const delta = Math.max(0, Math.floor((Date.now() - started.getTime()) / 1000));
+                        const nextSeconds = seconds + delta;
+                        await safeUpdateSession(sessionId, { viewing_technicians: 0, billable_started_at: null, billable_seconds: nextSeconds });
+                        this.io.emit('session-updated', { sessionId, viewing_technicians: 0, billable_started_at: null, billable_seconds: nextSeconds, reason });
+                    } else {
+                        await safeUpdateSession(sessionId, { viewing_technicians: 0 }).catch(() => {});
+                        this.io.emit('session-updated', { sessionId, viewing_technicians: 0, billable_started_at: null, billable_seconds: seconds, reason });
+                    }
+                } catch (_) {
+                    // ignore
+                }
+            };
 
             const cleanupIfEmpty = (sessionId) => {
                 const conn = this.sessionConnections.get(sessionId);
@@ -63,19 +124,19 @@ class WebSocketHandler {
                 socket.join(`session-${sessionId}`);
                 socket.sessionId = sessionId;
                 socket.role = role || 'unknown';
+                socket.technicianId = technicianId || socket.id;
+                socket.technicianName = technicianName || 'Technician';
 
                 // Track connection
-                if (!this.sessionConnections.has(sessionId)) {
-                    this.sessionConnections.set(sessionId, { helper: null, technicians: [] });
-                }
-                const conn = this.sessionConnections.get(sessionId);
+                const conn = ensureConn(sessionId);
                 if (role === 'helper') {
                     conn.helper = socket.id;
                     // Helper socket is the source of truth for "online/ready".
                     safeUpdateSession(sessionId, {
                         status: 'connected',
                         helper_connected: true,
-                        active_technicians: conn.technicians.length,
+                        active_technicians: countUniqueTechnicians(conn),
+                        viewing_technicians: countViewingTechnicians(conn),
                         ended_at: null,
                         connected_at: new Date()
                     }).catch(e => {
@@ -85,7 +146,8 @@ class WebSocketHandler {
                         sessionId,
                         status: 'connected',
                         helper_connected: true,
-                        active_technicians: conn.technicians.length
+                        active_technicians: countUniqueTechnicians(conn),
+                        viewing_technicians: countViewingTechnicians(conn)
                     });
                     // Send current technicians list to the helper so it can show who is already connected
                     if (conn.technicians.length > 0) {
@@ -94,17 +156,19 @@ class WebSocketHandler {
                             technicians: conn.technicians.map(t => ({ technicianId: t.technicianId, technicianName: t.technicianName, technicianSocketId: t.socketId }))
                         });
                     }
-                } else if (role === 'technician') {
-                    const techId = technicianId || socket.id;
-                    const techName = technicianName || 'Technician';
+                } else if (role === 'technician' || role === 'technician-panel') {
+                    const techId = socket.technicianId;
+                    const techName = socket.technicianName;
                     conn.technicians.push({ socketId: socket.id, technicianId: techId, technicianName: techName });
-                    console.log(`Socket ${socket.id} joined session ${sessionId} as technician "${techName}"`);
+                    console.log(`Socket ${socket.id} joined session ${sessionId} as ${role} "${techName}"`);
                     safeUpdateSession(sessionId, {
-                        active_technicians: conn.technicians.length
+                        active_technicians: countUniqueTechnicians(conn),
+                        viewing_technicians: countViewingTechnicians(conn)
                     }).catch(() => {});
                     this.io.emit('session-updated', {
                         sessionId,
-                        active_technicians: conn.technicians.length
+                        active_technicians: countUniqueTechnicians(conn),
+                        viewing_technicians: countViewingTechnicians(conn)
                     });
                     // Notify helper (and others) so they can show who is connected
                     socket.to(`session-${sessionId}`).emit('technician-joined', { sessionId, technicianId: techId, technicianName: techName, technicianSocketId: socket.id });
@@ -132,6 +196,41 @@ class WebSocketHandler {
                 }
             });
 
+            // Billable presence: SessionView emits viewer-state=true only after WebRTC is actually connected.
+            socket.on('viewer-state', (data) => {
+                const sessionId = (data && data.sessionId) ? data.sessionId : socket.sessionId;
+                if (!sessionId) return;
+                const conn = ensureConn(sessionId);
+
+                const techId = data?.technicianId || socket.technicianId || socket.id;
+                const viewing = !!data?.viewing;
+
+                const prev = countViewingTechnicians(conn);
+                const counts = conn.viewingCounts;
+                const cur = counts.get(techId) || 0;
+
+                if (viewing) {
+                    counts.set(techId, cur + 1);
+                    socket.isViewer = true;
+                    socket.viewerTechId = techId;
+                    socket.viewerSessionId = sessionId;
+                } else {
+                    const next = Math.max(0, cur - 1);
+                    if (next === 0) counts.delete(techId);
+                    else counts.set(techId, next);
+                    if (socket.viewerSessionId === sessionId && socket.viewerTechId === techId) {
+                        socket.isViewer = false;
+                        socket.viewerTechId = null;
+                        socket.viewerSessionId = null;
+                    }
+                }
+
+                const nowCount = countViewingTechnicians(conn);
+                if (nowCount !== prev) {
+                    recomputeBillable(sessionId, conn, 'viewer-state').catch(() => {});
+                }
+            });
+
             // Leave session room
             socket.on('leave-session', (data) => {
                 const sessionId = (data && data.sessionId) ? data.sessionId : socket.sessionId;
@@ -144,20 +243,39 @@ class WebSocketHandler {
                     if (conn.helper === socket.id) {
                         conn.helper = null;
                         this.pendingOffers.delete(sessionId);
+                        if (conn.viewingCounts) conn.viewingCounts.clear();
+                        recomputeBillable(sessionId, conn, 'helper-left').catch(() => {});
                         safeUpdateSession(sessionId, {
                             status: 'waiting',
                             helper_connected: false,
-                            active_technicians: conn.technicians ? conn.technicians.length : 0,
+                            active_technicians: countUniqueTechnicians(conn),
+                            viewing_technicians: 0,
                             ended_at: new Date()
                         }).catch(() => {});
                         this.io.emit('session-updated', {
                             sessionId,
                             status: 'waiting',
                             helper_connected: false,
-                            active_technicians: conn.technicians ? conn.technicians.length : 0
+                            active_technicians: countUniqueTechnicians(conn),
+                            viewing_technicians: 0
                         });
                         this.io.to(`session-${sessionId}`).emit('peer-disconnected', { role: 'helper', sessionId });
                     } else if (conn.technicians) {
+                        // If this socket was counted as a viewer, decrement now.
+                        if (socket.isViewer && socket.viewerSessionId === sessionId && socket.viewerTechId) {
+                            const prev = countViewingTechnicians(conn);
+                            const cur = conn.viewingCounts.get(socket.viewerTechId) || 0;
+                            const next = Math.max(0, cur - 1);
+                            if (next === 0) conn.viewingCounts.delete(socket.viewerTechId);
+                            else conn.viewingCounts.set(socket.viewerTechId, next);
+                            socket.isViewer = false;
+                            socket.viewerTechId = null;
+                            socket.viewerSessionId = null;
+                            if (countViewingTechnicians(conn) !== prev) {
+                                recomputeBillable(sessionId, conn, 'viewer-left').catch(() => {});
+                            }
+                        }
+
                         const idx = conn.technicians.findIndex(t => t.socketId === socket.id);
                         if (idx !== -1) {
                             const tech = conn.technicians[idx];
@@ -165,8 +283,8 @@ class WebSocketHandler {
                             if (conn.technicians.length === 0) {
                                 this.pendingOffers.delete(sessionId);
                             }
-                            safeUpdateSession(sessionId, { active_technicians: conn.technicians.length }).catch(() => {});
-                            this.io.emit('session-updated', { sessionId, active_technicians: conn.technicians.length });
+                            safeUpdateSession(sessionId, { active_technicians: countUniqueTechnicians(conn) }).catch(() => {});
+                            this.io.emit('session-updated', { sessionId, active_technicians: countUniqueTechnicians(conn), viewing_technicians: countViewingTechnicians(conn) });
                             this.io.to(`session-${sessionId}`).emit('technician-left', {
                                 sessionId,
                                 technicianId: tech.technicianId,
@@ -334,15 +452,33 @@ class WebSocketHandler {
                 if (socket.sessionId) {
                     const conn = this.sessionConnections.get(socket.sessionId);
                     if (conn) {
+                        // If this socket was counted as a viewer, decrement now.
+                        if (socket.isViewer && socket.viewerSessionId === socket.sessionId && socket.viewerTechId && conn.viewingCounts) {
+                            const prev = countViewingTechnicians(conn);
+                            const cur = conn.viewingCounts.get(socket.viewerTechId) || 0;
+                            const next = Math.max(0, cur - 1);
+                            if (next === 0) conn.viewingCounts.delete(socket.viewerTechId);
+                            else conn.viewingCounts.set(socket.viewerTechId, next);
+                            socket.isViewer = false;
+                            socket.viewerTechId = null;
+                            socket.viewerSessionId = null;
+                            if (countViewingTechnicians(conn) !== prev) {
+                                recomputeBillable(socket.sessionId, conn, 'viewer-disconnect').catch(() => {});
+                            }
+                        }
+
                         if (conn.helper === socket.id) {
                             conn.helper = null;
                             // Clear pending offer when helper disconnects
                             this.pendingOffers.delete(socket.sessionId);
+                            if (conn.viewingCounts) conn.viewingCounts.clear();
+                            recomputeBillable(socket.sessionId, conn, 'helper-disconnect').catch(() => {});
                             // Update session status to 'waiting' and record ended_at
                             safeUpdateSession(socket.sessionId, {
                                 status: 'waiting',
                                 helper_connected: false,
-                                active_technicians: conn.technicians ? conn.technicians.length : 0,
+                                active_technicians: countUniqueTechnicians(conn),
+                                viewing_technicians: 0,
                                 ended_at: new Date()
                             }).catch(e => {
                                 console.error('Failed to update session status on helper disconnect:', e.message);
@@ -351,7 +487,8 @@ class WebSocketHandler {
                                 sessionId: socket.sessionId,
                                 status: 'waiting',
                                 helper_connected: false,
-                                active_technicians: conn.technicians ? conn.technicians.length : 0
+                                active_technicians: countUniqueTechnicians(conn),
+                                viewing_technicians: 0
                             });
                             // Notify technicians that helper disconnected
                             this.io.to(`session-${socket.sessionId}`).emit('peer-disconnected', {
@@ -368,11 +505,13 @@ class WebSocketHandler {
                                     this.pendingOffers.delete(socket.sessionId);
                                 }
                                 safeUpdateSession(socket.sessionId, {
-                                    active_technicians: conn.technicians.length
+                                    active_technicians: countUniqueTechnicians(conn),
+                                    viewing_technicians: countViewingTechnicians(conn)
                                 }).catch(() => {});
                                 this.io.emit('session-updated', {
                                     sessionId: socket.sessionId,
-                                    active_technicians: conn.technicians.length
+                                    active_technicians: countUniqueTechnicians(conn),
+                                    viewing_technicians: countViewingTechnicians(conn)
                                 });
                                 // Notify helper (and others) so they can update the "who is connected" list
                                 this.io.to(`session-${socket.sessionId}`).emit('technician-left', {
