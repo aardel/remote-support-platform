@@ -87,7 +87,10 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>Remote Support</h1>
+    <div class="row" style="align-items:center; gap:16px; margin-bottom:6px;">
+      <img src="/logo.png" alt="Remote Support" style="height:38px; width:auto;" />
+      <h1 style="margin:0;">Remote Support</h1>
+    </div>
     <p>We can try to detect your recent support session and help you resume.</p>
 
     <div class="card" id="suggestions">
@@ -99,7 +102,7 @@
       <p class="muted">If you already have a code from your technician, enter it below.</p>
       <div class="input">
         <input id="sessionInput" type="text" placeholder="ABC-123-XYZ" />
-        <button class="btn" id="openSession">Open Support Page</button>
+        <button class="btn" id="openSession" type="button">Open Support Page</button>
       </div>
     </div>
 
@@ -162,11 +165,19 @@
         document.getElementById('suggestions').innerHTML = '<div class="muted">Unable to check for recent sessions.</div>';
       });
 
-    document.getElementById('openSession').addEventListener('click', function () {
+    function openSupportPage() {
       const raw = document.getElementById('sessionInput').value || '';
       const cleaned = raw.trim().toUpperCase();
       if (!cleaned) return;
       window.location.href = '/support/' + encodeURIComponent(cleaned);
+    }
+
+    document.getElementById('openSession').addEventListener('click', openSupportPage);
+    document.getElementById('sessionInput').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        openSupportPage();
+      }
     });
   </script>
 </body>
