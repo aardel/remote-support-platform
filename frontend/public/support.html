@@ -333,17 +333,33 @@
 
             const packageSelect = document.getElementById('packageSelect');
             packageSelect.innerHTML = '';
-            packageManifest.forEach(function (pkg) {
-                const opt = document.createElement('option');
-                opt.value = pkg.type;
-                opt.textContent = pkg.available ? pkg.label : pkg.label + ' (Not Ready)';
-                opt.disabled = !pkg.available;
-                packageSelect.appendChild(opt);
-            });
 
+            function allowedTypesForOs(os) {
+                if (os === 'windows-xp') return ['zip'];
+                if (os === 'windows') return ['exe', 'zip'];
+                if (os === 'mac') return ['dmg', 'zip'];
+                if (os === 'linux') return ['zip'];
+                return ['zip'];
+            }
+
+            function renderPackagesForOs(os) {
+                const allowed = allowedTypesForOs(os);
+                packageSelect.innerHTML = '';
+                packageManifest.forEach(function (pkg) {
+                    if (allowed.indexOf(pkg.type) === -1) return;
+                    const opt = document.createElement('option');
+                    opt.value = pkg.type;
+                    opt.textContent = pkg.available ? pkg.label : pkg.label + ' (Not Ready)';
+                    opt.disabled = !pkg.available;
+                    packageSelect.appendChild(opt);
+                });
+            }
+
+            renderPackagesForOs(os);
             autoSelectPackage(os);
 
             osSelect.addEventListener('change', function () {
+                renderPackagesForOs(osSelect.value);
                 autoSelectPackage(osSelect.value);
             });
             packageSelect.addEventListener('change', function () {
