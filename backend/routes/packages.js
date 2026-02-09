@@ -180,6 +180,7 @@ router.get('/download/:sessionId', async (req, res) => {
     try {
         const { sessionId } = req.params;
         const type = (req.query.type || 'zip').toString().toLowerCase();
+        const os = (req.query.os || '').toString().toLowerCase() || null;
 
         const SessionService = require('../services/sessionService');
         const session = await SessionService.getSession(sessionId);
@@ -192,14 +193,16 @@ router.get('/download/:sessionId', async (req, res) => {
             process.env.SERVER_URL || 'http://localhost:3000'
         );
 
-        let packagePath = await packageBuilder.getPackagePath(sessionId, type);
+        let packagePath = await packageBuilder.getPackagePath(sessionId, type, os);
 
         // If package doesn't exist, generate it
         if (!packagePath && type === 'zip') {
-            console.log(`Package not found for session ${sessionId}, generating...`);
+            console.log(`Package not found for session ${sessionId} (os=${os || 'any'}), generating...`);
             const technicianId = session.technician_id || session.technicianId;
             await packageBuilder.buildPackage(sessionId, technicianId);
-            packagePath = await packageBuilder.getPackagePath(sessionId, type);
+            // Generate a filtered ZIP for this OS selection.
+            await packageBuilder.createZipPackage(path.join(packageBuilder.packagesDir, sessionId), sessionId, { os });
+            packagePath = await packageBuilder.getPackagePath(sessionId, type, os);
 
             if (!packagePath) {
                 return res.status(500).json({ error: 'Failed to generate package' });
@@ -210,7 +213,7 @@ router.get('/download/:sessionId', async (req, res) => {
             return res.status(404).json({ error: 'Package not available for requested type' });
         }
 
-        const filename = packageBuilder.getDownloadName(sessionId, type);
+        const filename = packageBuilder.getDownloadName(sessionId, type, os);
 
         // For EXE/DMG, embed session ID by replacing placeholder
         if (type === 'exe' || type === 'dmg') {

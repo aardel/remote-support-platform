@@ -110,7 +110,7 @@ class PackageBuilder {
         );
         
         // Create ZIP package
-        const zipPath = await this.createZipPackage(packageDir, sessionId);
+        const zipPath = await this.createZipPackage(packageDir, sessionId, {});
         
         return {
             packageId: sessionId,
@@ -756,8 +756,60 @@ For support, contact your technician.
 `;
     }
     
-    async createZipPackage(packageDir, sessionId) {
-        const zipPath = path.join(this.packagesDir, `support-${sessionId}.zip`);
+    normalizeZipOs(os) {
+        if (!os) return null;
+        const raw = String(os).toLowerCase().replace(/[^a-z0-9-]/g, '');
+        if (raw === 'windowsxp' || raw === 'xp' || raw === 'windows-xp') return 'windows-xp';
+        if (raw === 'windows' || raw === 'win') return 'windows';
+        if (raw === 'linux') return 'linux';
+        if (raw === 'mac' || raw === 'macos' || raw === 'osx') return 'mac';
+        if (raw === 'other') return 'other';
+        return null;
+    }
+
+    getZipPath(sessionId, os) {
+        const suffix = os ? `-${os}` : '';
+        return path.join(this.packagesDir, `support-${sessionId}${suffix}.zip`);
+    }
+
+    getZipIncludes(os) {
+        const base = ['config.json', 'README.txt'];
+        if (os === 'windows' || os === 'windows-xp') {
+            return base.concat([
+                'launch.bat',
+                'connect.bat',
+                'register-session.ps1',
+                'register-session.vbs',
+                'tightvnc',
+                'tightvnc64',
+                'mypal'
+            ]);
+        }
+        if (os === 'linux') {
+            return base.concat(['launch.sh', 'connect.sh', 'register-session.sh', 'start-support']);
+        }
+        if (os === 'mac') {
+            return base.concat(['launch.sh', 'connect.sh', 'register-session.sh', 'start-support']);
+        }
+        // Fallback: include everything
+        return base.concat([
+            'start-support',
+            'launch.sh',
+            'connect.sh',
+            'register-session.sh',
+            'launch.bat',
+            'connect.bat',
+            'register-session.ps1',
+            'register-session.vbs',
+            'tightvnc',
+            'tightvnc64',
+            'mypal'
+        ]);
+    }
+
+    async createZipPackage(packageDir, sessionId, { os } = {}) {
+        const normalizedOs = this.normalizeZipOs(os);
+        const zipPath = this.getZipPath(sessionId, normalizedOs);
         
         return new Promise((resolve, reject) => {
             const output = fs.createWriteStream(zipPath);
@@ -769,13 +821,31 @@ For support, contact your technician.
             
             archive.on('error', reject);
             archive.pipe(output);
-            archive.directory(packageDir, false);
+
+            const includes = this.getZipIncludes(normalizedOs);
+            for (const entry of includes) {
+                const fullPath = path.join(packageDir, entry);
+                if (!fs.existsSync(fullPath)) continue;
+                const stat = fs.statSync(fullPath);
+                if (stat.isDirectory()) {
+                    archive.directory(fullPath, entry);
+                } else {
+                    archive.file(fullPath, { name: entry });
+                }
+            }
             archive.finalize();
         });
     }
     
-    async getPackagePath(sessionId, type = 'zip') {
+    async getPackagePath(sessionId, type = 'zip', os = null) {
         const normalized = type.toLowerCase();
+        if (normalized === 'zip') {
+            const normalizedOs = this.normalizeZipOs(os);
+            const zipPath = this.getZipPath(sessionId, normalizedOs);
+            if (fs.existsSync(zipPath)) return zipPath;
+            return null;
+        }
+
         const extension = this.getExtension(normalized);
         const filePath = path.join(this.packagesDir, `support-${sessionId}.${extension}`);
 
@@ -793,8 +863,13 @@ For support, contact your technician.
         return null;
     }
 
-    getDownloadName(sessionId, type = 'zip') {
+    getDownloadName(sessionId, type = 'zip', os = null) {
         const extension = this.getExtension(type);
+        if (type === 'zip') {
+            const normalizedOs = this.normalizeZipOs(os);
+            const suffix = normalizedOs ? `-${normalizedOs}` : '';
+            return `support-helper-${sessionId}${suffix}.zip`;
+        }
         return `support-helper-${sessionId}.${extension}`;
     }
 

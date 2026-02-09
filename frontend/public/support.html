@@ -304,6 +304,7 @@
 
         function detectOS() {
             const ua = navigator.userAgent.toLowerCase();
+            if (ua.includes('windows nt 5.1') || ua.includes('windows xp')) return 'windows-xp';
             if (ua.includes('windows')) return 'windows';
             if (ua.includes('mac')) return 'mac';
             if (ua.includes('linux')) return 'linux';
@@ -318,10 +319,14 @@
 
             const osSelect = document.getElementById('osSelect');
             osSelect.innerHTML = '';
-            ['windows', 'mac', 'linux', 'other'].forEach(function (value) {
+            ['windows', 'windows-xp', 'mac', 'linux', 'other'].forEach(function (value) {
                 const opt = document.createElement('option');
                 opt.value = value;
-                opt.textContent = value === 'mac' ? 'macOS' : value.charAt(0).toUpperCase() + value.slice(1);
+                if (value === 'windows-xp') {
+                    opt.textContent = 'Windows XP';
+                } else {
+                    opt.textContent = value === 'mac' ? 'macOS' : value.charAt(0).toUpperCase() + value.slice(1);
+                }
                 osSelect.appendChild(opt);
             });
             osSelect.value = os;
@@ -348,8 +353,9 @@
         }
 
         function autoSelectPackage(os) {
-            if (os === 'windows') {
+            if (os === 'windows' || os === 'windows-xp') {
                 selectedPackageType = (packageManifest.find(function (p) { return p.type === 'exe' && p.available; }) || {}).type || 'zip';
+                if (os === 'windows-xp') selectedPackageType = 'zip';
             } else if (os === 'mac') {
                 selectedPackageType = (packageManifest.find(function (p) { return p.type === 'dmg' && p.available; }) || {}).type || 'zip';
             } else {
@@ -361,7 +367,9 @@
 
         function updateDownloadLink() {
             var btn = document.getElementById('downloadBtn');
-            btn.href = '/api/packages/download/' + sessionId + '?type=' + selectedPackageType;
+            var os = document.getElementById('osSelect').value;
+            var osParam = selectedPackageType === 'zip' ? ('&os=' + encodeURIComponent(os)) : '';
+            btn.href = '/api/packages/download/' + sessionId + '?type=' + selectedPackageType + osParam;
 
             var run = document.getElementById('instructionsRun');
             if (selectedPackageType === 'exe') {

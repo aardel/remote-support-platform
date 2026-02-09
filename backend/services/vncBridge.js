@@ -28,10 +28,13 @@ class VNCBridge {
         const port = process.env.VNC_LISTENER_PORT || 5500;
         
         this.vncListener = net.createServer((vncSocket) => {
+            const remoteIp = this.normalizeIp(vncSocket.remoteAddress);
+            console.log(`📡 Incoming VNC connection from ${remoteIp || vncSocket.remoteAddress}:${vncSocket.remotePort}`);
             const sessionId = this.extractSessionIdFromConnection(vncSocket);
             
             if (!sessionId) {
-                console.warn('No session ID found, closing connection');
+                const pending = remoteIp ? this.pendingByIp.get(remoteIp) : null;
+                console.warn(`No session ID found for VNC connection from ${remoteIp || vncSocket.remoteAddress}. Pending mapping: ${pending ? pending.sessionId : 'none'}`);
                 vncSocket.end();
                 return;
             }
