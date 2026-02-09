@@ -100,6 +100,14 @@ function SessionsPage() {
       return 0;
     });
 
+  const daysLeft = (expiresAt) => {
+    if (!expiresAt) return null;
+    const ts = new Date(expiresAt).getTime();
+    if (!Number.isFinite(ts)) return null;
+    const days = Math.ceil((ts - Date.now()) / (24 * 60 * 60 * 1000));
+    return Math.max(0, days);
+  };
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -131,6 +139,10 @@ function SessionsPage() {
             const sid = s.session_id || s.sessionId;
             const customer = s.customer_name || s.customerName || '—';
             const machine = s.machine_name || s.machineName || s.hostname || '—';
+            const helperOnline = s.helper_connected === true || s.status === 'connected';
+            const unassignedInvite = !helperOnline && !(s.device_id || s.deviceId);
+            const purgeDays = unassignedInvite ? daysLeft(s.expires_at || s.expiresAt) : null;
+            const shareLink = s.link || `${window.location.origin}/support/${encodeURIComponent(sid)}`;
             return (
               <div key={sid} className="page-card">
                 <div className="card-top">
@@ -155,11 +167,14 @@ function SessionsPage() {
                 )}
                 <div className="card-meta">
                   <span>Created: {new Date(s.created_at).toLocaleString()}</span>
+                  {unassignedInvite && typeof purgeDays === 'number' && (
+                    <span title="Unassigned invite sessions are auto-deleted after the TTL">Purge in: <span className="mono">{purgeDays}</span> day{purgeDays === 1 ? '' : 's'}</span>
+                  )}
                 </div>
-                {s.link && (
+                {unassignedInvite && (
                   <div className="card-link">
-                    <input type="text" value={s.link} readOnly onClick={e => e.target.select()} className="link-input" />
-                    <button className="btn-sm btn-secondary" onClick={() => { navigator.clipboard.writeText(s.link); }}>Copy</button>
+                    <input type="text" value={shareLink} readOnly onClick={e => e.target.select()} className="link-input" />
+                    <button className="btn-sm btn-secondary" onClick={() => { navigator.clipboard.writeText(shareLink); }}>Copy</button>
                   </div>
                 )}
                 <div className="card-actions">
