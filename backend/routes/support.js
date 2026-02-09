@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/database');
+const SessionService = require('../services/sessionService');
 
 function getClientIp(req) {
     const forwarded = req.headers['x-forwarded-for'];
@@ -53,6 +54,48 @@ router.get('/suggest', async (req, res) => {
         res.json({ ip, suggestions });
     } catch (error) {
         console.error('Error suggesting support session:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/create', async (req, res) => {
+    try {
+        const ttlDays = Math.max(1, Math.floor(Number(process.env.GENERATED_SESSION_TTL_DAYS || 20) || 20));
+        const expiresIn = ttlDays * 24 * 60 * 60;
+        const session = await SessionService.createSession({
+            technicianId: null,
+            expiresIn
+        });
+
+        const sessionId = session.session_id || session.sessionId;
+        if (!sessionId) {
+            return res.status(500).json({ error: 'Session ID not found in session object' });
+        }
+
+        const origin = `${req.protocol}://${req.get('host')}`;
+        const directLink = `${origin}/support/${encodeURIComponent(sessionId)}`;
+        const downloadUrl = `${origin}/api/packages/download/${encodeURIComponent(sessionId)}?type=zip`;
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('session-created', {
+                sessionId,
+                status: 'waiting',
+                technician_id: null,
+                created_at: new Date().toISOString(),
+                link: directLink,
+                downloadUrl
+            });
+        }
+
+        res.json({
+            success: true,
+            sessionId,
+            directLink,
+            downloadUrl
+        });
+    } catch (error) {
+        console.error('Error creating support session:', error);
         res.status(500).json({ error: error.message });
     }
 });
