@@ -287,7 +287,7 @@
 
         async function loadSessionInfo() {
             try {
-                const response = await fetch('/api/sessions/' + sessionId);
+                const response = await fetch('/api/support/session/' + sessionId);
                 if (!response.ok) throw new Error('Session not found or expired.');
                 const session = await response.json();
 

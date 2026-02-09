@@ -63,7 +63,7 @@ router.post('/create', async (req, res) => {
         const ttlDays = Math.max(1, Math.floor(Number(process.env.GENERATED_SESSION_TTL_DAYS || 20) || 20));
         const expiresIn = ttlDays * 24 * 60 * 60;
         const session = await SessionService.createSession({
-            technicianId: null,
+            technicianId: 'public-web',
             expiresIn
         });
 
@@ -96,6 +96,28 @@ router.post('/create', async (req, res) => {
         });
     } catch (error) {
         console.error('Error creating support session:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/session/:sessionId', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        if (!sessionId) {
+            return res.status(400).json({ error: 'Missing sessionId' });
+        }
+        const session = await SessionService.getSession(sessionId);
+        if (!session) {
+            return res.status(404).json({ error: 'Session not found or expired.' });
+        }
+        res.json({
+            sessionId: session.session_id || session.sessionId,
+            status: session.status,
+            createdAt: session.created_at || session.createdAt,
+            expiresAt: session.expires_at || session.expiresAt
+        });
+    } catch (error) {
+        console.error('Error loading support session:', error);
         res.status(500).json({ error: error.message });
     }
 });
