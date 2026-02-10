@@ -379,6 +379,124 @@ function Dashboard({ user, onLogout }) {
             aria-label="Filter sessions and devices"
           />
         </div>
+
+        <div className="sessions-list" style={{ marginBottom: '30px' }}>
+          <h2>Active Sessions</h2>
+
+          {sessions.length === 0 ? (
+            <div className="empty-state">
+              <p>No active sessions</p>
+              <p>Generate a package to start a support session</p>
+            </div>
+          ) : (
+            <div className="sessions-grid">
+              {sessions
+                .filter((session) => {
+                  if (!searchQuery) return true;
+                  const q = searchQuery.toLowerCase();
+                  const sid = session.session_id || session.sessionId || '';
+                  const host = (session.client_info && session.client_info.hostname) || session.device_hostname || '';
+                  const cname = session.customer_name || '';
+                  const mname = session.machine_name || '';
+                  return sid.toLowerCase().includes(q) || host.toLowerCase().includes(q) || cname.toLowerCase().includes(q) || mname.toLowerCase().includes(q);
+                })
+                .map(session => {
+                const hostname = (session.client_info && session.client_info.hostname) || session.device_hostname || '';
+                const os = (session.client_info && session.client_info.os) || session.device_os || '';
+                return (
+                <div key={session.session_id} className="session-card">
+                  <div className="session-header">
+                    <span className="session-id">{session.session_id}</span>
+                    <span className="status-badges">
+                      <span className={`status-badge ${(session.helper_connected === true || session.status === 'connected') ? 'connected' : 'waiting'}`}>
+                        {(session.helper_connected === true || session.status === 'connected') ? 'helper online' : 'helper offline'}
+                      </span>
+                      <span className={`status-badge ${(Number(session.viewing_technicians || 0) > 0) ? 'connected' : 'waiting'}`}>
+                        {Number(session.viewing_technicians || 0) > 0 ? `tech viewing${Number(session.viewing_technicians || 0) > 1 ? ` (${Number(session.viewing_technicians || 0)})` : ''}` : 'not viewing'}
+                      </span>
+                    </span>
+                  </div>
+
+                  <div className="session-info">
+                    <div className="client-info">
+                      {(session.customer_name || session.machine_name) && (
+                        <><strong>Customer:</strong> {session.customer_name || '—'}{session.machine_name ? ` / ${session.machine_name}` : ''}<br /></>
+                      )}
+                      <strong>Hostname:</strong> {hostname || 'Waiting for connection...'}<br />
+                      <strong>OS:</strong> {os || 'Unknown'}
+                    </div>
+
+                    <div className="session-meta">
+                      <small>Created: {new Date(session.created_at).toLocaleString()}</small>
+                    </div>
+                  </div>
+
+                  <div className="session-info">
+                    {session.link && (
+                      <div className="share-link-section" style={{ marginTop: '15px', padding: '10px', background: '#f0f9ff', borderRadius: '6px' }}>
+                        <strong style={{ fontSize: '12px', color: '#666', display: 'block', marginBottom: '5px' }}>Share this link:</strong>
+                        <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                          <input
+                            type="text"
+                            value={session.link}
+                            readOnly
+                            style={{
+                              flex: 1,
+                              padding: '6px',
+                              border: '1px solid #ddd',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              fontFamily: 'monospace'
+                            }}
+                            onClick={(e) => e.target.select()}
+                          />
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(session.link);
+                              alert('Link copied to clipboard!');
+                            }}
+                            style={{
+                              padding: '6px 12px',
+                              background: '#2563eb',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="session-actions">
+                    {(session.status === 'connected' || session.helper_connected === true) ? (
+                      <button
+                        onClick={() => connectToSession(session.session_id || session.sessionId)}
+                        className="connect-btn"
+                      >
+                        Connect
+                      </button>
+                    ) : (
+                      <span className="waiting-text">Waiting for user...</span>
+                    )}
+                    <button
+                      onClick={() => deleteSession(session.session_id || session.sessionId)}
+                      className="delete-btn"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         <div className="sessions-list" style={{ marginBottom: '30px' }}>
           <h2>Registered Devices</h2>
           {devices.length === 0 ? (
@@ -411,6 +529,9 @@ function Dashboard({ user, onLogout }) {
                     <div className="client-info">
                       <strong>OS:</strong> {device.os || 'Unknown'}<br />
                       <strong>Hostname:</strong> {device.hostname || 'Unknown'}
+                      {device.pending_session_id && (
+                        <><br /><strong>Session:</strong> {device.pending_session_id}</>
+                      )}
                     </div>
                     <div className="session-meta">
                       <small>Last seen: {device.last_seen ? new Date(device.last_seen).toLocaleString() : 'Never'}</small>
@@ -439,14 +560,6 @@ function Dashboard({ user, onLogout }) {
         </div>
 
         <div className="dashboard-actions">
-          <button 
-            onClick={generatePackage} 
-            disabled={generating}
-            className="generate-btn"
-          >
-            {generating ? 'Generating...' : '➕ Generate Support Package'}
-          </button>
-
             <div className="template-card">
               <div className="template-title-row">
                 <div className="template-title">Helper Templates</div>
@@ -547,124 +660,6 @@ function Dashboard({ user, onLogout }) {
               Upload a template once. New sessions will auto-copy it.
             </div>
           </div>
-        </div>
-
-        <div className="sessions-list">
-          <h2>Active Sessions</h2>
-          
-          {sessions.length === 0 ? (
-            <div className="empty-state">
-              <p>No active sessions</p>
-              <p>Generate a package to start a support session</p>
-            </div>
-          ) : (
-            <div className="sessions-grid">
-              {sessions
-                .filter((session) => {
-                  if (!searchQuery) return true;
-                  const q = searchQuery.toLowerCase();
-                  const sid = session.session_id || session.sessionId || '';
-                  const host = (session.client_info && session.client_info.hostname) || '';
-                  return sid.toLowerCase().includes(q) || host.toLowerCase().includes(q);
-                })
-                .map(session => (
-                <div key={session.session_id} className="session-card">
-                  <div className="session-header">
-                    <span className="session-id">
-                      {session.session_id}
-                      {(session.customer_name || session.machine_name) && (
-                        <span style={{ marginLeft: 10, fontWeight: 700 }}>
-                          {(session.customer_name || '—')}{session.machine_name ? ` / ${session.machine_name}` : ''}
-                        </span>
-                      )}
-                    </span>
-                    <span className="status-badges">
-                      <span className={`status-badge ${(session.helper_connected === true || session.status === 'connected') ? 'connected' : 'waiting'}`}>
-                        {(session.helper_connected === true || session.status === 'connected') ? 'helper online' : 'helper offline'}
-                      </span>
-                      <span className={`status-badge ${(Number(session.viewing_technicians || 0) > 0) ? 'connected' : 'waiting'}`}>
-                        {Number(session.viewing_technicians || 0) > 0 ? `tech viewing${Number(session.viewing_technicians || 0) > 1 ? ` (${Number(session.viewing_technicians || 0)})` : ''}` : 'not viewing'}
-                      </span>
-                    </span>
-                  </div>
-                  
-                  <div className="session-info">
-                    {session.client_info && (
-                      <div className="client-info">
-                        <strong>OS:</strong> {session.client_info.os || 'Unknown'}
-                        <br />
-                        <strong>Hostname:</strong> {session.client_info.hostname || 'Unknown'}
-                      </div>
-                    )}
-                    
-                    <div className="session-meta">
-                      <small>Created: {new Date(session.created_at).toLocaleString()}</small>
-                    </div>
-                  </div>
-                  
-                  <div className="session-info">
-                    {session.link && (
-                      <div className="share-link-section" style={{ marginTop: '15px', padding: '10px', background: '#f0f9ff', borderRadius: '6px' }}>
-                        <strong style={{ fontSize: '12px', color: '#666', display: 'block', marginBottom: '5px' }}>Share this link:</strong>
-                        <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                          <input 
-                            type="text" 
-                            value={session.link} 
-                            readOnly 
-                            style={{ 
-                              flex: 1, 
-                              padding: '6px', 
-                              border: '1px solid #ddd', 
-                              borderRadius: '4px',
-                              fontSize: '12px',
-                              fontFamily: 'monospace'
-                            }}
-                            onClick={(e) => e.target.select()}
-                          />
-                          <button 
-                            onClick={() => {
-                              navigator.clipboard.writeText(session.link);
-                              alert('Link copied to clipboard!');
-                            }}
-                            style={{
-                              padding: '6px 12px',
-                              background: '#2563eb',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              fontSize: '12px'
-                            }}
-                          >
-                            Copy
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="session-actions">
-                    {(session.status === 'connected' || session.helper_connected === true) ? (
-                      <button
-                        onClick={() => connectToSession(session.session_id || session.sessionId)}
-                        className="connect-btn"
-                      >
-                        Connect
-                      </button>
-                    ) : (
-                      <span className="waiting-text">Waiting for user...</span>
-                    )}
-                    <button
-                      onClick={() => deleteSession(session.session_id || session.sessionId)}
-                      className="delete-btn"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
       {appVersion && (

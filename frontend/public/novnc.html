@@ -2,7 +2,6 @@
 <html>
 <head>
     <title>noVNC VNC Client</title>
-    <script src="https://cdn.jsdelivr.net/npm/@novnc/novnc@1.4.0/core/rfb.js"></script>
     <style>
         body {
             margin: 0;
@@ -14,40 +13,85 @@
             width: 100vw;
             height: 100vh;
         }
+        #status {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #aaa;
+            font-family: sans-serif;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
     <div id="screen"></div>
+    <div id="status">Loading noVNC...</div>
     <script>
-        // Get session ID from URL
+        // Global error handler to catch module loading failures
+        window.onerror = function(msg, url, line, col, err) {
+            document.getElementById('status').textContent = 'JS Error: ' + msg;
+            console.error('noVNC page error:', msg, url, line, col, err);
+        };
+    </script>
+    <script type="module">
+        const status = document.getElementById('status');
+
+        let RFB;
+        try {
+            const mod = await import('/customer/novnc-bundle.js');
+            RFB = mod.default;
+            console.log('noVNC module loaded OK');
+        } catch (err) {
+            status.textContent = 'Module load error: ' + err.message;
+            console.error('noVNC module load failed:', err);
+            throw err;
+        }
+
         const urlParams = new URLSearchParams(window.location.search);
         const sessionId = urlParams.get('session') || window.location.pathname.split('/').pop();
-        
-        // WebSocket URL
+
+        if (!sessionId) {
+            status.textContent = 'Error: no session ID in URL';
+            throw new Error('No session ID');
+        }
+
+        // WebSocket URL — connect through same origin (nginx proxies /websockify)
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsHost = window.location.hostname;
-        const wsPort = window.location.port ? `:${window.location.port === '3001' ? '6080' : window.location.port}` : '';
+        const wsPort = window.location.port ? `:${window.location.port}` : '';
         const wsUrl = `${wsProtocol}//${wsHost}${wsPort}/websockify?session=${sessionId}`;
-        
-        console.log('Connecting to VNC:', wsUrl);
-        
-        // Create RFB instance
-        const rfb = new RFB(document.getElementById('screen'), wsUrl, {
-            credentials: {
-                password: ''
-            }
-        });
-        
-        rfb.addEventListener('connect', () => {
-            console.log('Connected to VNC');
-        });
-        
-        rfb.addEventListener('disconnect', (e) => {
-            console.log('Disconnected:', e.detail);
-            if (e.detail.clean !== true) {
-                alert('Connection lost');
-            }
-        });
+
+        status.textContent = 'Connecting to ' + wsUrl;
+        console.log('noVNC connecting to:', wsUrl);
+
+        try {
+            const rfb = new RFB(document.getElementById('screen'), wsUrl, {
+                credentials: { password: '' }
+            });
+
+            rfb.scaleViewport = true;
+            rfb.resizeSession = false;
+
+            rfb.addEventListener('connect', () => {
+                console.log('Connected to VNC');
+                status.style.display = 'none';
+            });
+
+            rfb.addEventListener('disconnect', (e) => {
+                console.log('Disconnected:', e.detail);
+                status.style.display = 'block';
+                status.textContent = 'VNC disconnected' + (e.detail.clean ? '' : ' (connection lost)');
+            });
+
+            rfb.addEventListener('securityfailure', (e) => {
+                console.error('Security failure:', e.detail);
+                status.textContent = 'VNC security failure: ' + (e.detail.reason || 'unknown');
+            });
+        } catch (err) {
+            console.error('noVNC init error:', err);
+            status.textContent = 'Failed to initialize VNC: ' + err.message;
+        }
     </script>
 </body>
 </html>

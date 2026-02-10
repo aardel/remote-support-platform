@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import WidgetCard from './WidgetCard';
 
-function QuickConnectWidget({ size }) {
+function QuickConnectWidget({ size, linkTo }) {
   const [sessions, setSessions] = useState([]);
   const navigate = useNavigate();
 
@@ -22,7 +22,7 @@ function QuickConnectWidget({ size }) {
   };
 
   return (
-    <WidgetCard title="Quick Connect" size={size}>
+    <WidgetCard title="Quick Connect" size={size} linkTo={linkTo}>
       {sessions.length === 0 ? (
         <p className="widget-empty">No sessions ready to connect.</p>
       ) : (

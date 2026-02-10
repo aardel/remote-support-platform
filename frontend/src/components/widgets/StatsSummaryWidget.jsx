@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import axios from 'axios';
 import WidgetCard from './WidgetCard';
 
-function StatsSummaryWidget({ size }) {
+function StatsSummaryWidget({ size, linkTo }) {
   const [summary, setSummary] = useState({});
 
   useEffect(() => {
@@ -18,7 +18,7 @@ function StatsSummaryWidget({ size }) {
   };
 
   return (
-    <WidgetCard title="Statistics" size={size}>
+    <WidgetCard title="Statistics" size={size} linkTo={linkTo}>
       <div className="widget-stats-row">
         <div className="widget-mini-stat">
           <span className="wms-value">{summary.totalSessions ?? '—'}</span>

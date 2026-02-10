@@ -22,9 +22,15 @@ class PackageBuilder {
         }
         
         // Create configuration file
+        // Build HTTP fallback URL for XP clients that can't do TLS 1.2+
+        const serverHostname = new URL(this.serverUrl).hostname;
+        const expressPort = process.env.PORT || 3000;
+        const httpFallback = `http://${serverHostname}:${expressPort}`;
+
         const config = {
             sessionId,
             server: this.serverUrl,
+            httpFallback,
             port: 5500,
             technicianId,
             createdAt: new Date().toISOString()
@@ -144,10 +150,17 @@ class PackageBuilder {
     
     // Windows launcher (compatible with Windows XP and later)
     createWindowsLauncher(config) {
+        const serverHost = new URL(config.server).hostname;
         return `@echo off
 REM Support Helper Launcher for Windows
 REM Compatible with Windows XP, Vista, 7, 8, 10, 11
+REM Launcher version: 2.2 (XP-safe, crash-protected, verbose logging)
 
+REM --- Crash protection: call :main so parse errors inside cannot kill the window ---
+call :main
+goto :end
+
+:main
 cd /d "%~dp0"
 
 echo ========================================
@@ -156,60 +169,145 @@ echo   Session: ${config.sessionId}
 echo ========================================
 echo.
 
-REM Check if TightVNC exists
+REM --- STEP 0: Environment info ---
+echo [INFO] ---- Environment ----
+echo [INFO] Date/Time: %DATE% %TIME%
+echo [INFO] Working dir: %CD%
+echo [INFO] OS: %OS%
+echo [INFO] ComSpec: %ComSpec%
+echo [INFO] Architecture: %PROCESSOR_ARCHITECTURE%
+ver
+echo.
+
+echo [INFO] ---- Package contents ----
+dir /b
+echo.
+echo [INFO] ---- TightVNC dirs ----
+if exist "tightvnc" dir /b tightvnc
+if exist "tightvnc64" dir /b tightvnc64
+echo ---- end listing ----
+echo.
+
+REM --- STEP 1: Locate TightVNC ---
+echo [STEP 1] Locating TightVNC...
 set VNC_DIR=tightvnc
 if /I "%PROCESSOR_ARCHITECTURE%"=="AMD64" if exist "tightvnc64\\tvnserver.exe" set VNC_DIR=tightvnc64
 if defined PROCESSOR_ARCHITEW6432 if exist "tightvnc64\\tvnserver.exe" set VNC_DIR=tightvnc64
 
 if not exist "%VNC_DIR%\\tvnserver.exe" goto no_vnc
-echo Starting TightVNC Server...
+echo [OK] TightVNC found: %VNC_DIR%\\tvnserver.exe
+echo.
+
+REM --- STEP 2: Start TightVNC Server ---
+echo [STEP 2] Starting TightVNC Server...
 start "" "%VNC_DIR%\\tvnserver.exe"
+if errorlevel 1 goto start_failed
+echo [OK] TightVNC server start command issued.
+goto start_ok
+:start_failed
+echo [ERROR] Failed to start TightVNC server. Exit code: %ERRORLEVEL%
+:start_ok
 REM XP does not have "timeout" by default; use ping as a delay.
+echo [INFO] Waiting 3 seconds for TightVNC to initialize...
 ping -n 4 127.0.0.1 >nul
+echo [OK] Wait complete.
+echo.
 goto register
 
 :no_vnc
-echo TightVNC not found in package.
-echo Please ensure TightVNC Portable is included.
+echo [ERROR] TightVNC not found in package.
+echo [ERROR] Expected: %VNC_DIR%\\tvnserver.exe
 echo.
-if exist "mypal\\mypal.exe" (
-    echo Tip: If this link was opened in Internet Explorer on Windows XP,
-    echo you can run "mypal\\mypal.exe" from this folder for better compatibility.
-    echo.
-)
+echo Please ensure TightVNC Portable is included in the package.
+echo.
+if not exist "mypal\\mypal.exe" goto no_mypal
+echo Tip: If this link was opened in Internet Explorer on Windows XP,
+echo you can run "mypal\\mypal.exe" from this folder for better compatibility.
+echo.
+:no_mypal
 echo For manual setup:
 echo 1. Install TightVNC Server
-echo 2. Run: tvnserver.exe -controlapp -connect ${new URL(config.server).hostname}:5500
-pause
-exit /b 1
+echo 2. Run: tvnserver.exe -controlapp -connect ${serverHost}:5500
+goto :eof
 
-REM Register session (optional, for showing status in dashboard).
-REM Prefer PowerShell if available; fall back to VBScript (works on XP).
+REM --- STEP 3: Register session ---
 :register
-if exist "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" (
-    echo Registering session (PowerShell)...
-    "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -ExecutionPolicy Bypass -File register-session.ps1
-) else (
-    if exist "register-session.vbs" (
-        echo Registering session (VBScript)...
-        cscript //nologo register-session.vbs
-    ) else (
-        echo Registration skipped (no PowerShell/VBScript).
-        echo Session may still work without registration.
-    )
-)
+echo [STEP 3] Registering session with server...
+echo [INFO] Checking for PowerShell...
+if exist "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" goto do_powershell
+goto check_vbs
+:do_powershell
+echo [INFO] PowerShell found, using PowerShell registration...
+"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -ExecutionPolicy Bypass -File register-session.ps1
+if errorlevel 1 goto ps_failed
+echo [OK] PowerShell registration completed.
+goto reg_done
+:ps_failed
+echo [ERROR] PowerShell registration failed. Exit code: %ERRORLEVEL%
+goto reg_done
 
-call connect.bat
+:check_vbs
+echo [INFO] PowerShell not found, checking for VBScript...
+if not exist "register-session.vbs" goto reg_skip
+echo [INFO] Running: cscript //nologo register-session.vbs
+echo ---- VBScript output ----
+cscript //nologo register-session.vbs
+set VBS_EXIT=%ERRORLEVEL%
+echo ---- end VBScript output ----
+echo [INFO] VBScript exit code: %VBS_EXIT%
+if errorlevel 1 goto vbs_failed
+echo [OK] VBScript registration completed.
+goto reg_done
+:vbs_failed
+echo [ERROR] VBScript registration failed. Exit code: %VBS_EXIT%
+goto reg_done
 
+:reg_skip
+echo [WARNING] No PowerShell or VBScript available, registration skipped.
+echo [INFO] The session may still work, but dashboard status will not update.
+
+:reg_done
 echo.
+
+REM --- STEP 4: Connect to server ---
+echo [STEP 4] Connecting to support server...
+set CALLED_FROM_LAUNCHER=1
+call connect.bat
+set CONNECT_EXIT=%ERRORLEVEL%
+if errorlevel 1 goto connect_failed
+echo [OK] Connect script completed.
+goto connect_ok
+:connect_failed
+echo [ERROR] Connect script failed. Exit code: %CONNECT_EXIT%
+:connect_ok
+echo.
+
 echo ========================================
 echo   Support session is ready!
 echo   Session ID: ${config.sessionId}
 echo   Waiting for technician to connect...
 echo ========================================
 echo.
-echo Keep this window open while receiving support.
-echo Press any key to close...
+
+REM --- STEP 5: Open chat window ---
+echo [STEP 5] Opening chat window...
+set CHAT_URL=${config.httpFallback}/customer/xp-chat.html?session=${config.sessionId}
+echo [INFO] Chat URL: %CHAT_URL%
+start "" "%CHAT_URL%"
+echo [OK] Chat window opened in browser.
+echo [INFO] You can use the chat window to message your technician
+echo        and send/receive files.
+echo.
+
+echo [INFO] Session initialization complete at %TIME%
+echo [INFO] Keep this window open until your technician is done.
+goto :eof
+
+:end
+echo.
+echo ========================================
+echo   Press any key to close this window...
+echo ========================================
 pause >nul
 `;
     }
@@ -220,37 +318,55 @@ pause >nul
         const serverPort = config.port || 5500;
         return `@echo off
 REM Connect TightVNC to server (reverse connection)
+REM Version: 2.2
 
 cd /d "%~dp0"
+
+echo [INFO] Connect script started at %TIME%
 
 set VNC_DIR=tightvnc
 if /I "%PROCESSOR_ARCHITECTURE%"=="AMD64" if exist "tightvnc64\\tvnserver.exe" set VNC_DIR=tightvnc64
 if defined PROCESSOR_ARCHITEW6432 if exist "tightvnc64\\tvnserver.exe" set VNC_DIR=tightvnc64
 
 if not exist "%VNC_DIR%\\tvnserver.exe" goto no_vnc
-REM Basic network check (HTTP to server) for clearer error messages
-if exist "netcheck.vbs" (
-    cscript //nologo netcheck.vbs >nul
-    if errorlevel 1 (
-        echo.
-        echo WARNING: Cannot reach the server over HTTP.
-        echo This may indicate no internet connection or a firewall/proxy issue.
-        echo.
-    )
-)
-echo Connecting to ${serverHost}:${serverPort}...
+echo [OK] TightVNC found: %VNC_DIR%\\tvnserver.exe
+
+REM Network check (HTTP to server) for clearer error messages
+if not exist "netcheck.vbs" goto skip_netcheck
+echo [INFO] Running network connectivity check to server...
+cscript //nologo netcheck.vbs
+set NETCHECK_EXIT=%ERRORLEVEL%
+if errorlevel 1 goto netcheck_failed
+echo [OK] Network check passed - server is reachable.
+goto skip_netcheck
+:netcheck_failed
+echo [WARNING] Network check failed - exit code: %NETCHECK_EXIT%
+echo [WARNING] Cannot reach the server over HTTP.
+echo [WARNING] This may indicate no internet connection or a firewall/proxy issue.
+echo [INFO] Will attempt VNC connection anyway...
+echo.
+
+:skip_netcheck
+echo [INFO] Connecting VNC to ${serverHost}:${serverPort}...
 "%VNC_DIR%\\tvnserver.exe" -controlapp -connect ${serverHost}:${serverPort}
-if errorlevel 1 (
-    echo Connection failed. Please check your internet connection.
-    echo If internet works, a firewall may be blocking port ${serverPort}.
-) else (
-    echo Connected successfully!
-)
+set VNC_EXIT=%ERRORLEVEL%
+if errorlevel 1 goto vnc_failed
+echo [OK] VNC reverse connection command sent.
+echo [INFO] Connect finished at %TIME%
+goto done
+:vnc_failed
+echo [ERROR] VNC connection failed - exit code: %VNC_EXIT%
+echo [ERROR] Please check your internet connection.
+echo [ERROR] If internet works, a firewall may be blocking port ${serverPort}.
 goto done
 
 :no_vnc
-echo TightVNC not found. Cannot connect.
+echo [ERROR] TightVNC not found in: %VNC_DIR%\\tvnserver.exe
+echo [ERROR] Cannot establish connection.
+
 :done
+REM If run directly (not from launch.bat), pause so the window stays open.
+if not defined CALLED_FROM_LAUNCHER pause
 `;
     }
 
@@ -258,18 +374,38 @@ echo TightVNC not found. Cannot connect.
     createWindowsNetworkCheckVbs(config) {
         const serverHost = new URL(config.server).host;
         const serverProtocol = new URL(config.server).protocol === 'https:' ? 'https' : 'http';
+        const fallbackHost = config.httpFallback ? new URL(config.httpFallback).host : '';
+        const fallbackUrl = fallbackHost ? `http://${fallbackHost}/api/health` : '';
         return `On Error Resume Next
-Dim url: url = "${serverProtocol}://${serverHost}/api/health"
-Dim http: Set http = CreateObject("MSXML2.ServerXMLHTTP")
-http.setTimeouts 3000, 3000, 3000, 3000
-http.open "GET", url, False
-http.send
 
-If Err.Number <> 0 Then
-    WScript.Quit 1
-End If
+Function TryUrl(url)
+    TryUrl = False
+    If Len(url) = 0 Then Exit Function
+    Err.Clear
+    Dim h
+    Set h = CreateObject("MSXML2.ServerXMLHTTP")
+    If Err.Number <> 0 Then
+        Err.Clear
+        Set h = CreateObject("MSXML2.XMLHTTP")
+        If Err.Number <> 0 Then
+            Err.Clear
+            Exit Function
+        End If
+    Else
+        h.setTimeouts 3000, 3000, 3000, 3000
+        Err.Clear
+    End If
+    h.open "GET", url, False
+    h.send
+    If Err.Number = 0 Then
+        If h.status >= 200 And h.status < 400 Then TryUrl = True
+    End If
+    Err.Clear
+End Function
 
-If http.status >= 200 And http.status < 400 Then
+If TryUrl("${serverProtocol}://${serverHost}/api/health") Then
+    WScript.Quit 0
+ElseIf TryUrl("${fallbackUrl}") Then
     WScript.Quit 0
 Else
     WScript.Quit 1
@@ -369,53 +505,148 @@ try {
     createWindowsRegistrationVbs(config) {
         const serverHost = new URL(config.server).host;
         const serverProtocol = new URL(config.server).protocol === 'https:' ? 'https' : 'http';
-        // Note: VBScript uses very simple JSON parsing; registration is best-effort.
+        const fallbackHost = config.httpFallback ? new URL(config.httpFallback).host : '';
         return `' Remote Support Helper registration (VBScript; works on Windows XP)
 Option Explicit
 
-Dim SessionId, Server, Protocol
+Dim SessionId, Server, Protocol, FallbackServer
 SessionId = "${config.sessionId}"
 Server = "${serverHost}"
 Protocol = "${serverProtocol}"
+FallbackServer = "${fallbackHost}"
+
+WScript.Echo "[VBS] Starting registration script..."
+WScript.Echo "[VBS] SessionId: " & SessionId
+WScript.Echo "[VBS] Server: " & Server
+WScript.Echo "[VBS] Protocol: " & Protocol
 
 Dim appData, deviceDir, deviceFile, deviceId
+On Error Resume Next
 appData = CreateObject("WScript.Shell").ExpandEnvironmentStrings("%APPDATA%")
-If Len(appData) = 0 Then appData = CreateObject("WScript.Shell").ExpandEnvironmentStrings("%USERPROFILE%") & "\\Application Data"
+If Err.Number <> 0 Then
+  WScript.Echo "[VBS] ERROR: Failed to get APPDATA: " & Err.Description
+  Err.Clear
+End If
+If Len(appData) = 0 Then 
+  appData = CreateObject("WScript.Shell").ExpandEnvironmentStrings("%USERPROFILE%") & "\\Application Data"
+  WScript.Echo "[VBS] APPDATA empty, using USERPROFILE: " & appData
+Else
+  WScript.Echo "[VBS] APPDATA: " & appData
+End If
 deviceDir = appData & "\\RemoteSupport"
 deviceFile = deviceDir & "\\device_id.txt"
+WScript.Echo "[VBS] Device directory: " & deviceDir
 
 Dim fso: Set fso = CreateObject("Scripting.FileSystemObject")
-If Not fso.FolderExists(deviceDir) Then fso.CreateFolder(deviceDir)
+If Err.Number <> 0 Then
+  WScript.Echo "[VBS] ERROR: Failed to create FileSystemObject: " & Err.Description
+  WScript.Quit 1
+End If
+If Not fso.FolderExists(deviceDir) Then 
+  fso.CreateFolder(deviceDir)
+  WScript.Echo "[VBS] Created device directory: " & deviceDir
+Else
+  WScript.Echo "[VBS] Device directory exists: " & deviceDir
+End If
 
 If fso.FileExists(deviceFile) Then
   deviceId = Trim(ReadAllText(deviceFile))
+  WScript.Echo "[VBS] Loaded existing device ID: " & deviceId
 Else
+  On Error Resume Next
   deviceId = Replace(Replace(CreateObject("Scriptlet.TypeLib").Guid, "{", ""), "}", "")
+  If Err.Number <> 0 Then
+    WScript.Echo "[VBS] ERROR: Failed to generate GUID: " & Err.Description
+    deviceId = "unknown-device-" & Year(Now) & Month(Now) & Day(Now) & Hour(Now) & Minute(Now) & Second(Now)
+    WScript.Echo "[VBS] Using fallback device ID: " & deviceId
+  Else
+    WScript.Echo "[VBS] Generated new device ID: " & deviceId
+  End If
   WriteAllText deviceFile, deviceId
 End If
+On Error GoTo 0
+
+' Determine base URL (try primary, fall back to HTTP for XP/TLS compat)
+Dim baseUrl: baseUrl = Protocol & "://" & Server
+WScript.Echo "[VBS] Trying primary URL: " & baseUrl & " ..."
+On Error Resume Next
+Dim testResult: testResult = HttpGet(baseUrl & "/api/health")
+If Err.Number <> 0 Or Len(testResult) = 0 Then
+  Err.Clear
+  If Len(FallbackServer) > 0 Then
+    WScript.Echo "[VBS] Primary URL failed, trying HTTP fallback: http://" & FallbackServer
+    baseUrl = "http://" & FallbackServer
+    testResult = HttpGet(baseUrl & "/api/health")
+    If Err.Number <> 0 Or Len(testResult) = 0 Then
+      WScript.Echo "[VBS] WARNING: HTTP fallback also failed. Registration may not work."
+      Err.Clear
+    Else
+      WScript.Echo "[VBS] HTTP fallback OK."
+    End If
+  Else
+    WScript.Echo "[VBS] WARNING: Primary URL failed and no fallback configured."
+    Err.Clear
+  End If
+Else
+  WScript.Echo "[VBS] Primary URL OK."
+End If
+On Error GoTo 0
 
 ' Check pending session
+WScript.Echo "[VBS] Checking for pending session..."
 On Error Resume Next
-Dim pendingJson: pendingJson = HttpGet(Protocol & "://" & Server & "/api/devices/pending/" & deviceId)
+Dim pendingUrl: pendingUrl = baseUrl & "/api/devices/pending/" & deviceId
+WScript.Echo "[VBS] Pending URL: " & pendingUrl
+Dim pendingJson: pendingJson = HttpGet(pendingUrl)
+If Err.Number <> 0 Then
+  WScript.Echo "[VBS] ERROR: HttpGet failed: " & Err.Description & " (Error " & Err.Number & ")"
+  Err.Clear
+Else
+  WScript.Echo "[VBS] Pending response received (length: " & Len(pendingJson) & ")"
+End If
 If InStr(1, pendingJson, """pending"":true", vbTextCompare) > 0 Then
   Dim psid: psid = JsonGetString(pendingJson, "sessionId")
-  If Len(psid) > 0 Then SessionId = psid
+  If Len(psid) > 0 Then
+    SessionId = psid
+    WScript.Echo "[VBS] Found pending session ID: " & SessionId
+  End If
 End If
 On Error GoTo 0
 
 Dim osName, osVer, arch, host, user
 osName = "Windows"
 osVer = ""
+On Error Resume Next
 arch = CreateObject("WScript.Shell").ExpandEnvironmentStrings("%PROCESSOR_ARCHITECTURE%")
 host = CreateObject("WScript.Shell").ExpandEnvironmentStrings("%COMPUTERNAME%")
 user = CreateObject("WScript.Shell").ExpandEnvironmentStrings("%USERNAME%")
+WScript.Echo "[VBS] System info - OS: " & osName & ", Arch: " & arch & ", Host: " & host & ", User: " & user
+If Err.Number <> 0 Then
+  WScript.Echo "[VBS] ERROR: Failed to get system info: " & Err.Description
+  Err.Clear
+End If
+On Error GoTo 0
 
 Dim payload
 payload = "{""sessionId"":""" & EscapeJson(SessionId) & """,""clientInfo"":{""os"":""" & EscapeJson(osName) & """,""arch"":""" & EscapeJson(arch) & """,""hostname"":""" & EscapeJson(host) & """,""username"":""" & EscapeJson(user) & """},""vncPort"":5900,""status"":""connected"",""deviceId"":""" & EscapeJson(deviceId) & """,""deviceName"":""" & EscapeJson(host) & """}"
+WScript.Echo "[VBS] Payload length: " & Len(payload)
+WScript.Echo "[VBS] Registering session..."
 
+Dim registerUrl: registerUrl = baseUrl & "/api/sessions/register"
+WScript.Echo "[VBS] Register URL: " & registerUrl
 On Error Resume Next
-Call HttpPostJson(Protocol & "://" & Server & "/api/sessions/register", payload)
+Call HttpPostJson(registerUrl, payload)
+If Err.Number <> 0 Then
+  WScript.Echo "[VBS] ERROR: HttpPostJson failed: " & Err.Description & " (Error " & Err.Number & ")"
+  WScript.Echo "[VBS] Registration failed, but session may still work."
+  WScript.Quit 1
+Else
+  WScript.Echo "[VBS] Registration completed successfully."
+End If
 On Error GoTo 0
+
+WScript.Echo "[VBS] Script completed, exiting..."
+WScript.Quit 0
 
 Sub WriteAllText(path, text)
   Dim ts: Set ts = fso.OpenTextFile(path, 2, True)
@@ -430,27 +661,90 @@ Function ReadAllText(path)
 End Function
 
 Function EscapeJson(s)
-  Dim t: t = s
+  If IsNull(s) Or IsEmpty(s) Then
+    EscapeJson = ""
+    Exit Function
+  End If
+  Dim t: t = CStr(s)
   t = Replace(t, "\\", "\\\\")
   t = Replace(t, """", "\\""")
   t = Replace(t, vbCr, "\\r")
   t = Replace(t, vbLf, "\\n")
   t = Replace(t, vbTab, "\\t")
-  EscapeJson = t
+  ' Strip any remaining control characters (< 0x20) that would break JSON
+  Dim i, c, result: result = ""
+  For i = 1 To Len(t)
+    c = Mid(t, i, 1)
+    If AscW(c) >= 32 Then
+      result = result & c
+    End If
+  Next
+  EscapeJson = result
+End Function
+
+Function CreateHTTP()
+  ' Try ServerXMLHTTP first (supports setTimeouts), fall back to XMLHTTP
+  On Error Resume Next
+  Set CreateHTTP = CreateObject("MSXML2.ServerXMLHTTP")
+  If Err.Number = 0 Then
+    WScript.Echo "[VBS] Using MSXML2.ServerXMLHTTP"
+    CreateHTTP.setTimeouts 10000, 10000, 10000, 10000
+    Err.Clear
+    Exit Function
+  End If
+  Err.Clear
+  Set CreateHTTP = CreateObject("MSXML2.XMLHTTP")
+  If Err.Number = 0 Then
+    WScript.Echo "[VBS] Using MSXML2.XMLHTTP (fallback)"
+    Exit Function
+  End If
+  Err.Clear
+  WScript.Echo "[VBS] ERROR: No MSXML HTTP object available"
+  Set CreateHTTP = Nothing
 End Function
 
 Function HttpGet(url)
-  Dim x: Set x = CreateObject("MSXML2.XMLHTTP")
+  On Error Resume Next
+  Dim x: Set x = CreateHTTP()
+  If x Is Nothing Then
+    HttpGet = ""
+    Exit Function
+  End If
+  Err.Clear
   x.Open "GET", url, False
   x.Send
-  HttpGet = x.responseText
+  If Err.Number <> 0 Then
+    WScript.Echo "[VBS] ERROR: HTTP GET failed: " & Err.Description & " (Error " & Err.Number & ")"
+    HttpGet = ""
+  Else
+    WScript.Echo "[VBS] HTTP GET status: " & x.status & " " & x.statusText
+    HttpGet = x.responseText
+  End If
+  On Error GoTo 0
 End Function
 
 Sub HttpPostJson(url, json)
-  Dim x: Set x = CreateObject("MSXML2.XMLHTTP")
+  On Error Resume Next
+  Dim x: Set x = CreateHTTP()
+  If x Is Nothing Then
+    Exit Sub
+  End If
+  Err.Clear
   x.Open "POST", url, False
   x.setRequestHeader "Content-Type", "application/json"
   x.Send json
+  If Err.Number <> 0 Then
+    WScript.Echo "[VBS] ERROR: HTTP POST failed: " & Err.Description & " (Error " & Err.Number & ")"
+  Else
+    WScript.Echo "[VBS] HTTP POST status: " & x.status & " " & x.statusText
+    If x.status >= 200 And x.status < 300 Then
+      WScript.Echo "[VBS] Registration successful!"
+    Else
+      WScript.Echo "[VBS] Registration returned status: " & x.status
+      WScript.Echo "[VBS] Response: " & Left(x.responseText, 200)
+    End If
+  End If
+  On Error GoTo 0
 End Sub
 
 Function JsonGetString(json, key)
@@ -826,6 +1120,7 @@ For support, contact your technician.
                 'connect.bat',
                 'register-session.ps1',
                 'register-session.vbs',
+                'netcheck.vbs',
                 'tightvnc',
                 'tightvnc64',
                 'mypal'
@@ -847,6 +1142,7 @@ For support, contact your technician.
             'connect.bat',
             'register-session.ps1',
             'register-session.vbs',
+            'netcheck.vbs',
             'tightvnc',
             'tightvnc64',
             'mypal'

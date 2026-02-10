@@ -6,7 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-- (Next release)
+### Added
+
+- **VNC/XP support path** — TightVNC reverse connection with auto-created sessions when no prior registration; VNC bridge buffers data until noVNC WebSocket connects; session lookup by IP plus single-pending fallback for proxy/NAT. Windows launcher v2.2: crash protection, verbose logging, goto-based batch (XP-safe), HTTP fallback URL in config and VBScript registration/netcheck.
+- **Bridge API for HTTP-only clients** — GET/POST /api/bridge/:sessionId/messages and GET /api/bridge/:sessionId/files, POST upload, GET file download. Enables chat and file transfer for XP/IE customers without Socket.io; SessionView uses bridge for file list and download in VNC-only sessions.
+- **Case delete** — DELETE /api/cases/:caseId and Delete button on Cases page with confirmation.
+- **SessionView VNC mode** — When VNC connects (no WebRTC), SessionView shows noVNC iframe; chat modal and file panel (bridge-backed) for VNC-only sessions; put-remote-file stored server-side when no helper.
+- **Widget dashboard navigation** — Widget cards can link to a route (linkTo); click navigates unless the click is on a button, link, or input. Active Sessions, Recent Activity, Devices, Templates, Statistics, Classic Dashboard widgets wired to appropriate pages.
+- **Support page and package download** — SUPPORT_URL for direct links and suggest/create origin. ZIP always regenerated on download; optional refresh=1. Content-Disposition with RFC 5987; IE download via iframe and completion cookie (dltoken). “Get latest version” checkbox on support page.
+- **IE support landing** — support-landing-ie.html and support-ie.html use ___HTTPBASE___; download progress and “Open Chat Window” link to xp-chat. noVNC loaded from /customer/novnc-bundle.js (ESM).
+- **Dashboard layout** — Active Sessions section moved above Registered Devices; search filters by session ID, hostname, customer name, machine name; devices show pending_session_id when present. Generate Package button moved into template card area on classic/dashboard.
+
+### Changed
+
+- **Package builder** — VBScript registration uses CreateHTTP() (ServerXMLHTTP then XMLHTTP), HTTP fallback URL for XP/TLS; netcheck.vbs tries primary then httpFallback; EscapeJson strips control chars; launcher opens chat URL (httpFallback/customer/xp-chat.html).
+- **Case report modal** — “Skip” button and wording that report is optional for billing.
+- **Chat in SessionView** — Chat available as modal and in overlay; header Chat button when connected.
 
 ---
 

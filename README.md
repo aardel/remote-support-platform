@@ -1,6 +1,6 @@
 # Remote Desktop Support Platform
 
-Browser-based remote support: technicians use a web dashboard to view and control user PCs via an Electron helper app. WebRTC for screen sharing, Socket.io for signaling, full mouse/keyboard control, two-panel file transfer, in-session chat, and clipboard paste to remote. Self-hosted; no port forwarding.
+Browser-based remote support: technicians use a web dashboard to view and control user PCs via an Electron helper app (or, for Windows XP/legacy, via VNC + noVNC). WebRTC for screen sharing, Socket.io for signaling, full mouse/keyboard control, two-panel file transfer, in-session chat, and clipboard paste to remote. Optional VNC path for legacy browsers with Bridge API for chat and files. Self-hosted; no port forwarding.
 
 ## Vision
 
@@ -29,6 +29,10 @@ npm run dev
 Server runs on `http://localhost:3000`
 
 See `QUICK_START.md` for detailed setup and testing instructions.
+
+### Tests
+
+From repo root: `npm test` runs a quick smoke check (health endpoint). Backend and frontend do not yet have full test suites; critical paths (auth, sessions, bridge API, VNC) are covered manually or via smoke. See `docs/SECURITY.md` for audit and `docs/DEPENDENCIES.md` for dependency status.
 
 ### Same-machine development (SSH)
 
@@ -76,6 +80,7 @@ Remote Desktop Server/
 - ✅ **Dashboard filters and sort** (sessions: status filter + sort by date/status/hostname; devices: sort by last seen/name/hostname)
 - ✅ **Self-hosted** (Node backend, React dashboard, Electron helper; no port forwarding)
 - ✅ **Helper builds** (GitHub Actions: Windows EXE, macOS DMG on push to main)
+- ✅ **Optional VNC/XP path** (TightVNC reverse connection + noVNC in browser; Bridge API for chat and file transfer when Electron/TLS not available)
 
 ## Technology Stack
 

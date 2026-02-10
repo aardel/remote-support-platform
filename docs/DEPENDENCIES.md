@@ -24,6 +24,6 @@ cd ../helper && npm install
 - For major upgrades (e.g. React, Express, Electron), check changelogs and test; document breaking changes in CHANGELOG.
 - Optional deps (e.g. robotjs): documented in `helper/README.md`; helper works with reduced functionality if missing.
 
-## Audit
+## Audit and outdated
 
-Run `npm audit` in root (and `frontend/` if needed). **Current (2025-02-08):** Root has 3 high (tar → @mapbox/node-pre-gyp → bcrypt); frontend has 2 moderate. Fix for root may require `npm audit fix --force` (bcrypt major upgrade — test auth after). See `docs/SECURITY.md` for practices and backlog.
+Run `npm audit` and `npm outdated` in root (and `frontend/` if needed). **Current (2025-02-10):** Root has 4 high (axios; tar → @mapbox/node-pre-gyp → bcrypt). `npm audit fix` fixes axios; tar/bcrypt may need `npm audit fix --force` (bcrypt 6.x breaking — test auth after). **Outdated (root):** archiver (6→7), axios (patch), bcrypt (5→6 major), dotenv, express (4→5 major), multer (1→2 major), pdfkit, redis, uuid. Prefer patch/minor upgrades without breaking changes unless planned. See `docs/SECURITY.md` for practices and backlog.

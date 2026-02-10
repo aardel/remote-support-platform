@@ -117,6 +117,34 @@ Project agents live in `.cursor/agents/`; when to run them is in `.cursor/skills
 - **Action:** Read `.cursor/skills/auto-run-agents/SKILL.md` and apply the Trigger → Agent mapping. For "put agents to work" / "agents suggest I approve", use the **agent-approval-workflow** skill (present todo list, then execute only accepted items). For "build frontend" / "restart backend" or after frontend/backend changes, run the **build-restart** agent (execute `npm run build` and/or `pm2 restart remote-support-backend` yourself).
 - **Do not skip** unless the user explicitly says not to run agents.
 
+## Debugging
+
+When fixing bugs, verify the fix actually works before moving on. If a fix doesn't resolve the issue, re-examine assumptions about the root cause rather than applying incremental patches. Specifically:
+
+1. Reproduce the issue and confirm the exact error before writing any fix
+2. Form a hypothesis about root cause — state it explicitly
+3. Add targeted logging/diagnostics to verify the hypothesis before changing code
+4. Only after confirming root cause, apply a single targeted fix
+5. If the fix doesn't work, go back to step 2 — do NOT stack patches
+
+## Code Quality Checks
+
+After making changes, scan for common issues before building:
+
+- Missing imports/requires
+- Hardcoded URLs that should use env vars or config
+- SSL/TLS certificate handling (XP clients can't do TLS 1.2+)
+- Windows XP compatibility in batch files (no parenthesized if/else, no `%VAR%.ext`) and VBScript (`ServerXMLHTTP` vs `XMLHTTP`)
+- Check for warnings in build output
+- Verify Socket.io event names match between emitter and listener
+- Ensure WebSocket upgrade handlers are properly registered
+
+## Platform-Specific Notes
+
+- **Windows XP**: Batch files must use goto-based flow (no parenthesized if/else). VBScript needs `ServerXMLHTTP` for timeout support. Cannot do TLS 1.2+ — needs HTTP fallback to Express port 3500.
+- **VNC Bridge**: Uses `noServer` mode on the Express HTTP server. WebSocket path is `/websockify`. VNC TCP listener on port 5500.
+- **noVNC**: ESM source served from `frontend/public/novnc/` (GitHub release, NOT npm — npm version is CJS only).
+
 ## Before Making Changes
 
 1. Read the relevant files before modifying — understand existing patterns

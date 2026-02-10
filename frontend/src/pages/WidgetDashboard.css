@@ -151,6 +151,12 @@
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   display: flex;
   flex-direction: column;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.widget-clickable:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 2px 8px rgba(37,99,235,0.12);
 }
 
 .widget-small .widget-body { min-height: 60px; }

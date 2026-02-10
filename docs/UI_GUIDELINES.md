@@ -13,7 +13,7 @@ Principles and backlog for the technician dashboard and session view. Goal: **mi
 ## Current layout (summary)
 
 - **Dashboard**: Two modes — **Widget dashboard** (default landing): customizable widget grid (Generate package, Active sessions, Registered devices, Helper templates, Stats, etc.) with drag-and-drop; **Classic dashboard**: single scroll with search, Devices, Generate/Templates, Active Sessions. Layout shell: header with “Generate Support Package”, hamburger sidebar (Dashboard, Sessions, Devices, Statistics, Helper Templates, Classic, Preferences). Search filters by session ID, hostname, device name; status filter and sort still in backlog.
-- **SessionView**: **Responsive header** — Row 1: session ID, status + connection timer, version, control badge (robotjs on/off), Files and Disconnect buttons. Row 2 (when connected): Monitor, Stream, Split view, Fullscreen. Breakpoints at 768px and 480px: tighter spacing, smaller type, “Files” label hidden on very small screens; session title truncates with ellipsis. Video area (single or split) and file-transfer modal (two-panel, remote file browser). The **Monitor** dropdown only enables displays that exist on the customer’s machine (helper sends `displayCount` in capabilities); options beyond that show “(not available)” and are disabled.
+- **SessionView**: **Responsive header** — Row 1: session ID, status + connection timer, version, control badge (robotjs on/off), Files and Disconnect buttons. Row 2 (when connected): Monitor, Stream, Split view, Fullscreen. Breakpoints at 768px and 480px: tighter spacing, smaller type, “Files” label hidden on very small screens; session title truncates with ellipsis. Video area (single or split) and file-transfer modal (two-panel, remote file browser). In **VNC mode** (no WebRTC), SessionView shows a noVNC iframe and uses the Bridge API for chat and file list/download. The **Monitor** dropdown only enables displays that exist on the customer’s machine (helper sends `displayCount` in capabilities); options beyond that show “(not available)” and are disabled.
 
 ### Split view (intended behavior)
 
@@ -55,4 +55,4 @@ Principles and backlog for the technician dashboard and session view. Goal: **mi
 - Dashboard: `frontend/src/pages/WidgetDashboard.jsx`, `ClassicDashboard.jsx`, `DevicesPage.jsx`, `SessionsPage.jsx`, `StatisticsPage.jsx`, `HelperTemplatesPage.jsx`; layout: `frontend/src/components/Layout.jsx`.
 - Session view: `frontend/src/pages/SessionView.jsx`, `SessionView.css` (responsive header: `.session-header`, `.session-header-main`, `.session-settings`; media queries at 768px, 480px).
 
-Last updated: 2025-02-08 (responsive session header, widget/classic dashboard, current page list)
+Last updated: 2025-02-10 (SessionView VNC mode, chat modal, Bridge file panel; widget linkTo; sessions above devices, search by customer/machine)

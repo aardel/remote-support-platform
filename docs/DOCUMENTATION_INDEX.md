@@ -1,6 +1,6 @@
 # Documentation Index
 
-Entry point for all project documentation. The app uses **WebRTC + Electron** for screen sharing and control; some older docs reference a VNC approach and are kept for reference only.
+Entry point for all project documentation. The app uses **WebRTC + Electron** for screen sharing and control. An **optional VNC path** (TightVNC reverse connection + noVNC in browser) supports Windows XP and legacy browsers; chat and file transfer for those sessions use the **Bridge API** (see API_AND_EVENTS.md). Older VNC-era docs in "Legacy / reference" are kept for reference only.
 
 ---
 
@@ -30,6 +30,13 @@ Entry point for all project documentation. The app uses **WebRTC + Electron** fo
 | **DEPENDENCIES.md** | Node version, package layout |
 | **SECURITY.md** | npm audit, security practices |
 | **CODE_REVIEW_NOTES.md** | Short code-review notes from agents (recent changes) |
+| **XP_BUNDLES.md** | Windows XP support package contents and flow (if present) |
+
+---
+
+## Optional: VNC/XP path
+
+For Windows XP or legacy browsers that cannot use the Electron helper or TLS 1.2+, the app supports a **VNC path**: customer runs a support package (ZIP with TightVNC + batch/VBS scripts), reverse-connects to the server; technician views via noVNC in SessionView. Chat and files use the Bridge API (HTTP). See **API_AND_EVENTS.md** (Bridge, vnc-ready/vnc-disconnected).
 
 ---
 

@@ -61,6 +61,16 @@ function CasesPage() {
     window.open(`/api/cases/${encodeURIComponent(caseId)}/pdf`, '_blank');
   };
 
+  const deleteCase = async (caseId) => {
+    if (!window.confirm('Delete this case report? This cannot be undone.')) return;
+    try {
+      await axios.delete(`/api/cases/${encodeURIComponent(caseId)}`);
+      setCases(prev => prev.filter(c => c.id !== caseId));
+    } catch (e) {
+      alert('Failed to delete case: ' + (e.response?.data?.error || e.message));
+    }
+  };
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -136,6 +146,7 @@ function CasesPage() {
                   </td>
                   <td className="actions-cell">
                     <button className="btn-sm btn-secondary" onClick={() => downloadPdf(c.id)}>PDF</button>
+                    <button className="btn-sm btn-danger" onClick={() => deleteCase(c.id)} style={{ marginLeft: 4 }}>Delete</button>
                   </td>
                 </tr>
               ))}

@@ -2,7 +2,7 @@
 
 Candidate features for the Remote Support Platform. Aligned with current stack (WebRTC, Electron, Socket.io). Prioritized by impact and fit. Informed by common remote-support tools (TeamViewer, AnyDesk: session recording, chat, unattended access, file transfer, multi-monitor).
 
-**Last updated:** 2026-02-08 (audit: connection approval, status tracking, helper reconnect stability, and file-browser hardening)
+**Last updated:** 2025-02-10 (VNC/XP path and Bridge API shipped; dashboard sessions above devices, widget linkTo, case delete)
 
 ---
 

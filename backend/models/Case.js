@@ -50,6 +50,11 @@ class Case {
         return result.rows[0] || null;
     }
 
+    static async deleteById(id) {
+        const result = await pool.query('DELETE FROM cases WHERE id = $1 RETURNING id', [id]);
+        return result.rows[0] || null;
+    }
+
     static async list({ status, q, deviceId, limit = 200 } = {}) {
         const conditions = [];
         const values = [];

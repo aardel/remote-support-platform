@@ -50,6 +50,18 @@ Single source of truth for REST routes and Socket.io events. Keep this in sync w
 | DELETE | /api/devices/:deviceId | Yes | Deregister device |
 | PATCH | /api/devices/:deviceId | Yes | Update device (customerName, machineName) |
 | POST | /api/devices/:deviceId/request | Yes | Request session for device |
+| **Cases** | | | |
+| GET | /api/cases | Yes | List cases (Online Cases page) |
+| POST | /api/cases | Yes | Create case (sessionId, deviceId, description, …) |
+| GET | /api/cases/:caseId | Yes | Get case by ID |
+| DELETE | /api/cases/:caseId | Yes | Delete case |
+| GET | /api/cases/:caseId/pdf | Yes | Export case report PDF |
+| **Bridge** (HTTP fallback for XP / VNC-only sessions) | | | |
+| GET | /api/bridge/:sessionId/messages | No | Get chat messages (query: since=timestamp) |
+| POST | /api/bridge/:sessionId/messages | No | Post message (body: message, sender?); server emits chat-message to room |
+| GET | /api/bridge/:sessionId/files | No | List files for session (query: direction?) |
+| GET | /api/bridge/:sessionId/files/:fileId/download | No | Download file |
+| POST | /api/bridge/:sessionId/files/upload | No | Upload file (multipart); server emits file-available to room |
 | **Preferences** | | | |
 | GET | /api/preferences | Yes | Get technician preferences (dashboard layout, session history retention) |
 | PUT | /api/preferences | Yes | Update preferences (body: dashboardLayout?, sessionHistoryRetentionDays?) |
@@ -87,7 +99,9 @@ All events are scoped by session: clients join `session-${sessionId}` via `join-
 | get-remote-file | Technician | Helper | sessionId, path, requestId | Read file on user PC |
 | get-remote-file-result | Helper | Technician | sessionId, requestId, content?, name?, error? | File content (base64) |
 | put-remote-file | Technician | Helper | sessionId, path, filename, content, requestId | Write file on user PC |
-| put-remote-file-result | Helper | Technician | sessionId, requestId, success, error? | Write result |
+| put-remote-file-result | Helper or Server | Technician | sessionId, requestId, success, error?; when server stored file (VNC-only): stored: true, fileId | Write result; if no helper, server stores and responds with stored: true |
+| vnc-ready | Server | Technician (session room) | sessionId | VNC connection established; SessionView switches to noVNC iframe |
+| vnc-disconnected | Server | Technician (session room) | sessionId | VNC connection closed |
 | switch-monitor | Technician (via HTTP then server) | Helper | sessionId, monitorIndex | Switch capture display |
 | file-available | Server | Helper | sessionId, id, downloadUrl, … | Notify file for download |
 | approval-response | Helper? | Server | sessionId, approved | User approval |
@@ -99,7 +113,8 @@ All events are scoped by session: clients join `session-${sessionId}` via `join-
 ## Frontend / Helper usage
 
 - **Dashboard**: GET /api/sessions, /api/devices, POST /api/sessions/:id/connect, POST /api/packages/generate, etc. Socket: join-session (technician), webrtc-answer, webrtc-ice-candidate, remote-mouse, remote-keyboard, set-stream-quality, list-remote-dir, get-remote-file, put-remote-file, and result events.
-- **SessionView**: Same socket events for active session; GET /api/files/session/:id, POST /api/files/upload, GET /api/monitors/session/:id/switch (POST).
+- **SessionView**: Same socket events for active session; GET /api/files/session/:id, POST /api/files/upload, GET /api/monitors/session/:id/switch (POST). For VNC-only sessions: vnc-ready, vnc-disconnected; GET /api/bridge/:sessionId/files and GET /api/bridge/:sessionId/files/:fileId/download for file list and download.
 - **Helper**: POST /api/sessions/assign, POST /api/sessions/register, Socket: join-session (helper), helper-capabilities (sessionId, capabilities: robotjs, platform, displayCount), webrtc-offer, webrtc-ice-candidate, receives remote-mouse, remote-keyboard, set-stream-quality, list-remote-dir, get-remote-file, put-remote-file, switch-monitor, file-available, technicians-present, technician-joined, technician-left (to show “Connected: Technician (Name)” list).
+- **XP / VNC-only (no Electron)**: POST /api/sessions/register, GET/POST /api/bridge/:sessionId/messages, GET /api/bridge/:sessionId/files, POST /api/bridge/:sessionId/files/upload, GET /api/bridge/:sessionId/files/:fileId/download. Chat and files via HTTP; technician uses noVNC iframe and SessionView file panel.
 
-Last updated: 2025-02-08
+Last updated: 2025-02-10

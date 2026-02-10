@@ -234,7 +234,7 @@
     <div class="container">
         <div class="logo-header">
             <img src="/logo.png" alt="Logo" onerror="this.style.display='none'" />
-            <h1>Remote Support</h1>
+            <h1>Lasercomb GmbH Support</h1>
         </div>
 
         <div id="loading" class="loading">Loading session...</div>
@@ -260,6 +260,10 @@
                     <select id="osSelect"></select>
                     <label for="packageSelect">Package:</label>
                     <select id="packageSelect"></select>
+                </div>
+                <div class="os-row" style="margin-top: 6px;">
+                    <label><input type="checkbox" id="refreshPackage" /> Get latest version (force refresh)</label>
+                    <span class="muted" style="font-size: 11px; margin-left: 8px;">Use this if the window closes too fast or you see an old script without [DEBUG] messages.</span>
                 </div>
             </div>
 
@@ -412,7 +416,8 @@
             var btn = document.getElementById('downloadBtn');
             var os = document.getElementById('osSelect').value;
             var osParam = selectedPackageType === 'zip' ? ('&os=' + encodeURIComponent(os)) : '';
-            btn.href = '/api/packages/download/' + sessionId + '?type=' + selectedPackageType + osParam;
+            var refreshParam = document.getElementById('refreshPackage') && document.getElementById('refreshPackage').checked ? '&refresh=1' : '';
+            btn.href = '/api/packages/download/' + sessionId + '?type=' + selectedPackageType + osParam + refreshParam;
 
             var run = document.getElementById('instructionsRun');
             if (selectedPackageType === 'exe') {
@@ -455,7 +460,34 @@
                     var url = window.URL.createObjectURL(blob);
                     var a = document.createElement('a');
                     a.href = url;
-                    a.download = href.split('/').pop();
+                    
+                    // Extract filename from Content-Disposition header, or construct it
+                    var filename = null;
+                    var contentDisposition = xhr.getResponseHeader('Content-Disposition');
+                    if (contentDisposition) {
+                        var filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                        if (filenameMatch && filenameMatch[1]) {
+                            filename = filenameMatch[1].replace(/['"]/g, '');
+                            // Handle RFC 5987 encoded filename (filename*=UTF-8''...)
+                            if (filename.startsWith("UTF-8''")) {
+                                filename = decodeURIComponent(filename.substring(7));
+                            }
+                        }
+                    }
+                    
+                    // Fallback: construct filename from sessionId and type/os
+                    if (!filename) {
+                        var urlParts = href.split('?')[0].split('/');
+                        var sessionIdFromUrl = urlParts[urlParts.length - 1];
+                        var urlParams = new URLSearchParams(href.split('?')[1] || '');
+                        var type = urlParams.get('type') || 'zip';
+                        var os = urlParams.get('os') || '';
+                        var osSuffix = (type === 'zip' && os) ? '-' + os : '';
+                        var ext = type === 'exe' ? '.exe' : (type === 'dmg' ? '.dmg' : '.zip');
+                        filename = 'support-helper-' + sessionIdFromUrl + osSuffix + ext;
+                    }
+                    
+                    a.download = filename;
                     document.body.appendChild(a);
                     a.click();
                     a.remove();

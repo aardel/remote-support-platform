@@ -44,6 +44,7 @@ function SessionView({ user }) {
   const [splitView, setSplitView] = useState(false);
   const [splitRatio, setSplitRatio] = useState(0.5);
   const [draggingSplit, setDraggingSplit] = useState(false);
+  const [vncMode, setVncMode] = useState(false); // true when session uses VNC (not WebRTC)
   const splitContainerRef = useRef(null);
   const videoAreaActiveRef = useRef(false); // true after user clicked video area → send keys to remote even if focus didn't move
   const technicianInfoRef = useRef({ id: 'technician', name: 'Technician' });
@@ -236,6 +237,25 @@ function SessionView({ user }) {
     newSocket.on('helper-capabilities', (data) => {
       console.log('Helper capabilities:', data.capabilities);
       setHelperCapabilities(data.capabilities);
+    });
+
+    // VNC-only sessions (e.g. Windows XP with TightVNC)
+    newSocket.on('vnc-ready', (data) => {
+      if (data.sessionId === sessionId) {
+        console.log('VNC connection ready — switching to noVNC mode');
+        setVncMode(true);
+        setConnected(true);
+        setStatus('Connected (VNC)');
+      }
+    });
+
+    newSocket.on('vnc-disconnected', (data) => {
+      if (data.sessionId === sessionId) {
+        console.log('VNC disconnected');
+        setVncMode(false);
+        setConnected(false);
+        setStatus('VNC disconnected');
+      }
     });
 
     newSocket.on('chat-message', (data) => {
@@ -469,12 +489,41 @@ function SessionView({ user }) {
 
   // Request remote directory listing when file modal opens, path changes, or refresh
   useEffect(() => {
-    if (!socket || !sessionId || !filesOpen) return;
+    if (!sessionId || !filesOpen) return;
+
+    // VNC-only sessions: fetch files from bridge API instead of Socket.io
+    if (vncMode) {
+      setRemoteLoading(true);
+      setRemoteError(null);
+      const apiBase = window.location.origin;
+      fetch(`${apiBase}/api/bridge/${sessionId}/files`)
+        .then(r => r.json())
+        .then(data => {
+          const entries = (data.files || []).map(f => ({
+            name: f.name,
+            path: f.id,
+            size: f.size,
+            isDirectory: false,
+            mtime: f.uploadedAt ? new Date(f.uploadedAt).toISOString() : null,
+            _bridgeFileId: f.id,
+            _direction: f.direction
+          }));
+          setRemoteEntries(entries);
+          setRemoteLoading(false);
+        })
+        .catch(err => {
+          setRemoteError('Failed to load files: ' + err.message);
+          setRemoteLoading(false);
+        });
+      return;
+    }
+
+    if (!socket) return;
     setRemoteLoading(true);
     setRemoteError(null);
     const reqId = ++remoteRequestIdRef.current;
     socket.emit('list-remote-dir', { sessionId, path: remotePath, requestId: reqId });
-  }, [socket, sessionId, filesOpen, remotePath, remoteRefreshKey]);
+  }, [socket, sessionId, filesOpen, remotePath, remoteRefreshKey, vncMode]);
 
   function createPeerConnection(socket, sessionId) {
     const rtcConfig = {
@@ -930,7 +979,7 @@ function SessionView({ user }) {
             </div>
 
             <div className="case-modal-body">
-              <label className="case-label">Problem description (required)</label>
+              <label className="case-label">Problem description</label>
               <textarea
                 className="case-textarea"
                 value={caseDescription}
@@ -969,6 +1018,19 @@ function SessionView({ user }) {
               {caseError && <div className="case-error">{caseError}</div>}
 
               <div className="case-actions">
+                <button
+                  type="button"
+                  className="btn-sm btn-secondary"
+                  onClick={() => {
+                    setCaseModalOpen(false);
+                    if (disconnectAfterReportRef.current) {
+                      disconnectAfterReportRef.current = false;
+                      navigate('/sessions');
+                    }
+                  }}
+                >
+                  Skip
+                </button>
                 {createdCase?.id && (
                   <button
                     type="button"
@@ -984,7 +1046,7 @@ function SessionView({ user }) {
               </div>
 
               <div className="case-hint">
-                This report is required after a disconnect and will be attached to the device record for billing.
+                Fill out this report to attach it to the device record for billing, or skip if not needed.
               </div>
             </div>
           </div>
@@ -1018,6 +1080,18 @@ function SessionView({ user }) {
             )}
           </div>
           <div className="session-actions">
+            {connected && (
+              <button
+                type="button"
+                className={`files-header-btn ${chatOpen ? 'open' : ''}`}
+                onClick={() => { setChatOpen(!chatOpen); setChatUnread(0); }}
+                title="Chat with customer"
+              >
+                <span className="session-btn-icon">💬</span>
+                <span className="session-btn-label">Chat</span>
+                {chatUnread > 0 && <span className="header-badge">{chatUnread}</span>}
+              </button>
+            )}
             <button
               type="button"
               className={`files-header-btn ${filesOpen ? 'open' : ''}`}
@@ -1026,7 +1100,6 @@ function SessionView({ user }) {
             >
               <span className="session-btn-icon">📁</span>
               <span className="session-btn-label">Files</span>
-              <span className="session-btn-caret">{filesOpen ? '▼' : '▶'}</span>
             </button>
             {connected && (
               <button type="button" className="files-header-btn" onClick={pasteFromClipboard} title="Paste your clipboard on the remote computer">
@@ -1108,6 +1181,37 @@ function SessionView({ user }) {
       )}
 
       <div className={`video-container ${splitView ? 'video-container-split' : ''}`} ref={splitContainerRef}>
+        {chatOpen && (
+          <div className="chat-modal-overlay" onClick={() => setChatOpen(false)} role="dialog" aria-modal="true" aria-label="Chat">
+            <div className="chat-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="chat-modal-header">
+                <h3 className="chat-modal-title">Chat</h3>
+                <button type="button" className="chat-modal-close" onClick={() => setChatOpen(false)} aria-label="Close">×</button>
+              </div>
+              <div className="chat-modal-messages">
+                {chatMessages.length === 0 && <div className="chat-modal-empty">No messages yet.</div>}
+                {chatMessages.map((m, i) => (
+                  <div key={i} className={`chat-modal-msg ${m.role === 'technician' ? 'from-tech' : 'from-user'}`}>
+                    <span className="chat-modal-sender">{m.sender || m.role}</span>
+                    <span className="chat-modal-text">{m.message}</span>
+                  </div>
+                ))}
+                <div ref={chatEndRef} />
+              </div>
+              <div className="chat-modal-input">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') sendChatMessage(); }}
+                  placeholder="Type a message..."
+                  autoFocus
+                />
+                <button type="button" onClick={sendChatMessage}>Send</button>
+              </div>
+            </div>
+          </div>
+        )}
         {filesOpen && (
           <div className="files-modal-overlay" onClick={() => setFilesOpen(false)} role="dialog" aria-modal="true" aria-label="File transfer">
             <div className="files-modal" onClick={(e) => e.stopPropagation()}>
@@ -1143,21 +1247,40 @@ function SessionView({ user }) {
                 </div>
                 <div className="files-panel-divider" />
                 <div className="files-panel-right">
-                  <div className="files-panel-title">Remote computer</div>
+                  <div className="files-panel-title">{vncMode ? 'Files from customer' : 'Remote computer'}</div>
                   <div className="files-toolbar files-remote-toolbar">
-                    <button type="button" className="files-up-btn" onClick={goRemoteUp} disabled={!remotePath} title="Up">↑ Up</button>
+                    {!vncMode && <button type="button" className="files-up-btn" onClick={goRemoteUp} disabled={!remotePath} title="Up">↑ Up</button>}
                     <button type="button" className="files-refresh-btn" onClick={() => setRemoteRefreshKey((k) => k + 1)} title="Refresh">Refresh</button>
-                    <button
-                      type="button"
-                      className="files-receive-btn"
-                      onClick={receiveSelectedFromRemote}
-                      disabled={receiving || selectedRemotePaths.size === 0}
-                      title="Download selected from remote"
-                    >
-                      {receiving ? 'Receiving…' : '← Receive'}
-                    </button>
+                    {!vncMode && (
+                      <button
+                        type="button"
+                        className="files-receive-btn"
+                        onClick={receiveSelectedFromRemote}
+                        disabled={receiving || selectedRemotePaths.size === 0}
+                        title="Download selected from remote"
+                      >
+                        {receiving ? 'Receiving…' : '← Receive'}
+                      </button>
+                    )}
+                    {vncMode && selectedRemotePaths.size > 0 && (
+                      <button
+                        type="button"
+                        className="files-receive-btn"
+                        onClick={() => {
+                          for (const fileId of selectedRemotePaths) {
+                            const a = document.createElement('a');
+                            a.href = `/api/bridge/${sessionId}/files/${fileId}/download`;
+                            a.download = '';
+                            a.click();
+                          }
+                        }}
+                        title="Download selected files"
+                      >
+                        ← Download
+                      </button>
+                    )}
                   </div>
-                  <div className="files-remote-path" title={remotePath || 'Home'}>{remotePath || 'Home'}</div>
+                  {!vncMode && <div className="files-remote-path" title={remotePath || 'Home'}>{remotePath || 'Home'}</div>}
                   {remoteError && <div className="files-remote-error">{remoteError}</div>}
                   <div className="file-browser-table-wrap">
                     {remoteLoading ? (
@@ -1270,6 +1393,19 @@ function SessionView({ user }) {
               />
             </div>
           </>
+        ) : vncMode ? (
+          <div className="video-focus-wrapper" style={{ width: '100%', height: '100%' }}>
+            <iframe
+              src={`/customer/novnc.html?session=${sessionId}`}
+              style={{
+                width: '100%',
+                height: '100%',
+                border: 'none',
+                backgroundColor: '#000'
+              }}
+              title="VNC Remote Screen"
+            />
+          </div>
         ) : (
           <div
             ref={videoWrapperRef}
@@ -1368,41 +1504,14 @@ function SessionView({ user }) {
               </label>
             </div>
             <div className="overlay-divider" />
-            <div className="overlay-section">
-              <button type="button" className={`overlay-chat-toggle ${chatOpen ? 'open' : ''}`} onClick={() => setChatOpen(!chatOpen)}>
+            <div className="overlay-section overlay-actions-row">
+              <button type="button" className="overlay-btn-files" onClick={() => { setChatOpen(true); setChatUnread(0); setOverlayOpen(false); }}>
                 💬 Chat {chatUnread > 0 && <span className="overlay-badge">{chatUnread}</span>}
               </button>
-            </div>
-            {chatOpen && (
-              <div className="overlay-chat">
-                <div className="overlay-chat-messages">
-                  {chatMessages.length === 0 && <div className="overlay-chat-empty">No messages yet.</div>}
-                  {chatMessages.map((m, i) => (
-                    <div key={i} className={`overlay-chat-msg ${m.role === 'technician' ? 'from-tech' : 'from-user'}`}>
-                      <span className="overlay-chat-sender">{m.sender || m.role}</span>
-                      <span className="overlay-chat-text">{m.message}</span>
-                    </div>
-                  ))}
-                  <div ref={chatEndRef} />
-                </div>
-                <div className="overlay-chat-input">
-                  <input
-                    type="text"
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') sendChatMessage(); }}
-                    placeholder="Type a message..."
-                  />
-                  <button type="button" onClick={sendChatMessage}>Send</button>
-                </div>
-              </div>
-            )}
-            <div className="overlay-divider" />
-            <div className="overlay-section">
-              <button type="button" className="overlay-btn-files" onClick={() => { setFilesOpen(!filesOpen); setOverlayOpen(false); }}>
+              <button type="button" className="overlay-btn-files" onClick={() => { setFilesOpen(true); setOverlayOpen(false); }}>
                 📁 Files
               </button>
-              <button type="button" className="overlay-btn-files" onClick={pasteFromClipboard} title="Paste your clipboard on the remote computer">
+              <button type="button" className="overlay-btn-files" onClick={() => { pasteFromClipboard(); setOverlayOpen(false); }}>
                 📋 Paste
               </button>
             </div>

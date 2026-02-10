@@ -1,5 +1,6 @@
 const { Server } = require('socket.io');
 const SessionService = require('./sessionService');
+const sessionStore = require('./sessionStore');
 
 async function safeUpdateSession(sessionId, updates) {
     // Session schema can vary across deployments; tolerate missing columns by retrying without them.
@@ -41,6 +42,8 @@ class WebSocketHandler {
 
         // Cache offers and ICE candidates for late-joining technicians
         this.pendingOffers = new Map(); // sessionId -> { offer, from, iceCandidates }
+
+        this.vncBridge = null; // set via setVncBridge() after construction
 
         this.setupHandlers();
     }
@@ -115,6 +118,8 @@ class WebSocketHandler {
                 if (helperGone && techGone) {
                     this.sessionConnections.delete(sessionId);
                     this.pendingOffers.delete(sessionId);
+                    // Note: don't cleanup sessionStore here — XP clients may still
+                    // be polling. sessionStore has its own 24h TTL expiry.
                 }
             };
 
@@ -192,6 +197,15 @@ class WebSocketHandler {
                         pending.iceCandidates.forEach(ice => {
                             socket.emit('webrtc-ice-candidate', ice);
                         });
+                    }
+                }
+
+                // If no WebRTC offer but a VNC connection exists, notify technician to use noVNC
+                if (role === 'technician' && !this.pendingOffers.has(sessionId) && this.vncBridge) {
+                    const vncConn = this.vncBridge.getVNCConnection(sessionId);
+                    if (vncConn && !vncConn.destroyed) {
+                        console.log(`[VNC] Session ${sessionId} has active VNC connection, sending vnc-ready to technician`);
+                        socket.emit('vnc-ready', { sessionId });
                     }
                 }
             });
@@ -415,6 +429,30 @@ class WebSocketHandler {
             });
             socket.on('put-remote-file', (data) => {
                 const { sessionId } = data;
+                // If no helper connected (VNC-only session), store file server-side
+                const conn = this.sessionConnections.get(sessionId);
+                if (!conn || !conn.helper) {
+                    try {
+                        const fileRecord = sessionStore.addFileFromBase64(sessionId, {
+                            filename: data.filename,
+                            content: data.content
+                        });
+                        socket.emit('put-remote-file-result', {
+                            sessionId,
+                            requestId: data.requestId,
+                            success: true,
+                            stored: true,
+                            fileId: fileRecord.id
+                        });
+                    } catch (err) {
+                        socket.emit('put-remote-file-result', {
+                            sessionId,
+                            requestId: data.requestId,
+                            error: err.message
+                        });
+                    }
+                    return;
+                }
                 socket.to(`session-${sessionId}`).emit('put-remote-file', data);
             });
 
@@ -433,9 +471,11 @@ class WebSocketHandler {
             });
 
             // Chat messages: forward to session room with timestamp
+            // Also store in sessionStore so HTTP-polling clients (XP) can retrieve them
             socket.on('chat-message', (data) => {
                 const { sessionId } = data;
                 const msg = { ...data, timestamp: data.timestamp || Date.now() };
+                sessionStore.addMessage(sessionId, msg);
                 socket.to(`session-${sessionId}`).emit('chat-message', msg);
             });
 
@@ -532,6 +572,10 @@ class WebSocketHandler {
                 }
             });
         });
+    }
+
+    setVncBridge(bridge) {
+        this.vncBridge = bridge;
     }
 
     getIO() {

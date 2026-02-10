@@ -132,7 +132,7 @@ router.post('/generate', requireAuth, async (req, res) => {
             technicianId
         );
         
-        const directLink = `${process.env.SERVER_URL || 'http://localhost:3000'}/support/${sessionId}`;
+        const directLink = `${process.env.SUPPORT_URL || process.env.SERVER_URL || 'http://localhost:3000'}/support/${sessionId}`;
 
         // Broadcast to all dashboards so other technicians see it
         const io = req.app.get('io');
@@ -181,6 +181,7 @@ router.get('/download/:sessionId', async (req, res) => {
         const { sessionId } = req.params;
         const type = (req.query.type || 'zip').toString().toLowerCase();
         const os = (req.query.os || '').toString().toLowerCase() || null;
+        const refresh = (req.query.refresh || '').toString().toLowerCase() === '1' || (req.query.refresh || '').toString().toLowerCase() === 'true';
 
         const SessionService = require('../services/sessionService');
         const session = await SessionService.getSession(sessionId);
@@ -195,12 +196,16 @@ router.get('/download/:sessionId', async (req, res) => {
 
         let packagePath = await packageBuilder.getPackagePath(sessionId, type, os);
 
-        // If package doesn't exist, generate it
-        if (!packagePath && type === 'zip') {
-            console.log(`Package not found for session ${sessionId} (os=${os || 'any'}), generating...`);
+        // ZIP packages are always regenerated so users get the latest script
+        // templates (e.g. XP-safe batch fixes). The text files are tiny and
+        // bundle copies are idempotent, so this is cheap.
+        if (type === 'zip') {
             const technicianId = session.technician_id || session.technicianId;
+            const zipPath = packageBuilder.getZipPath(sessionId, packageBuilder.normalizeZipOs(os));
+            try {
+                if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
+            } catch (_) {}
             await packageBuilder.buildPackage(sessionId, technicianId);
-            // Generate a filtered ZIP for this OS selection.
             await packageBuilder.createZipPackage(path.join(packageBuilder.packagesDir, sessionId), sessionId, { os });
             packagePath = await packageBuilder.getPackagePath(sessionId, type, os);
 
@@ -214,6 +219,8 @@ router.get('/download/:sessionId', async (req, res) => {
         }
 
         const filename = packageBuilder.getDownloadName(sessionId, type, os);
+        // Escape filename for Content-Disposition header (RFC 5987)
+        const escapedFilename = filename.replace(/"/g, '\\"').replace(/[\r\n]/g, '');
 
         // For EXE/DMG, embed session ID by replacing placeholder
         if (type === 'exe' || type === 'dmg') {
@@ -237,16 +244,30 @@ router.get('/download/:sessionId', async (req, res) => {
 
             const contentType = type === 'exe' ? 'application/x-msdownload' : 'application/x-apple-diskimage';
             res.setHeader('Content-Type', contentType);
-            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            res.setHeader('Content-Disposition', `attachment; filename="${escapedFilename}"`);
             res.setHeader('Content-Length', modified.length);
             res.send(modified);
         } else {
-            res.download(packagePath, filename, (err) => {
-                if (err) {
-                    console.error('Error sending file:', err);
-                    if (!res.headersSent) {
-                        res.status(500).json({ error: 'Error downloading file' });
-                    }
+            // For ZIP files, set headers explicitly to ensure correct filename
+            const stats = fs.statSync(packagePath);
+            res.setHeader('Content-Type', 'application/zip');
+            // Discourage caching so users get latest launcher (e.g. verbose logging, persistent window)
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+            res.setHeader('Pragma', 'no-cache');
+            // Use both filename and filename* (RFC 5987) for better browser compatibility
+            res.setHeader('Content-Disposition', `attachment; filename="${escapedFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+            res.setHeader('Content-Length', stats.size);
+            // Set cookie so IE iframe-based downloads can detect completion
+            const dlToken = req.query.dltoken;
+            if (dlToken) {
+                res.cookie('downloadComplete', dlToken, { path: '/', httpOnly: false });
+            }
+            const fileStream = fs.createReadStream(packagePath);
+            fileStream.pipe(res);
+            fileStream.on('error', (err) => {
+                console.error('Error streaming file:', err);
+                if (!res.headersSent) {
+                    res.status(500).json({ error: 'Error downloading file' });
                 }
             });
         }

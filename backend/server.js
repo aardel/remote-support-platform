@@ -82,9 +82,24 @@ app.use('/api/websocket', require('./routes/websocket'));
 app.use('/api/preferences', require('./routes/preferences'));
 app.use('/api/statistics', require('./routes/statistics'));
 app.use('/api/whats-new', require('./routes/whatsNew'));
+app.use('/api/bridge', require('./routes/sessionBridge'));
 
 // Customer support page route (download page with instructions)
 app.get(['/support', '/support/'], (req, res) => {
+    const ua = String(req.headers['user-agent'] || '').toLowerCase();
+    const isIE = ua.includes('msie') || ua.includes('trident/');
+    if (isIE) {
+        try {
+            const expressPort = process.env.PORT || 3500;
+            const serverHostname = req.hostname || req.headers.host?.split(':')[0] || 'localhost';
+            const httpBase = `http://${serverHostname}:${expressPort}`;
+            const p = path.join(__dirname, '../frontend/public/support-landing-ie.html');
+            const html = fs.readFileSync(p, 'utf8')
+                .replace(/___HTTPBASE___/g, httpBase);
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            return res.send(html);
+        } catch (_) {}
+    }
     res.sendFile(path.join(__dirname, '../frontend/public/support-landing.html'));
 });
 
@@ -94,8 +109,13 @@ app.get('/support/:sessionId', (req, res) => {
     if (isIE) {
         // Serve a minimal page that works on IE (XP-era), with static links.
         try {
+            const expressPort = process.env.PORT || 3500;
+            const serverHostname = req.hostname || req.headers.host?.split(':')[0] || 'localhost';
+            const httpBase = `http://${serverHostname}:${expressPort}`;
             const p = path.join(__dirname, '../frontend/public/support-ie.html');
-            const html = fs.readFileSync(p, 'utf8').replace(/___SESSID___/g, req.params.sessionId);
+            const html = fs.readFileSync(p, 'utf8')
+                .replace(/___SESSID___/g, req.params.sessionId)
+                .replace(/___HTTPBASE___/g, httpBase);
             res.setHeader('Content-Type', 'text/html; charset=utf-8');
             return res.send(html);
         } catch (_) {
@@ -144,7 +164,9 @@ app.set('approvalHandler', approvalHandler);
 
 // Start VNC Bridge
 const vncBridge = new VNCBridge(server);
+vncBridge.setIo(io);
 vncBridge.start();
+wsHandler.setVncBridge(vncBridge);
 
 // Start Cleanup Service
 const CleanupService = require('./services/cleanup');

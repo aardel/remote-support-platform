@@ -15,13 +15,13 @@ import './WidgetDashboard.css';
 
 const WIDGET_TYPES = {
   generate:   { label: 'Generate Package',   component: GeneratePackageWidget, defaultSize: 'medium' },
-  sessions:   { label: 'Active Sessions',    component: ActiveSessionsWidget,  defaultSize: 'medium' },
-  activity:   { label: 'Recent Activity',    component: RecentActivityWidget,  defaultSize: 'medium' },
-  devices:    { label: 'Registered Devices',  component: RegisteredDevicesWidget, defaultSize: 'medium' },
-  templates:  { label: 'Helper Templates',   component: HelperTemplatesWidget, defaultSize: 'small' },
-  stats:      { label: 'Statistics Summary', component: StatsSummaryWidget,    defaultSize: 'small' },
+  sessions:   { label: 'Active Sessions',    component: ActiveSessionsWidget,  defaultSize: 'medium', linkTo: '/sessions' },
+  activity:   { label: 'Recent Activity',    component: RecentActivityWidget,  defaultSize: 'medium', linkTo: '/sessions' },
+  devices:    { label: 'Registered Devices',  component: RegisteredDevicesWidget, defaultSize: 'medium', linkTo: '/devices' },
+  templates:  { label: 'Helper Templates',   component: HelperTemplatesWidget, defaultSize: 'small', linkTo: '/helper-templates' },
+  stats:      { label: 'Statistics Summary', component: StatsSummaryWidget,    defaultSize: 'small', linkTo: '/statistics' },
   quickConnect: { label: 'Quick Connect',    component: QuickConnectWidget,    defaultSize: 'small' },
-  classic:    { label: 'Classic Dashboard',  component: ClassicDashboardWidget, defaultSize: 'small' },
+  classic:    { label: 'Classic Dashboard',  component: ClassicDashboardWidget, defaultSize: 'small', linkTo: '/dashboard/classic' },
 };
 
 const DEFAULT_LAYOUT = [
@@ -182,9 +182,10 @@ function WidgetDashboard() {
         <SortableContext items={visibleWidgets.map(w => w.id)} strategy={verticalListSortingStrategy}>
           <div className="wd-grid">
             {visibleWidgets.map(w => {
-              const WidgetComp = WIDGET_TYPES[w.type]?.component;
+              const widgetDef = WIDGET_TYPES[w.type];
+              const WidgetComp = widgetDef?.component;
               if (!WidgetComp) return null;
-              const props = { size: w.size };
+              const props = { size: w.size, linkTo: widgetDef.linkTo };
               if (w.type === 'generate') props.onGenerate = openGenerate;
               return editing ? (
                 <SortableWidget key={w.id} id={w.id}>

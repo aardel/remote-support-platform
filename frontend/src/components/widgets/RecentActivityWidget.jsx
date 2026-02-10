@@ -12,7 +12,7 @@ function daysLeft(expiresAt) {
   return days;
 }
 
-function RecentActivityWidget({ size }) {
+function RecentActivityWidget({ size, linkTo }) {
   const [sessions, setSessions] = useState([]);
   const navigate = useNavigate();
   const limit = size === 'large' ? 7 : 5;
@@ -29,7 +29,7 @@ function RecentActivityWidget({ size }) {
   };
 
   return (
-    <WidgetCard title="Recent Activity" size={size}>
+    <WidgetCard title="Recent Activity" size={size} linkTo={linkTo}>
       {sessions.length === 0 ? (
         <p className="widget-empty">No recent sessions.</p>
       ) : (

@@ -34,8 +34,10 @@ npm run build
 |-----------------|-----------|
 | Add/change an API route | `backend/routes/` and mount in `backend/server.js` |
 | Add/change a Socket.io event | `backend/services/websocketHandler.js`; then frontend + helper |
-| Change dashboard (widget/classic, sessions, devices, packages) | `frontend/src/pages/WidgetDashboard.jsx`, `ClassicDashboard.jsx`, `DevicesPage.jsx`, `SessionsPage.jsx`, etc. |
-| Change session view (video, files, controls) | `frontend/src/pages/SessionView.jsx` |
+| Bridge API (XP/VNC chat and files) | `backend/routes/sessionBridge.js`, `backend/services/sessionStore.js`; SessionView uses `/api/bridge/:sessionId/...` in VNC mode |
+| VNC path (noVNC, auto-session, mapping) | `backend/services/vncBridge.js`, `backend/server.js` (support routes); `frontend/public/novnc.html`, support-ie.html |
+| Change dashboard (widget/classic, sessions, devices, packages) | `frontend/src/pages/WidgetDashboard.jsx`, `ClassicDashboard.jsx`, `Dashboard.jsx`, `SessionsPage.jsx`, etc. |
+| Change session view (video, files, controls, VNC iframe) | `frontend/src/pages/SessionView.jsx` |
 | Change helper app (capture, IPC, socket) | `helper/src/main.js`, `renderer/renderer.js`, `preload.js` |
 | Update API/event contract doc | `docs/API_AND_EVENTS.md` |
 | Bump version / keep versions in sync | Edit `version` in root `package.json`, then run `npm run version:sync`. See [docs/VERSIONING.md](docs/VERSIONING.md). |

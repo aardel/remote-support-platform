@@ -4,7 +4,7 @@
 
 Run `npm audit` in the repo root (and in `frontend/` and `helper/` if you add scripts there). Address **high** and **critical** before release.
 
-**Last run:** 2025-02-08 — Root/frontend: 2 moderate (typical in Vite/React deps). Backlog: run `npm audit` in root and `frontend/` before release; address high/critical. Mitigation for moderate may require:
+**Last run:** 2025-02-10 — Root: **4 high** (axios DoS via __proto__ in mergeConfig; tar/bcrypt chain — tar path sanitization and related issues). Run `npm audit fix` to fix axios; tar/bcrypt may require `npm audit fix --force` (bcrypt 6.x is breaking — re-test auth after). Address high/critical before release.
 
 ```bash
 npm audit fix

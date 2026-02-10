@@ -103,6 +103,17 @@ router.get('/:caseId', requireAuth, async (req, res) => {
     }
 });
 
+// Delete a case
+router.delete('/:caseId', requireAuth, async (req, res) => {
+    try {
+        const deleted = await Case.deleteById(req.params.caseId);
+        if (!deleted) return res.status(404).json({ error: 'Case not found' });
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // Export case report PDF
 router.get('/:caseId/pdf', requireAuth, async (req, res) => {
     try {

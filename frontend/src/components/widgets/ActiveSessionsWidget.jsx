@@ -12,7 +12,7 @@ function daysLeft(expiresAt) {
   return days;
 }
 
-function ActiveSessionsWidget({ size }) {
+function ActiveSessionsWidget({ size, linkTo }) {
   const [sessions, setSessions] = useState([]);
   const navigate = useNavigate();
   const limit = size === 'large' ? 5 : size === 'medium' ? 3 : 0;
@@ -29,7 +29,7 @@ function ActiveSessionsWidget({ size }) {
   };
 
   return (
-    <WidgetCard title="Active Sessions" size={size}>
+    <WidgetCard title="Active Sessions" size={size} linkTo={linkTo}>
       <div className="widget-stat">{sessions.length}</div>
       {limit > 0 && sessions.slice(0, limit).map(s => {
         const sid = s.session_id || s.sessionId;

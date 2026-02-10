@@ -31,7 +31,7 @@ router.get('/suggest', async (req, res) => {
         `;
         const result = await pool.query(query, [ip]);
 
-        const origin = `${req.protocol}://${req.get('host')}`;
+        const origin = process.env.SUPPORT_URL || `${req.protocol}://${req.get('host')}`;
         const suggestions = result.rows.map(row => {
             const sid = row.session_id;
             return {
@@ -72,7 +72,7 @@ router.post('/create', async (req, res) => {
             return res.status(500).json({ error: 'Session ID not found in session object' });
         }
 
-        const origin = `${req.protocol}://${req.get('host')}`;
+        const origin = process.env.SUPPORT_URL || `${req.protocol}://${req.get('host')}`;
         const directLink = `${origin}/support/${encodeURIComponent(sessionId)}`;
         const downloadUrl = `${origin}/api/packages/download/${encodeURIComponent(sessionId)}?type=zip`;
 

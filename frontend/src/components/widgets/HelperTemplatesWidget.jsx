@@ -4,7 +4,7 @@ import axios from 'axios';
 import io from 'socket.io-client';
 import WidgetCard from './WidgetCard';
 
-function HelperTemplatesWidget({ size }) {
+function HelperTemplatesWidget({ size, linkTo }) {
   const [status, setStatus] = useState(null);
   const [isNew, setIsNew] = useState(false);
 
@@ -60,6 +60,7 @@ function HelperTemplatesWidget({ size }) {
         </span>
       }
       size={size}
+      linkTo={linkTo}
     >
       <div className="widget-row">
         <span>EXE</span>

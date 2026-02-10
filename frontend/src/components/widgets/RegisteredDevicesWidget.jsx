@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import axios from 'axios';
 import WidgetCard from './WidgetCard';
 
-function RegisteredDevicesWidget({ size }) {
+function RegisteredDevicesWidget({ size, linkTo }) {
   const [devices, setDevices] = useState([]);
   const limit = size === 'large' ? 5 : size === 'medium' ? 3 : 0;
 
@@ -12,7 +12,7 @@ function RegisteredDevicesWidget({ size }) {
   }, []);
 
   return (
-    <WidgetCard title="Registered Devices" size={size}>
+    <WidgetCard title="Registered Devices" size={size} linkTo={linkTo}>
       <div className="widget-stat">{devices.length}</div>
       {limit > 0 && devices.slice(0, limit).map(d => (
         <div key={d.device_id} className="widget-row">
