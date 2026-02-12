@@ -37,9 +37,6 @@
         "dmg"
       ]
     },
-    "npmRebuild": false,
-    "asarUnpack": [
-      "**/robotjs/**/*"
-    ]
+    "npmRebuild": true
   }
 }
