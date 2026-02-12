@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../config/database');
 const SessionService = require('../services/sessionService');
+const urlShortener = require('../services/urlShortener');
 
 function getClientIp(req) {
     const forwarded = req.headers['x-forwarded-for'];
@@ -34,6 +35,14 @@ router.get('/suggest', async (req, res) => {
         const origin = process.env.SUPPORT_URL || `${req.protocol}://${req.get('host')}`;
         const suggestions = result.rows.map(row => {
             const sid = row.session_id;
+            const fullSupportUrl = `${origin}/support/${encodeURIComponent(sid)}`;
+            const fullDownloadUrl = `${origin}/api/packages/download/${encodeURIComponent(sid)}?type=zip`;
+            
+            // Generate short URLs (expires when session expires)
+            const expiresIn = row.expires_at ? Math.max(0, Math.floor((new Date(row.expires_at).getTime() - Date.now()) / 1000 / 60)) : 20 * 24 * 60;
+            const shortCode = urlShortener.createShortUrl(fullSupportUrl, expiresIn);
+            const shortDownloadCode = urlShortener.createShortUrl(fullDownloadUrl, expiresIn);
+            
             return {
                 sessionId: sid,
                 status: row.status,
@@ -46,8 +55,10 @@ router.get('/suggest', async (req, res) => {
                 hostname: row.hostname,
                 os: row.os,
                 lastSeen: row.last_seen,
-                supportUrl: `${origin}/support/${encodeURIComponent(sid)}`,
-                downloadUrl: `${origin}/api/packages/download/${encodeURIComponent(sid)}?type=zip`
+                supportUrl: fullSupportUrl,
+                shortUrl: `${origin}/s/${shortCode}`,
+                downloadUrl: fullDownloadUrl,
+                shortDownloadUrl: `${origin}/s/${shortDownloadCode}`
             };
         });
 
@@ -75,6 +86,13 @@ router.post('/create', async (req, res) => {
         const origin = process.env.SUPPORT_URL || `${req.protocol}://${req.get('host')}`;
         const directLink = `${origin}/support/${encodeURIComponent(sessionId)}`;
         const downloadUrl = `${origin}/api/packages/download/${encodeURIComponent(sessionId)}?type=zip`;
+        
+        // Generate short URLs (expires when session expires, default 20 days)
+        const expiresInMinutes = ttlDays * 24 * 60;
+        const shortCode = urlShortener.createShortUrl(directLink, expiresInMinutes);
+        const shortDownloadCode = urlShortener.createShortUrl(downloadUrl, expiresInMinutes);
+        const shortLink = `${origin}/s/${shortCode}`;
+        const shortDownloadUrl = `${origin}/s/${shortDownloadCode}`;
 
         const io = req.app.get('io');
         if (io) {
@@ -84,7 +102,9 @@ router.post('/create', async (req, res) => {
                 technician_id: null,
                 created_at: new Date().toISOString(),
                 link: directLink,
-                downloadUrl
+                shortLink,
+                downloadUrl,
+                shortDownloadUrl
             });
         }
 
@@ -92,7 +112,9 @@ router.post('/create', async (req, res) => {
             success: true,
             sessionId,
             directLink,
-            downloadUrl
+            shortLink,
+            downloadUrl,
+            shortDownloadUrl
         });
     } catch (error) {
         console.error('Error creating support session:', error);

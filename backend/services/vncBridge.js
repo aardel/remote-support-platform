@@ -79,6 +79,16 @@ class VNCBridge {
                     sessionId = session.session_id || session.sessionId;
                     const serverUrl = process.env.SUPPORT_URL || process.env.SERVER_URL || 'http://localhost:3000';
                     const directLink = `${serverUrl}/support/${sessionId}`;
+                    const downloadUrl = `${serverUrl}/api/packages/download/${sessionId}`;
+                    
+                    // Generate short URLs (expires when session expires, default 20 days)
+                    const urlShortener = require('./urlShortener');
+                    const expiresInMinutes = 20 * 24 * 60;
+                    const shortCode = urlShortener.createShortUrl(directLink, expiresInMinutes);
+                    const shortDownloadCode = urlShortener.createShortUrl(downloadUrl, expiresInMinutes);
+                    const shortLink = `${serverUrl}/s/${shortCode}`;
+                    const shortDownloadUrl = `${serverUrl}/s/${shortDownloadCode}`;
+                    
                     // Update session status directly (registerSession may fail on in-memory fallback)
                     try {
                         await SessionService.registerSession(sessionId, {
@@ -99,7 +109,9 @@ class VNCBridge {
                             technician_id: 'vnc-auto',
                             created_at: new Date().toISOString(),
                             link: directLink,
-                            downloadUrl: `/api/packages/download/${sessionId}`,
+                            shortLink,
+                            downloadUrl,
+                            shortDownloadUrl,
                             client_info: { os: 'Unknown (VNC)', hostname: remoteIp },
                             helper_connected: true
                         });

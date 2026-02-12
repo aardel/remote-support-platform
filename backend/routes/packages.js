@@ -132,7 +132,18 @@ router.post('/generate', requireAuth, async (req, res) => {
             technicianId
         );
         
-        const directLink = `${process.env.SUPPORT_URL || process.env.SERVER_URL || 'http://localhost:3000'}/support/${sessionId}`;
+        const origin = process.env.SUPPORT_URL || process.env.SERVER_URL || 'http://localhost:3000';
+        const directLink = `${origin}/support/${sessionId}`;
+        const downloadUrl = `${origin}/api/packages/download/${sessionId}`;
+        
+        // Get session expiration for short URL TTL (reuse session from above)
+        const sessionExpiresIn = session?.expires_at ? Math.max(0, Math.floor((new Date(session.expires_at).getTime() - Date.now()) / 1000 / 60)) : 20 * 24 * 60;
+        
+        // Generate short URLs
+        const shortCode = urlShortener.createShortUrl(directLink, sessionExpiresIn);
+        const shortDownloadCode = urlShortener.createShortUrl(downloadUrl, sessionExpiresIn);
+        const shortLink = `${origin}/s/${shortCode}`;
+        const shortDownloadUrl = `${origin}/s/${shortDownloadCode}`;
 
         // Broadcast to all dashboards so other technicians see it
         const io = req.app.get('io');
@@ -143,15 +154,19 @@ router.post('/generate', requireAuth, async (req, res) => {
                 technician_id: technicianId,
                 created_at: new Date().toISOString(),
                 link: directLink,
-                downloadUrl: `/api/packages/download/${sessionId}`
+                shortLink,
+                downloadUrl,
+                shortDownloadUrl
             });
         }
 
         res.json({
             success: true,
             sessionId: sessionId,
-            downloadUrl: `/api/packages/download/${sessionId}`,
-            directLink
+            downloadUrl,
+            shortDownloadUrl,
+            directLink,
+            shortLink
         });
     } catch (error) {
         console.error('Error generating package:', error);

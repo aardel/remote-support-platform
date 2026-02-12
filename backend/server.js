@@ -58,6 +58,10 @@ app.use('/customer', express.static(path.join(__dirname, '../frontend/public')))
 // Serve React app (technician dashboard) - built files
 app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
+// Short URL redirect routes (must be before API routes)
+const shortUrlRouter = require('./routes/short-url');
+app.use('/s', shortUrlRouter);
+
 // Routes
 const { router: authRouter } = require('./routes/auth');
 const sessionsRouter = require('./routes/sessions');
