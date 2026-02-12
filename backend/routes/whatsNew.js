@@ -1,5 +1,7 @@
 const express = require('express');
 const https = require('https');
+const fs = require('fs');
+const path = require('path');
 const { requireAuth } = require('../middleware/sessionAuth');
 
 const router = express.Router();
@@ -24,31 +26,70 @@ function fetchJson(url, headers = {}) {
   });
 }
 
+function getHelperVersion() {
+  try {
+    const versionFile = path.join(__dirname, '../../packages/support-template.version');
+    if (fs.existsSync(versionFile)) {
+      return fs.readFileSync(versionFile, 'utf8').trim();
+    }
+  } catch (e) {
+    // ignore
+  }
+  try {
+    const pkg = require('../../helper/package.json');
+    return pkg.version || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 // GET /api/whats-new
-// Returns latest GitHub release info (cached). Requires auth to reduce abuse.
+// Returns latest helper version info (cached). Requires auth to reduce abuse.
 router.get('/', requireAuth, async (_req, res) => {
   try {
     if (cache.data && Date.now() - cache.ts < CACHE_TTL_MS) {
       return res.json(cache.data);
     }
 
+    const helperVersion = getHelperVersion();
     const repo = process.env.GITHUB_REPO || 'aardel/remote-support-platform';
-    const data = await fetchJson(`https://api.github.com/repos/${repo}/releases/latest`);
+    
+    // Try to get GitHub release info, but use helper version as primary
+    let githubData = null;
+    try {
+      githubData = await fetchJson(`https://api.github.com/repos/${repo}/releases/latest`);
+    } catch (e) {
+      // If GitHub fails, we'll still return helper version
+    }
+
+    // Use helper version if available, otherwise fall back to GitHub tag
+    const version = helperVersion || githubData?.tag_name?.replace(/^v/, '') || null;
+    const tag = version ? `v${version}` : (githubData?.tag_name || null);
+    const name = version ? `Helper v${version}` : (githubData?.name || null);
 
     const out = {
       repo,
-      tag: data.tag_name || null,
-      name: data.name || null,
-      body: data.body || null,
-      publishedAt: data.published_at || null,
-      url: data.html_url || null
+      tag,
+      name,
+      body: githubData?.body || `Version ${version} is available. Windows: use the .exe installer. macOS: use the .dmg image.`,
+      publishedAt: githubData?.published_at || null,
+      url: githubData?.html_url || null
     };
 
     cache = { ts: Date.now(), data: out };
     return res.json(out);
   } catch (e) {
-    // Do not fail the dashboard if GitHub is down/rate-limited.
-    return res.json({ repo: process.env.GITHUB_REPO || 'aardel/remote-support-platform', tag: null, name: null, body: null, publishedAt: null, url: null, error: e.message });
+    // Fallback to helper version even if everything fails
+    const helperVersion = getHelperVersion();
+    return res.json({ 
+      repo: process.env.GITHUB_REPO || 'aardel/remote-support-platform', 
+      tag: helperVersion ? `v${helperVersion}` : null, 
+      name: helperVersion ? `Helper v${helperVersion}` : null, 
+      body: helperVersion ? `Version ${helperVersion} is available. Windows: use the .exe installer. macOS: use the .dmg image.` : null,
+      publishedAt: null, 
+      url: null, 
+      error: e.message 
+    });
   }
 });
 
