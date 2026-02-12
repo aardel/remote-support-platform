@@ -15,7 +15,7 @@ on:
         default: ""
 
 env:
-  NODE_VERSION: "20"
+  NODE_VERSION: "22"
 
 jobs:
   build-win:
@@ -25,6 +25,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+      - name: Install Python setuptools (provides distutils for Python 3.12+)
+        run: python -m pip install setuptools
       - name: Sync version from root (helper + frontend)
         run: node scripts/sync-version.js ${{ github.event.inputs.version }}
       - name: Install helper dependencies
