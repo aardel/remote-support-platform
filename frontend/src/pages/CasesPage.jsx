@@ -58,7 +58,10 @@ function CasesPage() {
   };
 
   const downloadPdf = (caseId) => {
-    window.open(`/api/cases/${encodeURIComponent(caseId)}/pdf`, '_blank');
+    // Compute base path from current location (e.g., "/remote")
+    const pathPrefix = window.location.pathname.split('/').slice(0, -1).join('/') || '';
+    const pdfUrl = `${pathPrefix}/api/cases/${encodeURIComponent(caseId)}/pdf`;
+    window.open(pdfUrl, '_blank');
   };
 
   const deleteCase = async (caseId) => {
