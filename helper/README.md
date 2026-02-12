@@ -9,7 +9,7 @@ It reads `config.json` bundled in the app resources:
 ```json
 {
   "sessionId": "ABC-123-XYZ",
-  "server": "https://173.249.10.40:8460",
+  "server": "https://backup.servicelc.com/remote",
   "port": 5500
 }
 ```

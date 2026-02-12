@@ -22,14 +22,19 @@ class PackageBuilder {
         }
         
         // Create configuration file
-        // Build HTTP fallback URL for XP clients that can't do TLS 1.2+
+        // serverBase is the full URL including any path prefix (e.g. https://backup.servicelc.com/remote)
+        const serverBase = this.serverUrl.replace(/\/$/, '');
         const serverHostname = new URL(this.serverUrl).hostname;
-        const expressPort = process.env.PORT || 3000;
-        const httpFallback = `http://${serverHostname}:${expressPort}`;
+
+        // HTTP fallback for XP clients that can't do TLS 1.2+.
+        // With path-based routing (Nginx → backend on 127.0.0.1), the plain-HTTP
+        // fallback goes through port 80 which Nginx may redirect to HTTPS.
+        // Keep as best-effort; the primary URL (serverBase) is the reliable path.
+        const httpFallback = `http://${serverHostname}`;
 
         const config = {
             sessionId,
-            server: this.serverUrl,
+            server: serverBase,
             httpFallback,
             port: 5500,
             technicianId,
@@ -291,7 +296,7 @@ echo.
 
 REM --- STEP 5: Open chat window ---
 echo [STEP 5] Opening chat window...
-set CHAT_URL=${config.httpFallback}/customer/xp-chat.html?session=${config.sessionId}
+set CHAT_URL=${config.server}/customer/xp-chat.html?session=${config.sessionId}
 echo [INFO] Chat URL: %CHAT_URL%
 start "" "%CHAT_URL%"
 echo [OK] Chat window opened in browser.
@@ -372,10 +377,9 @@ if not defined CALLED_FROM_LAUNCHER pause
 
     // Windows network check (VBScript, XP compatible)
     createWindowsNetworkCheckVbs(config) {
-        const serverHost = new URL(config.server).host;
-        const serverProtocol = new URL(config.server).protocol === 'https:' ? 'https' : 'http';
-        const fallbackHost = config.httpFallback ? new URL(config.httpFallback).host : '';
-        const fallbackUrl = fallbackHost ? `http://${fallbackHost}/api/health` : '';
+        // Use full server URL (including path prefix like /remote) for health check
+        const serverBase = config.server.replace(/\/$/, '');
+        const fallbackBase = config.httpFallback ? config.httpFallback.replace(/\/$/, '') : '';
         return `On Error Resume Next
 
 Function TryUrl(url)
@@ -403,9 +407,9 @@ Function TryUrl(url)
     Err.Clear
 End Function
 
-If TryUrl("${serverProtocol}://${serverHost}/api/health") Then
+If TryUrl("${serverBase}/api/health") Then
     WScript.Quit 0
-ElseIf TryUrl("${fallbackUrl}") Then
+ElseIf TryUrl("${fallbackBase}/api/health") Then
     WScript.Quit 0
 Else
     WScript.Quit 1
@@ -415,12 +419,11 @@ End If
     
     // Windows registration script (PowerShell, compatible with XP SP3+)
     createWindowsRegistration(config) {
-        const serverHost = new URL(config.server).host;
-        const serverProtocol = new URL(config.server).protocol === 'https:' ? 'https' : 'http';
+        // Use full server URL (including path prefix like /remote) so API calls work with path-based routing
+        const serverBase = config.server.replace(/\/$/, '');
         return `param(
     [string]$SessionId = "${config.sessionId}",
-    [string]$Server = "${serverHost}",
-    [string]$Protocol = "${serverProtocol}"
+    [string]$ServerBase = "${serverBase}"
 )
 
 # Get OS info (compatible with older PowerShell versions)
@@ -478,7 +481,7 @@ function Http-PostJson([string]$url, [string]$json) {
 
 # Check for pending session
 try {
-    $pendingJson = Http-Get "$Protocol://$Server/api/devices/pending/$deviceId"
+    $pendingJson = Http-Get "$ServerBase/api/devices/pending/$deviceId"
     if ($pendingJson -match '\"pending\"\\s*:\\s*true' -and $pendingJson -match '\"sessionId\"\\s*:\\s*\"([^\"]+)\"') {
         $SessionId = $matches[1]
     }
@@ -489,7 +492,7 @@ try {
 $body = "{""sessionId"":""$(Escape-Json $SessionId)"",""clientInfo"":{""os"":""$(Escape-Json $clientInfo.os)"",""arch"":""$(Escape-Json $clientInfo.arch)"",""hostname"":""$(Escape-Json $clientInfo.hostname)"",""username"":""$(Escape-Json $clientInfo.username)""},""vncPort"":5900,""status"":""connected"",""deviceId"":""$(Escape-Json $deviceId)"",""deviceName"":""$(Escape-Json $env:COMPUTERNAME)""}"
 
 try {
-    $uri = "$Protocol" + "://" + "$Server/api/sessions/register"
+    $uri = "$ServerBase/api/sessions/register"
     $response = Http-PostJson $uri $body
     
     Write-Host "Session registered successfully!" -ForegroundColor Green
@@ -503,22 +506,20 @@ try {
 
     // Windows registration script (VBScript) for XP (no PowerShell required)
     createWindowsRegistrationVbs(config) {
-        const serverHost = new URL(config.server).host;
-        const serverProtocol = new URL(config.server).protocol === 'https:' ? 'https' : 'http';
-        const fallbackHost = config.httpFallback ? new URL(config.httpFallback).host : '';
+        // Use full server URL (including path prefix like /remote) so API calls work with path-based routing
+        const serverBase = config.server.replace(/\/$/, '');
+        const fallbackBase = config.httpFallback ? config.httpFallback.replace(/\/$/, '') : '';
         return `' Remote Support Helper registration (VBScript; works on Windows XP)
 Option Explicit
 
-Dim SessionId, Server, Protocol, FallbackServer
+Dim SessionId, ServerBase, FallbackBase
 SessionId = "${config.sessionId}"
-Server = "${serverHost}"
-Protocol = "${serverProtocol}"
-FallbackServer = "${fallbackHost}"
+ServerBase = "${serverBase}"
+FallbackBase = "${fallbackBase}"
 
 WScript.Echo "[VBS] Starting registration script..."
 WScript.Echo "[VBS] SessionId: " & SessionId
-WScript.Echo "[VBS] Server: " & Server
-WScript.Echo "[VBS] Protocol: " & Protocol
+WScript.Echo "[VBS] ServerBase: " & ServerBase
 
 Dim appData, deviceDir, deviceFile, deviceId
 On Error Resume Next
@@ -567,15 +568,15 @@ End If
 On Error GoTo 0
 
 ' Determine base URL (try primary, fall back to HTTP for XP/TLS compat)
-Dim baseUrl: baseUrl = Protocol & "://" & Server
+Dim baseUrl: baseUrl = ServerBase
 WScript.Echo "[VBS] Trying primary URL: " & baseUrl & " ..."
 On Error Resume Next
 Dim testResult: testResult = HttpGet(baseUrl & "/api/health")
 If Err.Number <> 0 Or Len(testResult) = 0 Then
   Err.Clear
-  If Len(FallbackServer) > 0 Then
-    WScript.Echo "[VBS] Primary URL failed, trying HTTP fallback: http://" & FallbackServer
-    baseUrl = "http://" & FallbackServer
+  If Len(FallbackBase) > 0 Then
+    WScript.Echo "[VBS] Primary URL failed, trying HTTP fallback: " & FallbackBase
+    baseUrl = FallbackBase
     testResult = HttpGet(baseUrl & "/api/health")
     If Err.Number <> 0 Or Len(testResult) = 0 Then
       WScript.Echo "[VBS] WARNING: HTTP fallback also failed. Registration may not work."
@@ -593,7 +594,7 @@ End If
 On Error GoTo 0
 
 ' Check pending session
-WScript.Echo "[VBS] Checking for pending session..."
+WScript.Echo "[VBS] Checking for pending session (base: " & baseUrl & ")..."
 On Error Resume Next
 Dim pendingUrl: pendingUrl = baseUrl & "/api/devices/pending/" & deviceId
 WScript.Echo "[VBS] Pending URL: " & pendingUrl
@@ -769,7 +770,8 @@ End Function
 cd "$(dirname "$0")"
 
 SESSION_ID="${config.sessionId}"
-SERVER_HOST="${new URL(config.server).host}"
+SERVER_BASE="${config.server.replace(/\/$/, '')}"
+SERVER_HOST="${new URL(config.server).hostname}"
 SERVER_PORT=${config.port || 5500}
 
 echo "========================================"
@@ -879,16 +881,15 @@ fi
     
     // Unix registration script
     createUnixRegistration(config) {
-        const serverHost = new URL(config.server).host;
-        const serverProtocol = new URL(config.server).protocol === 'https:' ? 'https' : 'http';
+        // Use full server URL (including path prefix like /remote) so API calls work with path-based routing
+        const serverBase = config.server.replace(/\/$/, '');
         return `#!/bin/bash
 # Register session with server
 
 cd "$(dirname "$0")"
 
 SESSION_ID="${config.sessionId}"
-SERVER_HOST="${serverHost}"
-SERVER_PROTOCOL="${serverProtocol}"
+SERVER_BASE="${serverBase}"
 
 DEVICE_DIR="$HOME/.remote-support"
 DEVICE_FILE="$DEVICE_DIR/device_id"
@@ -901,7 +902,7 @@ else
 fi
 
 # Check for pending session
-PENDING_JSON=$(curl -s "$SERVER_PROTOCOL://$SERVER_HOST/api/devices/pending/$DEVICE_ID")
+PENDING_JSON=$(curl -s "$SERVER_BASE/api/devices/pending/$DEVICE_ID")
 PENDING_SESSION=$(echo "$PENDING_JSON" | sed -n 's/.*"sessionId"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p')
 if echo "$PENDING_JSON" | grep -q '"pending"[[:space:]]*:[[:space:]]*true'; then
     if [ -n "$PENDING_SESSION" ]; then
@@ -949,7 +950,7 @@ EOF
 if command -v curl &> /dev/null; then
     echo "Registering session with server..."
     HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/register_response.json -X POST \\
-        "$SERVER_PROTOCOL://$SERVER_HOST/api/sessions/register" \\
+        "$SERVER_BASE/api/sessions/register" \\
         -H "Content-Type: application/json" \\
         -d "$CLIENT_INFO" 2>&1)
     
@@ -966,8 +967,8 @@ if command -v curl &> /dev/null; then
             echo "  Response: $(cat /tmp/register_response.json)"
             rm -f /tmp/register_response.json
         fi
-        echo "  Attempted to connect to: $SERVER_PROTOCOL://$SERVER_HOST"
-        if [ "$SERVER_HOST" = "localhost" ] || [ "$SERVER_HOST" = "127.0.0.1" ]; then
+        echo "  Attempted to connect to: $SERVER_BASE"
+        if echo "$SERVER_BASE" | grep -q "localhost\|127.0.0.1"; then
             echo ""
             echo "  ⚠️  WARNING: Server URL is set to localhost!"
             echo "  This won't work from remote machines."
@@ -979,7 +980,7 @@ if command -v curl &> /dev/null; then
 elif command -v wget &> /dev/null; then
     echo "Registering session with server..."
     echo "$CLIENT_INFO" | wget --quiet --post-data=- --header="Content-Type: application/json" \\
-        "$SERVER_PROTOCOL://$SERVER_HOST/api/sessions/register" -O /tmp/register_response.json 2>&1
+        "$SERVER_BASE/api/sessions/register" -O /tmp/register_response.json 2>&1
     if [ $? -eq 0 ]; then
         echo "✓ Session registration attempted"
         if [ -f /tmp/register_response.json ]; then
@@ -988,7 +989,7 @@ elif command -v wget &> /dev/null; then
         fi
     else
         echo "⚠ Registration failed"
-        echo "  Server: $SERVER_PROTOCOL://$SERVER_HOST"
+        echo "  Server: $SERVER_BASE"
     fi
 else
     echo "⚠ curl or wget not found. Registration skipped."

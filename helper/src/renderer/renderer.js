@@ -338,7 +338,7 @@ async function startScreenCapture(overrideIndex) {
           minHeight: captureHeight,
           maxWidth: captureWidth,
           maxHeight: captureHeight,
-          maxFrameRate: 30
+          maxFrameRate: 60
         }
       }
     });
@@ -424,20 +424,20 @@ async function connectSignaling(sessionId) {
           if (quality === 'speed') {
             enc.scaleResolutionDownBy = 2;
             enc.maxBitrate = 2000000;
-            enc.maxFramerate = 15;
+            enc.maxFramerate = 30;
             params.degradationPreference = 'balanced';
           } else if (quality === 'quality') {
             enc.scaleResolutionDownBy = 1;
             enc.maxBitrate = 16000000;
-            enc.maxFramerate = 24;
+            enc.maxFramerate = 60;
             enc.priority = 'high';
             enc.networkPriority = 'high';
-            params.degradationPreference = 'maintain-resolution';
+            params.degradationPreference = 'maintain-framerate';
           } else {
             enc.scaleResolutionDownBy = 1;
-            enc.maxBitrate = 6000000;
-            enc.maxFramerate = 24;
-            params.degradationPreference = 'maintain-resolution';
+            enc.maxBitrate = 10000000;
+            enc.maxFramerate = 60;
+            params.degradationPreference = 'maintain-framerate';
           }
           await sender.setParameters(params);
         } catch (e) {
@@ -583,7 +583,7 @@ function boostSdpBitrate(sdp) {
     if (inVideo && line.startsWith('a=fmtp:') && !line.includes('x-google-min-bitrate')) {
       const idx = line.indexOf(' ');
       if (idx > 0) {
-        out[out.length - 1] = line + ';x-google-min-bitrate=4000;x-google-start-bitrate=8000;x-google-max-bitrate=16000';
+        out[out.length - 1] = line + ';x-google-min-bitrate=4000;x-google-start-bitrate=16000;x-google-max-bitrate=16000';
       }
     }
   }
@@ -603,7 +603,7 @@ function preferScreenCodecs(pc) {
             const h264 = caps.codecs.filter(c => c.mimeType === 'video/H264');
             const vp8 = caps.codecs.filter(c => c.mimeType === 'video/VP8');
             const rest = caps.codecs.filter(c => c.mimeType !== 'video/VP9' && c.mimeType !== 'video/H264' && c.mimeType !== 'video/VP8');
-            const ordered = [...vp9, ...h264, ...vp8, ...rest];
+            const ordered = [...h264, ...vp9, ...vp8, ...rest];
             if (typeof t.setCodecPreferences === 'function') {
               t.setCodecPreferences(ordered);
             }
@@ -626,11 +626,11 @@ async function applyInitialQuality(pc) {
     const enc = params.encodings[0];
     enc.scaleResolutionDownBy = 1;
     enc.maxBitrate = 16000000;
-    enc.maxFramerate = 24;
+    enc.maxFramerate = 60;
     enc.priority = 'high';
     enc.networkPriority = 'high';
-    // CRITICAL: never reduce resolution under pressure — drop frames instead
-    params.degradationPreference = 'maintain-resolution';
+    // Under pressure: reduce resolution rather than dropping frames (avoids stutter)
+    params.degradationPreference = 'maintain-framerate';
     await sender.setParameters(params);
   } catch (_) { /* some implementations reject before connection */ }
 }
@@ -656,6 +656,25 @@ async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
 
   preferScreenCodecs(pc);
   applyInitialQuality(pc);
+
+  // Create data channel for low-latency mouse/keyboard (unreliable, unordered = UDP-like)
+  try {
+    const controlChannel = pc.createDataChannel('control', { ordered: false, maxRetransmits: 0 });
+    controlChannel.onopen = () => log('[DataChannel] control channel open');
+    controlChannel.onclose = () => log('[DataChannel] control channel closed');
+    controlChannel.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data);
+        if (msg.kind === 'mouse') {
+          window.helperApi.injectControl({ type: 'mouse', data: msg });
+        } else if (msg.kind === 'keyboard') {
+          window.helperApi.injectControl({ type: 'keyboard', data: msg });
+        }
+      } catch (_) {}
+    };
+  } catch (e) {
+    log('[DataChannel] Failed to create: ' + e.message);
+  }
 
   pc.onicecandidate = (event) => {
     if (event.candidate) {

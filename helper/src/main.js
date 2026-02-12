@@ -164,7 +164,7 @@ function readConfig() {
   }
   return {
     sessionId,
-    server: 'https://173.249.10.40:8460',
+    server: 'https://backup.servicelc.com/remote',
     port: 5500
   };
 }
@@ -659,6 +659,16 @@ ipcMain.handle('helper:keyboard-event', async (_event, data) => {
   // This requires robotjs or similar - placeholder for now
   console.log('Keyboard event:', data);
   return { success: true };
+});
+
+// WebRTC data channel control messages (low-latency mouse/keyboard bypass)
+ipcMain.on('control-message', (_event, msg) => {
+  if (!msg || !msg.data) return;
+  if (msg.type === 'mouse') {
+    injectMouse(msg.data);
+  } else if (msg.type === 'keyboard') {
+    injectKeyboard(msg.data);
+  }
 });
 
 // Socket.io signaling - connect to server

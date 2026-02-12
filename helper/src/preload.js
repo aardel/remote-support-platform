@@ -116,5 +116,8 @@ contextBridge.exposeInMainWorld('helperApi', {
     return () => ipcRenderer.removeListener('update-download-progress', handler);
   },
 
-  createDesktopShortcut: () => ipcRenderer.invoke('helper:create-desktop-shortcut')
+  createDesktopShortcut: () => ipcRenderer.invoke('helper:create-desktop-shortcut'),
+
+  // Direct control injection via WebRTC data channel (bypasses Socket.io for lower latency)
+  injectControl: (data) => ipcRenderer.send('control-message', data)
 });

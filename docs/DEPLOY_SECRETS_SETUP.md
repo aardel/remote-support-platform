@@ -75,7 +75,7 @@ This tells the workflow to run the deploy job. (GitHub doesn’t allow workflows
 1. Click **New repository secret**.
 2. **Name:** `SERVER_HOST`
 3. **Secret:** Your server hostname or IP, e.g.:
-   - `173.249.10.40`
+   - `backup.servicelc.com` (or `173.249.10.40`)
    - or `vmi3066396.contaboserver.net`
    - or whatever you use in `ssh user@host`
 4. Click **Add secret**.

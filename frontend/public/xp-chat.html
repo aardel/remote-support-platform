@@ -171,7 +171,7 @@
       }
       var div = document.createElement('div');
       div.className = 'msg';
-      div.innerHTML = '<span class="msg-time">[' + formatTime(Date.now()) + ']</span> '
+      div.innerHTML = '<span class="msg-time">[' + formatTime(new Date().getTime()) + ']</span> '
         + '<span class="msg-cust">You:</span> '
         + escapeHtml(msg);
       container.appendChild(div);
