@@ -1,6 +1,6 @@
 {
   "name": "remote-support-helper",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Customer helper app for Remote Support",
   "author": "ServiceLC",
   "main": "src/main.js",
@@ -12,13 +12,15 @@
   },
   "dependencies": {
     "form-data": "^4.0.0",
-    "socket.io-client": "^4.7.5",
-    "robotjs": "^0.6.0"
+    "robotjs": "^0.6.0",
+    "socket.io-client": "^4.7.5"
   },
   "devDependencies": {
     "electron": "^28.0.0",
     "electron-builder": "^24.13.3",
-    "electron-rebuild": "^3.2.9"
+    "electron-rebuild": "^3.2.9",
+    "node-abi": "^4.26.0",
+    "prebuild-install": "^7.1.3"
   },
   "build": {
     "productName": "Remote Support Helper",
@@ -35,6 +37,9 @@
         "dmg"
       ]
     },
-    "npmRebuild": true
+    "npmRebuild": false,
+    "asarUnpack": [
+      "**/robotjs/**/*"
+    ]
   }
 }

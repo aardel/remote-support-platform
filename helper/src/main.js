@@ -8,11 +8,18 @@ const { execSync, execFileSync } = require('child_process');
 const { io } = require('socket.io-client');
 
 let robot = null;
+let robotjsError = null;
 try {
   robot = require('robotjs');
   console.log('✅ robotjs loaded successfully');
+  console.log('   robotjs version:', robot ? 'loaded' : 'null');
+  console.log('   moveMouse available:', typeof robot?.moveMouse === 'function');
+  console.log('   mouseToggle available:', typeof robot?.mouseToggle === 'function');
 } catch (e) {
+  robotjsError = e;
   console.error('❌ robotjs not available (remote control disabled):', e.message);
+  console.error('   Error code:', e.code);
+  console.error('   Error stack:', e.stack);
   console.error('   This will prevent mouse and keyboard control from working.');
   console.error('   robotjs needs to be compiled for the target platform during build.');
 }
@@ -509,11 +516,17 @@ ipcMain.handle('helper:create-desktop-shortcut', async () => {
 
 ipcMain.handle('helper:get-capabilities', () => {
   const displays = screen.getAllDisplays();
-  return {
+  const caps = {
     robotjs: !!robot,
     platform: process.platform,
     displayCount: displays.length
   };
+  if (robotjsError) {
+    caps.robotjsError = robotjsError.message;
+    caps.robotjsErrorCode = robotjsError.code;
+  }
+  console.log('[capabilities]', JSON.stringify(caps));
+  return caps;
 });
 
 ipcMain.handle('helper:register-session', async (_event, payload) => {
