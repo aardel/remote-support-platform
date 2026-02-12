@@ -81,13 +81,14 @@ class VNCBridge {
                     const directLink = `${serverUrl}/support/${sessionId}`;
                     const downloadUrl = `${serverUrl}/api/packages/download/${sessionId}`;
                     
-                    // Generate short URLs (expires when session expires, default 20 days)
+                    // Generate short URLs at root level (expires when session expires, default 20 days)
                     const urlShortener = require('./urlShortener');
                     const expiresInMinutes = 20 * 24 * 60;
                     const shortCode = urlShortener.createShortUrl(directLink, expiresInMinutes);
                     const shortDownloadCode = urlShortener.createShortUrl(downloadUrl, expiresInMinutes);
-                    const shortLink = `${serverUrl}/s/${shortCode}`;
-                    const shortDownloadUrl = `${serverUrl}/s/${shortDownloadCode}`;
+                    const baseUrl = serverUrl.replace(/\/remote.*$/, ''); // Remove /remote if present
+                    const shortLink = `${baseUrl}/${shortCode}`;
+                    const shortDownloadUrl = `${baseUrl}/${shortDownloadCode}`;
                     
                     // Update session status directly (registerSession may fail on in-memory fallback)
                     try {

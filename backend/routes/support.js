@@ -38,10 +38,11 @@ router.get('/suggest', async (req, res) => {
             const fullSupportUrl = `${origin}/support/${encodeURIComponent(sid)}`;
             const fullDownloadUrl = `${origin}/api/packages/download/${encodeURIComponent(sid)}?type=zip`;
             
-            // Generate short URLs (expires when session expires)
+            // Generate short URLs at root level (expires when session expires)
             const expiresIn = row.expires_at ? Math.max(0, Math.floor((new Date(row.expires_at).getTime() - Date.now()) / 1000 / 60)) : 20 * 24 * 60;
             const shortCode = urlShortener.createShortUrl(fullSupportUrl, expiresIn);
             const shortDownloadCode = urlShortener.createShortUrl(fullDownloadUrl, expiresIn);
+            const baseUrl = origin.replace(/\/remote.*$/, ''); // Remove /remote if present
             
             return {
                 sessionId: sid,
@@ -56,9 +57,9 @@ router.get('/suggest', async (req, res) => {
                 os: row.os,
                 lastSeen: row.last_seen,
                 supportUrl: fullSupportUrl,
-                shortUrl: `${origin}/s/${shortCode}`,
+                shortUrl: `${baseUrl}/${shortCode}`,
                 downloadUrl: fullDownloadUrl,
-                shortDownloadUrl: `${origin}/s/${shortDownloadCode}`
+                shortDownloadUrl: `${baseUrl}/${shortDownloadCode}`
             };
         });
 
@@ -87,12 +88,13 @@ router.post('/create', async (req, res) => {
         const directLink = `${origin}/support/${encodeURIComponent(sessionId)}`;
         const downloadUrl = `${origin}/api/packages/download/${encodeURIComponent(sessionId)}?type=zip`;
         
-        // Generate short URLs (expires when session expires, default 20 days)
+        // Generate short URLs at root level (expires when session expires, default 20 days)
         const expiresInMinutes = ttlDays * 24 * 60;
         const shortCode = urlShortener.createShortUrl(directLink, expiresInMinutes);
         const shortDownloadCode = urlShortener.createShortUrl(downloadUrl, expiresInMinutes);
-        const shortLink = `${origin}/s/${shortCode}`;
-        const shortDownloadUrl = `${origin}/s/${shortDownloadCode}`;
+        const baseUrl = origin.replace(/\/remote.*$/, ''); // Remove /remote if present
+        const shortLink = `${baseUrl}/${shortCode}`;
+        const shortDownloadUrl = `${baseUrl}/${shortDownloadCode}`;
 
         const io = req.app.get('io');
         if (io) {

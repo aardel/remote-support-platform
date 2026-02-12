@@ -139,11 +139,12 @@ router.post('/generate', requireAuth, async (req, res) => {
         // Get session expiration for short URL TTL (reuse session from above)
         const sessionExpiresIn = session?.expires_at ? Math.max(0, Math.floor((new Date(session.expires_at).getTime() - Date.now()) / 1000 / 60)) : 20 * 24 * 60;
         
-        // Generate short URLs
+        // Generate short URLs at root level
         const shortCode = urlShortener.createShortUrl(directLink, sessionExpiresIn);
         const shortDownloadCode = urlShortener.createShortUrl(downloadUrl, sessionExpiresIn);
-        const shortLink = `${origin}/s/${shortCode}`;
-        const shortDownloadUrl = `${origin}/s/${shortDownloadCode}`;
+        const baseUrl = origin.replace(/\/remote.*$/, ''); // Remove /remote if present
+        const shortLink = `${baseUrl}/${shortCode}`;
+        const shortDownloadUrl = `${baseUrl}/${shortDownloadCode}`;
 
         // Broadcast to all dashboards so other technicians see it
         const io = req.app.get('io');
