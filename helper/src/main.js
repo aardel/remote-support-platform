@@ -10,8 +10,11 @@ const { io } = require('socket.io-client');
 let robot = null;
 try {
   robot = require('robotjs');
+  console.log('✅ robotjs loaded successfully');
 } catch (e) {
-  console.warn('robotjs not available (remote control disabled):', e.message);
+  console.error('❌ robotjs not available (remote control disabled):', e.message);
+  console.error('   This will prevent mouse and keyboard control from working.');
+  console.error('   robotjs needs to be compiled for the target platform during build.');
 }
 
 // Allow self-signed SSL certificates (for development/testing)
@@ -29,21 +32,31 @@ let isQuitting = false;
 const MOUSE_BUTTONS = ['left', 'middle', 'right'];
 
 function injectMouse(data) {
-  if (!robot) return;
+  if (!robot) {
+    console.warn('Mouse injection failed: robotjs not available');
+    return;
+  }
   try {
     const bounds = screen.getPrimaryDisplay().bounds;
     const x = Math.round(bounds.x + data.x * bounds.width);
     const y = Math.round(bounds.y + data.y * bounds.height);
+    
+    console.log(`[mouse] ${data.type} at normalized (${data.x?.toFixed(3)}, ${data.y?.toFixed(3)}) -> screen (${x}, ${y})`);
+    
     if (data.type === 'mousemove') {
       robot.moveMouse(x, y);
     } else if (data.type === 'mousedown' || data.type === 'mouseup') {
       const btn = MOUSE_BUTTONS[data.button] || 'left';
-      if (btn === 'middle' && !robot.mouseToggle) return;
+      if (btn === 'middle' && !robot.mouseToggle) {
+        console.warn(`[mouse] Middle button not supported (no mouseToggle)`);
+        return;
+      }
       robot.moveMouse(x, y);
       robot.mouseToggle(data.type === 'mousedown' ? 'down' : 'up', btn);
+      console.log(`[mouse] ${data.type} button=${btn} at (${x}, ${y})`);
     }
   } catch (e) {
-    console.warn('Mouse injection error:', e.message);
+    console.error('Mouse injection error:', e.message, e.stack);
   }
 }
 
@@ -675,8 +688,28 @@ ipcMain.on('control-message', (_event, msg) => {
 ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
   const config = readConfig();
 
+  // Extract base URL and socket.io path for path-based routing
+  // config.server is like "https://backup.servicelc.com/remote"
+  // We need base URL "https://backup.servicelc.com" and path "/remote/socket.io"
+  let serverUrl = config.server;
+  let socketPath = '/socket.io';
+  
+  try {
+    const url = new URL(config.server);
+    if (url.pathname && url.pathname !== '/') {
+      // Extract base URL (without path) and socket.io path
+      const baseUrl = `${url.protocol}//${url.host}`;
+      socketPath = `${url.pathname}/socket.io`.replace(/\/+/g, '/'); // Normalize slashes
+      serverUrl = baseUrl;
+    }
+  } catch (e) {
+    // If URL parsing fails, use original server URL
+    console.warn('Failed to parse server URL, using as-is:', e.message);
+  }
+
   return new Promise((resolve, reject) => {
-    socket = io(config.server, {
+    socket = io(serverUrl, {
+      path: socketPath,
       transports: ['websocket', 'polling'],
       rejectUnauthorized: false
     });
@@ -769,6 +802,7 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
     });
 
     socket.on('remote-mouse', (data) => {
+      console.log('[socket] Received remote-mouse event:', data.type, data.button || '', `(${data.x?.toFixed(3)}, ${data.y?.toFixed(3)})`);
       injectMouse(data);
     });
 

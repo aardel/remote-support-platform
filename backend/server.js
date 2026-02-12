@@ -90,9 +90,7 @@ app.get(['/support', '/support/'], (req, res) => {
     const isIE = ua.includes('msie') || ua.includes('trident/');
     if (isIE) {
         try {
-            const expressPort = process.env.PORT || 3500;
-            const serverHostname = req.hostname || req.headers.host?.split(':')[0] || 'localhost';
-            const httpBase = `http://${serverHostname}:${expressPort}`;
+            const httpBase = (process.env.SERVER_URL || process.env.SUPPORT_URL || '').replace(/\/+$/, '');
             const p = path.join(__dirname, '../frontend/public/support-landing-ie.html');
             const html = fs.readFileSync(p, 'utf8')
                 .replace(/___HTTPBASE___/g, httpBase);
@@ -109,9 +107,7 @@ app.get('/support/:sessionId', (req, res) => {
     if (isIE) {
         // Serve a minimal page that works on IE (XP-era), with static links.
         try {
-            const expressPort = process.env.PORT || 3500;
-            const serverHostname = req.hostname || req.headers.host?.split(':')[0] || 'localhost';
-            const httpBase = `http://${serverHostname}:${expressPort}`;
+            const httpBase = (process.env.SERVER_URL || process.env.SUPPORT_URL || '').replace(/\/+$/, '');
             const p = path.join(__dirname, '../frontend/public/support-ie.html');
             const html = fs.readFileSync(p, 'utf8')
                 .replace(/___SESSID___/g, req.params.sessionId)

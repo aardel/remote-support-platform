@@ -44,7 +44,6 @@ router.get('/update-info', (req, res) => {
   try {
     const platform = (req.query.platform || process.platform || '').toString().toLowerCase();
     const currentVersion = (req.query.currentVersion || '0.0.0').trim();
-    const clientBuildTime = req.query.buildTime ? parseInt(req.query.buildTime, 10) : null;
     const latestVersion = getLatestVersion();
 
     const platformKey = platform === 'darwin' || platform === 'mac' ? 'darwin' : 'win';
@@ -52,25 +51,9 @@ router.get('/update-info', (req, res) => {
     const templatePath = path.join(PACKAGES_DIR, `support-template.${ext}`);
     const available = fs.existsSync(templatePath);
 
-    let updateAvailable = false;
-    let serverBuildTime = null;
-
-    if (available) {
-      const versionCmp = compareVersions(latestVersion, currentVersion);
-      if (versionCmp > 0) {
-        // Newer version on server
-        updateAvailable = true;
-      } else if (versionCmp === 0 && clientBuildTime) {
-        // Same version — compare template file modification time vs helper build time
-        try {
-          const stat = fs.statSync(templatePath);
-          serverBuildTime = Math.floor(stat.mtimeMs);
-          if (serverBuildTime > clientBuildTime) {
-            updateAvailable = true;
-          }
-        } catch (_) { /* stat failed, skip timestamp check */ }
-      }
-    }
+    // Only check version comparison - no timestamp checks
+    const versionCmp = compareVersions(latestVersion, currentVersion);
+    const updateAvailable = available && versionCmp > 0;
 
     // Use SERVER_URL env if set (includes correct port), otherwise reconstruct from request
     const baseUrl = process.env.SERVER_URL
@@ -83,11 +66,8 @@ router.get('/update-info', (req, res) => {
       currentVersion,
       latestVersion,
       downloadUrl,
-      serverBuildTime,
       releaseNotes: updateAvailable
-        ? (compareVersions(latestVersion, currentVersion) > 0
-          ? `Version ${latestVersion} is available.`
-          : `A newer build of ${latestVersion} is available.`)
+        ? `Version ${latestVersion} is available.`
         : null
     });
   } catch (e) {

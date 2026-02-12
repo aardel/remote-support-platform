@@ -1,21 +1,24 @@
 {
   "name": "remote-support-helper",
-  "version": "1.0.4",
+  "version": "1.0.6",
   "description": "Customer helper app for Remote Support",
   "author": "ServiceLC",
   "main": "src/main.js",
   "scripts": {
     "dev": "electron .",
     "build:win": "electron-builder --win nsis",
-    "build:mac": "electron-builder --mac dmg"
+    "build:mac": "electron-builder --mac dmg",
+    "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
+    "form-data": "^4.0.0",
     "socket.io-client": "^4.7.5",
-    "form-data": "^4.0.0"
+    "robotjs": "^0.6.0"
   },
   "devDependencies": {
     "electron": "^28.0.0",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "electron-rebuild": "^3.2.9"
   },
   "build": {
     "productName": "Remote Support Helper",
@@ -31,9 +34,7 @@
       "target": [
         "dmg"
       ]
-    }
-  },
-  "optionalDependencies": {
-    "robotjs": "^0.6.0"
+    },
+    "npmRebuild": true
   }
 }

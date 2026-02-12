@@ -39,7 +39,7 @@
 <body>
   <div class="wrap">
     <div class="brand">
-      <img src="/customer/logo.png" alt="Lasercomb" />
+      <img id="brandLogo" alt="Lasercomb" />
       <div class="brand-name">Lasercomb GmbH Support</div>
     </div>
     <div class="panel">
@@ -291,11 +291,20 @@
         return;
       }
 
-      // Determine base URL (use current origin for HTTP, same server)
+      // Determine base URL (use current origin + path prefix)
       var proto = window.location.protocol;
       var host = window.location.hostname;
       var port = window.location.port;
-      BASE_URL = proto + '//' + host + (port ? ':' + port : '');
+      var origin = proto + '//' + host + (port ? ':' + port : '');
+      // Detect path prefix from the customer page path (e.g. /remote/customer/ -> /remote)
+      var pathPrefix = '';
+      var custIdx = window.location.pathname.indexOf('/customer');
+      if (custIdx > 0) pathPrefix = window.location.pathname.substring(0, custIdx);
+      BASE_URL = origin + pathPrefix;
+
+      // Fix brand logo
+      var brandLogo = document.getElementById('brandLogo');
+      if (brandLogo) brandLogo.src = BASE_URL + '/logo.png';
 
       document.getElementById('conn-status').innerHTML = 'Session: ' + SESSION_ID;
 

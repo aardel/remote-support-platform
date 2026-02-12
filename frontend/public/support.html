@@ -233,7 +233,7 @@
 <body>
     <div class="container">
         <div class="logo-header">
-            <img src="/logo.png" alt="Logo" onerror="this.style.display='none'" />
+            <img id="pageLogo" alt="Logo" style="display:none;" />
             <h1>Lasercomb GmbH Support</h1>
         </div>
 
@@ -294,6 +294,23 @@
     </div>
 
     <script>
+        // Compute the app base path (e.g., "/remote/") from current URL
+        var basePath = (function() {
+            var p = window.location.pathname;
+            var idx = p.indexOf('/support');
+            return idx >= 0 ? p.substring(0, idx + 1) : '/';
+        })();
+
+        // Fix logo path
+        (function() {
+            var img = document.getElementById('pageLogo');
+            if (img) {
+                img.src = basePath + 'logo.png';
+                img.style.display = '';
+                img.onerror = function() { this.style.display = 'none'; };
+            }
+        })();
+
         function getSessionIdFromURL() {
             const match = window.location.pathname.match(/\/support\/([A-Z0-9-]+)/i);
             return match ? match[1] : null;
@@ -318,7 +335,7 @@
 
         async function loadSessionInfo() {
             try {
-                const response = await fetch('/api/support/session/' + sessionId);
+                const response = await fetch(basePath + 'api/support/session/' + sessionId);
                 if (!response.ok) throw new Error('Session not found or expired.');
                 const session = await response.json();
 
@@ -344,7 +361,7 @@
 
         async function loadPackageManifest() {
             const os = detectOS();
-            const response = await fetch('/api/packages/manifest/' + sessionId);
+            const response = await fetch(basePath + 'api/packages/manifest/' + sessionId);
             const data = await response.json();
             packageManifest = data.packages || [];
 
@@ -417,7 +434,7 @@
             var os = document.getElementById('osSelect').value;
             var osParam = selectedPackageType === 'zip' ? ('&os=' + encodeURIComponent(os)) : '';
             var refreshParam = document.getElementById('refreshPackage') && document.getElementById('refreshPackage').checked ? '&refresh=1' : '';
-            btn.href = '/api/packages/download/' + sessionId + '?type=' + selectedPackageType + osParam + refreshParam;
+            btn.href = basePath + 'api/packages/download/' + sessionId + '?type=' + selectedPackageType + osParam + refreshParam;
 
             var run = document.getElementById('instructionsRun');
             if (selectedPackageType === 'exe') {

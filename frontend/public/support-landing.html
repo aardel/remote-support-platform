@@ -88,7 +88,7 @@
 <body>
   <div class="wrap">
     <div class="row" style="align-items:center; gap:16px; margin-bottom:6px;">
-      <img src="/logo.png" alt="Remote Support" style="height:38px; width:auto;" />
+      <img id="pageLogo" alt="Remote Support" style="height:38px; width:auto; display:none;" />
       <h1 style="margin:0;">Remote Support</h1>
     </div>
     <p>We can try to detect your recent support session and help you resume.</p>
@@ -117,6 +117,23 @@
   </div>
 
   <script>
+    // Compute the app base path (e.g., "/remote/") from current URL
+    var basePath = (function() {
+      var p = window.location.pathname;
+      var idx = p.indexOf('/support');
+      return idx >= 0 ? p.substring(0, idx + 1) : '/';
+    })();
+
+    // Fix logo path
+    (function() {
+      var img = document.getElementById('pageLogo');
+      if (img) {
+        img.src = basePath + 'logo.png';
+        img.style.display = '';
+        img.onerror = function() { this.style.display = 'none'; };
+      }
+    })();
+
     function formatLabel(s) {
       const parts = [];
       if (s.customerName) parts.push(s.customerName);
@@ -162,7 +179,7 @@
       `;
     }
 
-    fetch('/api/support/suggest')
+    fetch(basePath + 'api/support/suggest')
       .then(r => r.json())
       .then(renderSuggestions)
       .catch(() => {
@@ -175,18 +192,18 @@
       if (!cleaned) {
         return createSupportSession();
       }
-      window.location.href = '/support/' + encodeURIComponent(cleaned);
+      window.location.href = basePath + 'support/' + encodeURIComponent(cleaned);
     }
 
     function createSupportSession() {
       const status = document.getElementById('createStatus');
       status.textContent = 'Creating a new support session...';
-      return fetch('/api/support/create', { method: 'POST' })
+      return fetch(basePath + 'api/support/create', { method: 'POST' })
         .then(r => r.json())
         .then(data => {
           if (!data || !data.sessionId) throw new Error('Failed to create session');
           status.textContent = 'Redirecting to support page...';
-          window.location.href = '/support/' + encodeURIComponent(data.sessionId);
+          window.location.href = basePath + 'support/' + encodeURIComponent(data.sessionId);
         })
         .catch(() => {
           status.textContent = 'Unable to create a support session. Please try again.';

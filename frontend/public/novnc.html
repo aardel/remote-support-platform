@@ -39,7 +39,10 @@
 
         let RFB;
         try {
-            const mod = await import('/customer/novnc-bundle.js');
+            // Compute base path from current location (e.g. /remote/)
+            const custIdx = window.location.pathname.indexOf('/customer');
+            const pathPrefix = custIdx > 0 ? window.location.pathname.substring(0, custIdx) : '';
+            const mod = await import(pathPrefix + '/customer/novnc-bundle.js');
             RFB = mod.default;
             console.log('noVNC module loaded OK');
         } catch (err) {
@@ -60,7 +63,7 @@
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsHost = window.location.hostname;
         const wsPort = window.location.port ? `:${window.location.port}` : '';
-        const wsUrl = `${wsProtocol}//${wsHost}${wsPort}/websockify?session=${sessionId}`;
+        const wsUrl = `${wsProtocol}//${wsHost}${wsPort}${pathPrefix}/websockify?session=${sessionId}`;
 
         status.textContent = 'Connecting to ' + wsUrl;
         console.log('noVNC connecting to:', wsUrl);
