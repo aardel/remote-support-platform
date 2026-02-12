@@ -70,13 +70,47 @@ class VNCBridge {
                 }
             }
             if (!sessionId) {
+                // Check if this IP already has a recent vnc-auto session (within last hour)
+                const Session = require('../models/Session');
+                try {
+                    const recentVncSessions = await Session.findByTechnician('vnc-auto');
+                    const now = new Date();
+                    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+                    
+                    // Find a recent session from the same IP (if we can match by IP from client_info)
+                    const recentSession = recentVncSessions.find(s => {
+                        const createdAt = new Date(s.created_at);
+                        if (createdAt <= oneHourAgo) return false;
+                        // Try to match IP from client_info if available
+                        if (s.client_info && typeof s.client_info === 'object') {
+                            const sessionHostname = s.client_info.hostname || '';
+                            return sessionHostname === remoteIp || sessionHostname.includes(remoteIp);
+                        }
+                        return false;
+                    });
+                    
+                    if (recentSession && !this.vncConnections.has(recentSession.session_id)) {
+                        console.log(`[VNC] Reusing recent vnc-auto session ${recentSession.session_id} for IP ${remoteIp} (prevented duplicate)`);
+                        sessionId = recentSession.session_id;
+                        // Update the VNC connection mapping
+                        this.vncConnections.set(sessionId, vncSocket);
+                        // Continue with existing session instead of creating new one
+                    }
+                } catch (e) {
+                    console.warn('[VNC] Could not check for existing vnc-auto sessions:', e.message);
+                }
+            }
+            
+            if (!sessionId) {
                 console.log(`[VNC] No mapping for ${remoteIp}, auto-creating session...`);
+                console.log(`[SESSION-CREATE] VNC auto-create from IP: ${remoteIp}, existing sessions for this IP: ${[...this.vncConnections.values()].filter(s => this.normalizeIp(s.remoteAddress) === remoteIp).length}`);
                 try {
                     const session = await SessionService.createSession({
                         technicianId: 'vnc-auto',
                         expiresIn: 20 * 24 * 60 * 60
                     });
                     sessionId = session.session_id || session.sessionId;
+                    console.log(`[SESSION-CREATE] Created session ${sessionId} for vnc-auto from IP ${remoteIp}`);
                     const serverUrl = process.env.SUPPORT_URL || process.env.SERVER_URL || 'http://localhost:3000';
                     const directLink = `${serverUrl}/support/${sessionId}`;
                     const downloadUrl = `${serverUrl}/api/packages/download/${sessionId}`;

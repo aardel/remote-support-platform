@@ -72,12 +72,58 @@ router.get('/suggest', async (req, res) => {
 
 router.post('/create', async (req, res) => {
     try {
+        const clientIp = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
+        console.log(`[SESSION-CREATE] Public web request from IP: ${clientIp}, User-Agent: ${req.headers['user-agent'] || 'unknown'}`);
+        
+        // Check for existing recent session from same IP (within last 5 minutes)
+        const Session = require('../models/Session');
+        try {
+            const recentSessions = await Session.findByTechnician('public-web');
+            const now = new Date();
+            const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+            
+            // Check if there's a very recent session (likely duplicate request)
+            const veryRecent = recentSessions.find(s => {
+                const createdAt = new Date(s.created_at);
+                return createdAt > fiveMinutesAgo && s.status === 'waiting' && !s.device_id;
+            });
+            
+            if (veryRecent) {
+                console.log(`[SESSION-CREATE] Reusing recent session ${veryRecent.session_id} for IP ${clientIp} (prevented duplicate)`);
+                const origin = process.env.SUPPORT_URL || `${req.protocol}://${req.get('host')}`;
+                const directLink = `${origin}/support/${encodeURIComponent(veryRecent.session_id)}`;
+                const downloadUrl = `${origin}/api/packages/download/${encodeURIComponent(veryRecent.session_id)}?type=zip`;
+                
+                const ttlDays = Math.max(1, Math.floor(Number(process.env.GENERATED_SESSION_TTL_DAYS || 20) || 20));
+                const expiresInMinutes = ttlDays * 24 * 60;
+                const urlShortener = require('../services/urlShortener');
+                const shortCode = urlShortener.createShortUrl(directLink, expiresInMinutes);
+                const shortDownloadCode = urlShortener.createShortUrl(downloadUrl, expiresInMinutes);
+                const baseUrl = origin.replace(/\/remote.*$/, '');
+                const shortLink = `${baseUrl}/${shortCode}`;
+                const shortDownloadUrl = `${baseUrl}/${shortDownloadCode}`;
+                
+                return res.json({
+                    success: true,
+                    sessionId: veryRecent.session_id,
+                    directLink,
+                    shortLink,
+                    downloadUrl,
+                    shortDownloadUrl,
+                    reused: true
+                });
+            }
+        } catch (e) {
+            console.warn('[SESSION-CREATE] Could not check for existing sessions:', e.message);
+        }
+        
         const ttlDays = Math.max(1, Math.floor(Number(process.env.GENERATED_SESSION_TTL_DAYS || 20) || 20));
         const expiresIn = ttlDays * 24 * 60 * 60;
         const session = await SessionService.createSession({
             technicianId: 'public-web',
             expiresIn
         });
+        console.log(`[SESSION-CREATE] Created session ${session.session_id || session.sessionId} for public-web from IP ${clientIp}`);
 
         const sessionId = session.session_id || session.sessionId;
         if (!sessionId) {
