@@ -5,6 +5,7 @@ const path = require('path');
 const multer = require('multer');
 const PackageBuilder = require('../services/packageBuilder');
 const { requireAuth } = require('../middleware/sessionAuth');
+const urlShortener = require('../services/urlShortener');
 
 const upload = multer({ dest: '/tmp' });
 
