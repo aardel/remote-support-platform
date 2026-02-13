@@ -64,18 +64,23 @@ function injectMouse(data) {
     return;
   }
   try {
+    const inputType =
+      data.type === 'move' ? 'mousemove' :
+      data.type === 'down' ? 'mousedown' :
+      data.type === 'up' ? 'mouseup' :
+      data.type;
     const bounds = screen.getPrimaryDisplay().bounds;
     const x = Math.round(bounds.x + data.x * bounds.width);
     const y = Math.round(bounds.y + data.y * bounds.height);
 
-    if (data.type === 'mousemove') {
+    if (inputType === 'mousemove') {
       robot.moveMouse(x, y);
-    } else if (data.type === 'mousedown' || data.type === 'mouseup') {
+    } else if (inputType === 'mousedown' || inputType === 'mouseup') {
       const btn = MOUSE_BUTTONS[data.button] || 'left';
       if (btn === 'middle' && !robot.mouseToggle) return;
       robot.moveMouse(x, y);
-      robot.mouseToggle(data.type === 'mousedown' ? 'down' : 'up', btn);
-    } else if (data.type === 'scroll') {
+      robot.mouseToggle(inputType === 'mousedown' ? 'down' : 'up', btn);
+    } else if (inputType === 'scroll') {
       if (data.deltaX || data.deltaY) {
         robot.moveMouse(x, y);
         const dx = data.deltaX ? (Math.abs(data.deltaX) < 40 ? Math.sign(data.deltaX) : data.deltaX / 40) : 0;
@@ -104,6 +109,7 @@ const BROWSER_TO_ROBOTJS = {
 function injectKeyboard(data) {
   if (!robot) return;
   try {
+    const inputType = data.type === 'down' ? 'keydown' : data.type === 'up' ? 'keyup' : data.type;
     const keyLower = (data.key || '').toLowerCase();
     if (['control', 'shift', 'alt', 'meta'].includes(keyLower)) return;
 
@@ -126,7 +132,7 @@ function injectKeyboard(data) {
     }
 
     if (key) {
-      const down = data.type === 'keydown' ? 'down' : 'up';
+      const down = inputType === 'keydown' ? 'down' : 'up';
       robot.keyToggle(key, down, mods.length ? mods : undefined);
     }
   } catch (e) {
@@ -463,19 +469,13 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
       if (mainWindow) mainWindow.webContents.send('signaling:connection-request', data);
 
       if (currentAllowUnattended) {
-        // Auto approve handled by renderer or implicitly by separate event if needed? 
-        // Actually original code had logic here.
-        // If unattended, we do nothing and let renderer handle it? Or auto-respond?
-        // In original code (line 818), it said "Auto-approve if unattended".
-        // But then in line 1007 manual flow, it said "if unattended return".
-        // We should ensure we don't block.
-        // Let's assume renderer (via signaling:connection-request) handles auto-reply if needed, 
-        // OR we just send Approved here.
-        // Better:
-        if (currentAllowUnattended) {
-          socket.emit('connection-response', { sessionId, approved: true, targetSocketId: data.technicianSocketId });
-          return;
+        try {
+          await sendApprovalResponse(currentSessionId, true);
+          if (mainWindow) mainWindow.webContents.send('signaling:connection-response', { sessionId: currentSessionId, approved: true });
+        } catch (e) {
+          console.error('Auto-approval failed:', e.message);
         }
+        return;
       }
 
       // Manual flow
@@ -605,6 +605,11 @@ ipcMain.handle('helper:socket-send-offer', (_event, data) => { if (socket) socke
 ipcMain.handle('helper:socket-send-ice', (_event, data) => { if (socket) socket.emit('webrtc-ice-candidate', data); });
 ipcMain.handle('helper:socket-emit', (_event, eventName, data) => { if (socket) socket.emit(eventName, data); });
 ipcMain.handle('helper:socket-disconnect', () => { if (socket) socket.disconnect(); socket = null; });
+ipcMain.on('control-message', (_event, payload) => {
+  if (!payload || !payload.type) return;
+  if (payload.type === 'mouse' && payload.data) injectMouse(payload.data);
+  if (payload.type === 'keyboard' && payload.data) injectKeyboard(payload.data);
+});
 
 // Chat Window
 ipcMain.handle('helper:open-chat-window', () => {

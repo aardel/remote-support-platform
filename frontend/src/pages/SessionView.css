@@ -45,9 +45,11 @@
 /* Toolbar buttons */
 .toolbar-btn {
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 6px 10px;
+  gap: 2px;
+  padding: 4px 8px;
   background: transparent;
   color: #94a3b8;
   border: 1px solid transparent;
@@ -68,6 +70,11 @@
   background: #334155;
   color: #fff;
   border-color: #475569;
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .back-btn {
@@ -140,6 +147,22 @@
   font-weight: 600;
   color: #94a3b8;
   white-space: nowrap;
+}
+
+.control-inline-status {
+  font-size: 11px;
+  color: #cbd5e1;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.control-inline-status-warn {
+  color: #f59e0b;
+  border-color: #92400e;
+  background: rgba(146, 64, 14, 0.18);
 }
 
 /* Monitor selector */
@@ -277,6 +300,27 @@
   white-space: nowrap;
 }
 
+.button-help-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+  padding: 8px 14px;
+  background: #111827;
+  border-bottom: 1px solid #334155;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.button-help-panel span {
+  white-space: nowrap;
+}
+
+.button-help-warning {
+  color: #fbbf24;
+  font-weight: 600;
+}
+
 /* ── Main area ── */
 .session-main {
   flex: 1;
@@ -313,6 +357,11 @@
   max-height: 100%;
   object-fit: contain;
   cursor: crosshair;
+}
+
+.remote-video.control-disabled,
+.remote-canvas.control-disabled {
+  cursor: not-allowed;
 }
 
 .remote-canvas {

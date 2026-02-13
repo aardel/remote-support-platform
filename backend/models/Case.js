@@ -50,6 +50,43 @@ class Case {
         return result.rows[0] || null;
     }
 
+    static async findLatestBySessionId(sessionId) {
+        const result = await pool.query(
+            'SELECT * FROM cases WHERE session_id = $1 ORDER BY created_at DESC LIMIT 1',
+            [sessionId]
+        );
+        return result.rows[0] || null;
+    }
+
+    static async updateById(id, data) {
+        const fields = [];
+        const values = [];
+        let i = 1;
+        const assign = (col, val) => {
+            if (val === undefined) return;
+            fields.push(`${col} = $${i++}`);
+            values.push(val);
+        };
+        assign('status', data.status);
+        assign('problem_description', data.problemDescription);
+        assign('remote_viewing_seconds', data.remoteViewingSeconds);
+        assign('phone_support_minutes', data.phoneSupportMinutes);
+        assign('whatsapp_support_minutes', data.whatsappSupportMinutes);
+        assign('billable_total_seconds', data.billableTotalSeconds);
+        assign('technician_id', data.technicianId);
+        assign('technician_name', data.technicianName);
+        assign('customer_name', data.customerName);
+        assign('machine_name', data.machineName);
+        if (!fields.length) return this.findById(id);
+        fields.push(`updated_at = NOW()`);
+        values.push(id);
+        const result = await pool.query(
+            `UPDATE cases SET ${fields.join(', ')} WHERE id = $${i} RETURNING *`,
+            values
+        );
+        return result.rows[0] || null;
+    }
+
     static async deleteById(id) {
         const result = await pool.query('DELETE FROM cases WHERE id = $1 RETURNING id', [id]);
         return result.rows[0] || null;
@@ -83,4 +120,3 @@ class Case {
 }
 
 module.exports = Case;
-

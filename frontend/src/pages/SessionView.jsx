@@ -57,6 +57,7 @@ export default function SessionView({ user }) {
 
     // Video / control
     const [isControlEnabled, setControlEnabled] = useState(true);
+    const [helperCanControl, setHelperCanControl] = useState(true);
     const [isSplitView, setSplitView] = useState(false);
     const [selectedMonitor, setMonitor] = useState(0);
     const [monitors, setMonitors] = useState(DEFAULT_MONITORS);
@@ -89,6 +90,7 @@ export default function SessionView({ user }) {
     const [sessionInfo, setInfo] = useState(null);
     const [errorMsg, setError] = useState(null);
     const [leaving, setLeaving] = useState(false);
+    const [showControlsHelp, setShowControlsHelp] = useState(false);
 
     // Timer for viewing seconds
     const viewingTimerRef = useRef(null);
@@ -117,6 +119,10 @@ export default function SessionView({ user }) {
             setError('The support session has ended.');
             setPeerConnected(false);
         });
+        socket.on('vnc-ready', () => {
+            setVncFallback(true);
+            setPeerConnected(false);
+        });
 
         // Helper joined after us — update status
         socket.on('peer-joined', (data) => {
@@ -131,6 +137,12 @@ export default function SessionView({ user }) {
 
         // Helper capabilities (includes monitor info)
         socket.on('helper-capabilities', (data) => {
+            if (typeof data?.capabilities?.robotjs === 'boolean') {
+                setHelperCanControl(data.capabilities.robotjs);
+                if (!data.capabilities.robotjs) {
+                    setControlEnabled(false);
+                }
+            }
             if (data?.displays && data.displays.length > 0) {
                 setMonitors(data.displays.map((d, i) => ({
                     index: i,
@@ -148,21 +160,19 @@ export default function SessionView({ user }) {
             if (!chatOpen) setUnread(u => u + 1);
         });
 
-        // File from helper
-        socket.on('file-incoming', (meta) => {
-            setRecvProgress({ name: meta.name, percent: 0 });
-        });
-        socket.on('file-chunk', (data) => {
-            setRecvProgress(p => p ? { ...p, percent: Math.min(100, (data.offset / data.total) * 100) } : p);
-        });
-        socket.on('file-complete', (data) => {
-            setRecvProgress(null);
-            if (data?.url) {
-                const a = document.createElement('a');
-                a.href = data.url;
-                a.download = data.name || 'file';
-                a.click();
-            }
+        // File transfer: helper/user uploads are announced via backend `file-available`
+        socket.on('file-available', (data) => {
+            const direction = data?.direction || 'technician-to-user';
+            if (direction !== 'user-to-technician') return;
+            const fileId = data?.id;
+            const fileName = data?.original_name || data?.originalName || 'download';
+            if (!fileId) return;
+            setRecvProgress({ name: fileName, percent: 100 });
+            const a = document.createElement('a');
+            a.href = `/remote/api/files/download/${encodeURIComponent(fileId)}`;
+            a.download = fileName;
+            a.click();
+            setTimeout(() => setRecvProgress(null), 1200);
         });
 
         // WebRTC signalling (event names must match websocketHandler.js)
@@ -206,7 +216,7 @@ export default function SessionView({ user }) {
         socket.emit('join-session', { sessionId, role: 'technician', technicianName: user?.username });
 
         return () => { socket.disconnect(); };
-    }, [sessionId]);
+    }, [sessionId, user?.username]);
 
     /* ---------- WebRTC offer handler ---------- */
     const handleIncomingOffer = async (offer, pendingCandidates = []) => {
@@ -317,6 +327,24 @@ export default function SessionView({ user }) {
         setIceState('new');
     };
 
+    useEffect(() => {
+        const socket = socketRef.current;
+        if (!socket || !sessionId) return;
+        const technicianId = user?.id || user?.username;
+        socket.emit('viewer-state', {
+            sessionId,
+            viewing: !!(peerConnected && viewing),
+            technicianId
+        });
+        return () => {
+            socket.emit('viewer-state', {
+                sessionId,
+                viewing: false,
+                technicianId
+            });
+        };
+    }, [sessionId, peerConnected, viewing, user?.id, user?.username]);
+
     /* ---------- Viewing timer ---------- */
     useEffect(() => {
         if (peerConnected && viewing) {
@@ -363,8 +391,18 @@ export default function SessionView({ user }) {
                 ch.send(JSON.stringify(data));
             }
         } else if (socketRef.current) {
-            if (data.kind === 'mouse') socketRef.current.emit('remote-mouse', data);
-            if (data.kind === 'keyboard') socketRef.current.emit('remote-keyboard', data);
+            if (data.kind === 'mouse') {
+                const type =
+                    data.type === 'move' ? 'mousemove' :
+                    data.type === 'down' ? 'mousedown' :
+                    data.type === 'up' ? 'mouseup' :
+                    data.type;
+                socketRef.current.emit('remote-mouse', { ...data, type });
+            }
+            if (data.kind === 'keyboard') {
+                const type = data.type === 'down' ? 'keydown' : data.type === 'up' ? 'keyup' : data.type;
+                socketRef.current.emit('remote-keyboard', { ...data, type });
+            }
         }
     }, []);
 
@@ -475,44 +513,43 @@ export default function SessionView({ user }) {
 
     /* ---------- File send ---------- */
     const handleFileSend = useCallback(async (file) => {
-        if (!file || !socketRef.current) return;
-        const CHUNK = 64 * 1024;
-        const total = file.size;
-        let offset = 0;
-
-        socketRef.current.emit('file-start', { sessionId, name: file.name, size: total, type: file.type });
+        if (!file) return;
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('sessionId', sessionId);
+        formData.append('direction', 'technician-to-user');
         setSendProgress({ name: file.name, percent: 0 });
-
-        const reader = new FileReader();
-        const readSlice = () => {
-            const slice = file.slice(offset, offset + CHUNK);
-            reader.readAsArrayBuffer(slice);
-        };
-        reader.onload = (e) => {
-            socketRef.current.emit('file-chunk', { sessionId, data: e.target.result, offset });
-            offset += e.target.result.byteLength;
-            const pct = Math.min(100, (offset / total) * 100);
-            setSendProgress(p => p ? { ...p, percent: pct } : p);
-            if (offset < total) readSlice();
-            else {
-                socketRef.current.emit('file-end', { sessionId });
-                setSendProgress(null);
-            }
-        };
-        readSlice();
+        try {
+            await axios.post('/api/files/upload', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                onUploadProgress: (evt) => {
+                    const total = evt.total || file.size || 1;
+                    const loaded = evt.loaded || 0;
+                    setSendProgress({ name: file.name, percent: Math.round((loaded / total) * 100) });
+                }
+            });
+            setSendProgress({ name: file.name, percent: 100 });
+            setTimeout(() => setSendProgress(null), 800);
+        } catch (err) {
+            console.error('Error uploading file:', err);
+            setSendProgress(null);
+        }
     }, [sessionId]);
 
     /* ---------- Case report ---------- */
     const loadCase = useCallback(async () => {
         try {
-            const res = await axios.get(`/api/sessions/${sessionId}/case`);
-            if (res.data?.caseReport) {
-                const c = res.data.caseReport;
-                setOpenCase(c);
-                setNotes(c.notes || '');
-                setPhoneMin(c.phone_support_minutes || 0);
-                setWhatsappMin(c.whatsapp_support_minutes || 0);
+            const res = await axios.get('/api/cases', { params: { q: sessionId, limit: 50 } });
+            const list = Array.isArray(res.data?.cases) ? res.data.cases : [];
+            const c = list.find(row => (row.session_id || row.sessionId) === sessionId);
+            if (!c) {
+                setOpenCase(null);
+                return;
             }
+            setOpenCase(c);
+            setNotes(c.problem_description || '');
+            setPhoneMin(c.phone_support_minutes || 0);
+            setWhatsappMin(c.whatsapp_support_minutes || 0);
         } catch { /* no case yet */ }
     }, [sessionId]);
 
@@ -633,18 +670,38 @@ export default function SessionView({ user }) {
 
                     <button
                         className={`toolbar-btn ${isControlEnabled ? 'active' : ''}`}
-                        onClick={() => setControlEnabled(c => !c)}
-                        title={isControlEnabled ? 'Disable control' : 'Enable control'}
+                        onClick={() => {
+                            if (!helperCanControl) return;
+                            setControlEnabled(c => !c);
+                        }}
+                        disabled={!helperCanControl}
+                        title={
+                            !helperCanControl
+                                ? 'Control unavailable on helper (view-only mode)'
+                                : (isControlEnabled ? 'Disable control' : 'Enable control')
+                        }
                     >
-                        {isControlEnabled ? '\uD83D\uDDB1' : '\uD83D\uDC41'}
+                        <span className="tb-icon">{isControlEnabled ? '\uD83D\uDDB1' : '\uD83D\uDC41'}</span>
+                        <span className="tb-label">{isControlEnabled ? 'Control On' : 'Control Off'}</span>
                     </button>
+                    {!helperCanControl && (
+                        <span className="control-inline-status control-inline-status-warn">
+                            View-only: helper control unavailable
+                        </span>
+                    )}
+                    {helperCanControl && !isControlEnabled && (
+                        <span className="control-inline-status">
+                            View-only: control is disabled
+                        </span>
+                    )}
 
                     <button
                         className={`toolbar-btn ${isSplitView ? 'active' : ''}`}
                         onClick={() => setSplitView(s => !s)}
                         title="Split view"
                     >
-                        {'\u2B1B'}
+                        <span className="tb-icon">{'\u2B1B'}</span>
+                        <span className="tb-label">Split</span>
                     </button>
 
                     <button
@@ -652,7 +709,8 @@ export default function SessionView({ user }) {
                         onClick={() => setChatOpen(o => !o)}
                         title="Chat"
                     >
-                        {'\uD83D\uDCAC'}{unread > 0 && <span className="chat-badge">{unread}</span>}
+                        <span className="tb-icon">{'\uD83D\uDCAC'}{unread > 0 && <span className="chat-badge">{unread}</span>}</span>
+                        <span className="tb-label">Chat</span>
                     </button>
 
                     <button
@@ -660,11 +718,13 @@ export default function SessionView({ user }) {
                         onClick={() => setCaseOpen(o => !o)}
                         title="Case report"
                     >
-                        {'\uD83D\uDCCB'}
+                        <span className="tb-icon">{'\uD83D\uDCCB'}</span>
+                        <span className="tb-label">Report</span>
                     </button>
 
-                    <label className="toolbar-btn file-upload-label" title="Send file (legacy)">
-                        {'\uD83D\uDCCE'}
+                    <label className="toolbar-btn file-upload-label" title="Send file">
+                        <span className="tb-icon">{'\uD83D\uDCCE'}</span>
+                        <span className="tb-label">Send</span>
                         <input
                             type="file"
                             hidden
@@ -677,10 +737,37 @@ export default function SessionView({ user }) {
                         onClick={() => setShowFileManager(s => !s)}
                         title="File Manager"
                     >
-                        {'\uD83D\uDCC2'}
+                        <span className="tb-icon">{'\uD83D\uDCC2'}</span>
+                        <span className="tb-label">Files</span>
+                    </button>
+
+                    <button
+                        className={`toolbar-btn ${showControlsHelp ? 'active' : ''}`}
+                        onClick={() => setShowControlsHelp(v => !v)}
+                        title="Show button guide"
+                    >
+                        <span className="tb-icon">?</span>
+                        <span className="tb-label">Help</span>
                     </button>
                 </div>
             </div>
+
+            {showControlsHelp && (
+                <div className="button-help-panel">
+                    <span><strong>Control On/Off:</strong> Enable or disable remote mouse and keyboard input.</span>
+                    <span><strong>Split:</strong> Show a second monitor pane and switch monitors quickly.</span>
+                    <span><strong>Chat:</strong> Open session chat with the helper user.</span>
+                    <span><strong>Report:</strong> Open case report notes and billing fields.</span>
+                    <span><strong>Send:</strong> Upload a file to the helper machine.</span>
+                    <span><strong>Files:</strong> Open remote file manager (P2P channel).</span>
+                    <span><strong>Fast/Bal/HD:</strong> Stream quality presets (latency vs image quality).</span>
+                    {!helperCanControl && (
+                        <span className="button-help-warning">
+                            Helper reported control capability is unavailable, so this session is view-only.
+                        </span>
+                    )}
+                </div>
+            )}
 
             {/* Error banner */}
             {errorMsg && (
@@ -702,7 +789,7 @@ export default function SessionView({ user }) {
                     {vncFallback ? (
                         <canvas
                             ref={canvasRef}
-                            className="remote-canvas"
+                            className={`remote-canvas ${isControlEnabled && helperCanControl ? '' : 'control-disabled'}`}
                             onMouseMove={handleMouseMove}
                             onMouseDown={handleMouseDown}
                             onMouseUp={handleMouseUp}
@@ -713,7 +800,7 @@ export default function SessionView({ user }) {
                     ) : (
                         <video
                             ref={videoRef}
-                            className="remote-video"
+                            className={`remote-video ${isControlEnabled && helperCanControl ? '' : 'control-disabled'}`}
                             autoPlay
                             playsInline
                             onMouseMove={handleMouseMove}

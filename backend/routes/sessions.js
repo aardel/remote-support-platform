@@ -3,6 +3,7 @@ const router = express.Router();
 const SessionService = require('../services/sessionService');
 const Session = require('../models/Session');
 const Device = require('../models/Device');
+const Case = require('../models/Case');
 const { requireAuth } = require('../middleware/sessionAuth');
 const { geolocate, normalizeIp } = require('../services/geolocate');
 
@@ -14,6 +15,16 @@ function extractClientIp(req) {
         if (ip) return ip;
     }
     return normalizeIp(req.ip);
+}
+
+function computeRemoteViewingSeconds(sessionRow) {
+    if (!sessionRow) return 0;
+    let seconds = Number(sessionRow.billable_seconds || 0) || 0;
+    const startedAt = sessionRow.billable_started_at ? new Date(sessionRow.billable_started_at).getTime() : null;
+    if (startedAt && Number.isFinite(startedAt)) {
+        seconds += Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+    }
+    return Math.max(0, Math.floor(seconds));
 }
 
 // Assign session for device (helper calls on launch – no auth)
@@ -319,6 +330,86 @@ router.post('/:sessionId/approval', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         console.error('Error handling approval:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Compatibility case endpoints used by SessionView
+router.get('/:sessionId/case', requireAuth, async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const caseReport = await Case.findLatestBySessionId(sessionId);
+        if (!caseReport) return res.json({ caseReport: null });
+        res.json({ caseReport });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+async function upsertCaseFromSession(req, res, status) {
+    const { sessionId } = req.params;
+    const { notes, phoneMinutes, whatsappMinutes, remoteViewingSeconds } = req.body || {};
+    const session = await SessionService.getSession(sessionId);
+    if (!session) {
+        return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const phoneMin = Math.max(0, Math.floor(Number(phoneMinutes) || 0));
+    const whatsappMin = Math.max(0, Math.floor(Number(whatsappMinutes) || 0));
+    const remoteSeconds = Math.max(
+        0,
+        Math.floor(Number(remoteViewingSeconds ?? computeRemoteViewingSeconds(session)) || 0)
+    );
+    const technicianId = req.user?.id || req.user?.nextcloudId || req.user?.username || 'technician';
+    const technicianName = req.user?.username || 'Technician';
+    const billableTotalSeconds = remoteSeconds + (phoneMin * 60) + (whatsappMin * 60);
+    const description = String(notes || '').trim() || 'Session notes';
+
+    const existing = await Case.findLatestBySessionId(sessionId);
+    let row;
+    if (existing) {
+        row = await Case.updateById(existing.id, {
+            status,
+            problemDescription: description,
+            remoteViewingSeconds: remoteSeconds,
+            phoneSupportMinutes: phoneMin,
+            whatsappSupportMinutes: whatsappMin,
+            billableTotalSeconds,
+            technicianId,
+            technicianName
+        });
+    } else {
+        row = await Case.create({
+            sessionId,
+            deviceId: session.device_id || null,
+            customerName: session.customer_name || null,
+            machineName: session.machine_name || null,
+            technicianId,
+            technicianName,
+            status,
+            problemDescription: description,
+            remoteViewingSeconds: remoteSeconds,
+            phoneSupportMinutes: phoneMin,
+            whatsappSupportMinutes: whatsappMin,
+            billableTotalSeconds
+        });
+    }
+
+    return res.json({ success: true, caseReport: row });
+}
+
+router.post('/:sessionId/case', requireAuth, async (req, res) => {
+    try {
+        return await upsertCaseFromSession(req, res, 'open');
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/:sessionId/case/close', requireAuth, async (req, res) => {
+    try {
+        return await upsertCaseFromSession(req, res, 'closed');
+    } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });

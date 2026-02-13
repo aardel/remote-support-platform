@@ -155,6 +155,27 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+app.get('/api/turn-servers', (req, res) => {
+    const servers = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+    ];
+    const urls = (process.env.TURN_URLS || process.env.TURN_URL || '')
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
+    const username = process.env.TURN_USERNAME || '';
+    const credential = process.env.TURN_PASSWORD || process.env.TURN_CREDENTIAL || '';
+    for (const u of urls) {
+        if (username && credential) {
+            servers.push({ urls: u, username, credential });
+        } else {
+            servers.push({ urls: u });
+        }
+    }
+    res.json({ servers });
+});
+
 // Socket.io connection handling is in websocketHandler.js (wsHandler above)
 // Do NOT add duplicate io.on('connection') handlers here
 
