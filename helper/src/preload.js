@@ -119,5 +119,11 @@ contextBridge.exposeInMainWorld('helperApi', {
   createDesktopShortcut: () => ipcRenderer.invoke('helper:create-desktop-shortcut'),
 
   // Direct control injection via WebRTC data channel (bypasses Socket.io for lower latency)
-  injectControl: (data) => ipcRenderer.send('control-message', data)
+  injectControl: (data) => ipcRenderer.send('control-message', data),
+
+  // File System for P2P
+  fsDrives: () => ipcRenderer.invoke('helper:fs-drives'),
+  fsList: (path) => ipcRenderer.invoke('helper:fs-list', path),
+  fsReadChunk: (path, offset, length) => ipcRenderer.invoke('helper:fs-read-chunk', path, offset, length),
+  fsWriteChunk: (path, data, offset) => ipcRenderer.invoke('helper:fs-write-chunk', path, data, offset)
 });

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import axios from '../api/axios';
+import FileManager from '../components/FileManager';
 
 const SOCKET_PATH = '/remote/socket.io';
 const MONITORS = [1, 2, 3, 4];
@@ -38,6 +39,7 @@ export default function SessionView({ user }) {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const controlChannel = useRef(null);
+    const filesChannel = useRef(null);
     const pcRef = useRef(null);
     const socketRef = useRef(null);
     const chatEndRef = useRef(null);
@@ -66,6 +68,7 @@ export default function SessionView({ user }) {
     // File transfer
     const [sendProgress, setSendProgress] = useState(null);
     const [recvProgress, setRecvProgress] = useState(null);
+    const [showFileManager, setShowFileManager] = useState(false);
 
     // Case report
     const [caseOpen, setCaseOpen] = useState(false);
@@ -225,6 +228,12 @@ export default function SessionView({ user }) {
         // Receive DataChannel from helper
         pc.ondatachannel = (e) => {
             const ch = e.channel;
+            if (ch.label === 'files') {
+                filesChannel.current = ch;
+                ch.onopen = () => console.log('Files channel open');
+                return;
+            }
+            // Control channel
             ch.onopen = () => { controlChannel.current = ch; setDcState('open'); };
             ch.onclose = () => {
                 if (controlChannel.current === ch) {
@@ -592,7 +601,7 @@ export default function SessionView({ user }) {
                         📋
                     </button>
 
-                    <label className="toolbar-btn file-upload-label" title="Send file">
+                    <label className="toolbar-btn file-upload-label" title="Send file (legacy)">
                         📎
                         <input
                             type="file"
@@ -600,6 +609,14 @@ export default function SessionView({ user }) {
                             onChange={e => { if (e.target.files?.[0]) handleFileSend(e.target.files[0]); e.target.value = ''; }}
                         />
                     </label>
+
+                    <button
+                        className={`toolbar-btn ${showFileManager ? 'active' : ''}`}
+                        onClick={() => setShowFileManager(s => !s)}
+                        title="File Manager"
+                    >
+                        📂
+                    </button>
                 </div>
             </div>
 
@@ -771,6 +788,12 @@ export default function SessionView({ user }) {
                 <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.25))}>−</button>
                 <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>⟳</button>
             </div>
+            {showFileManager && (
+                <FileManager
+                    channel={filesChannel.current}
+                    onClose={() => setShowFileManager(false)}
+                />
+            )}
         </div>
     );
 }

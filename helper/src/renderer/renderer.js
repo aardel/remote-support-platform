@@ -702,8 +702,90 @@ async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
         }
       } catch (e) { console.error('DC error', e); }
     };
+
+    // Create data channel for File Transfer (reliable, ordered)
+    const filesChannel = pc.createDataChannel('files', { ordered: true });
+    filesChannel.onopen = () => log('[DataChannel] files channel open');
+
+    filesChannel.onmessage = async (evt) => {
+      try {
+        const data = typeof evt.data === 'string' ? JSON.parse(evt.data) : null;
+        if (!data || !data.action) return;
+
+        if (data.action === 'drives') {
+          const drives = await window.helperApi.fsDrives();
+          filesChannel.send(JSON.stringify({ action: 'drives-response', reqId: data.reqId, drives }));
+        }
+        else if (data.action === 'list') {
+          try {
+            const items = await window.helperApi.fsList(data.path);
+            filesChannel.send(JSON.stringify({ action: 'list-response', reqId: data.reqId, items }));
+          } catch (e) {
+            filesChannel.send(JSON.stringify({ action: 'list-response', reqId: data.reqId, error: e.message }));
+          }
+        }
+        else if (data.action === 'read') {
+          // Basic read chunk implementation
+          // If size is small, we can read whole file? No, assume chunks requested or whole file requested?
+          // The protocol should support chunking requests.
+          // For V1, let's assume request contains offset/length.
+          // If not, allow downloading whole file in one go? (Risk of memory limit)
+          // Let's implement chunk reading.
+          try {
+            const buffer = await window.helperApi.fsReadChunk(data.path, data.offset || 0, data.length || 64 * 1024);
+            // Convert buffer to Base64
+            const b64 = buffer ? d2b(buffer) : '';
+            filesChannel.send(JSON.stringify({
+              action: 'read-response',
+              reqId: data.reqId,
+              chunk: b64,
+              offset: data.offset || 0,
+              eof: !buffer || buffer.byteLength < (data.length || 64 * 1024)
+            }));
+          } catch (e) {
+            filesChannel.send(JSON.stringify({ action: 'read-response', reqId: data.reqId, error: e.message }));
+          }
+        }
+        else if (data.action === 'write') {
+          try {
+            // data.chunk is base64
+            if (data.chunk) {
+              const buf = b2d(data.chunk); // decode
+              await window.helperApi.fsWriteChunk(data.path, buf, data.offset || 0);
+            }
+            filesChannel.send(JSON.stringify({ action: 'write-ack', reqId: data.reqId }));
+          } catch (e) {
+            filesChannel.send(JSON.stringify({ action: 'write-ack', reqId: data.reqId, error: e.message }));
+          }
+        }
+      } catch (e) {
+        console.error('FileDC error:', e);
+      }
+    };
+
   } catch (e) {
     log('[DataChannel] Failed to create: ' + e.message);
+  }
+
+  // Helper to convert Buffer/ArrayBuffer to Base64 (d2b) and back (b2d)
+  // Since we are in browser environment in renderer:
+  function d2b(buffer) {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+  }
+  function b2d(b64) {
+    const bin = window.atob(b64);
+    const len = bin.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = bin.charCodeAt(i);
+    }
+    return bytes;
   }
 
   pc.onicecandidate = (event) => {
