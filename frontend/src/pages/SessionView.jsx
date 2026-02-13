@@ -6,26 +6,28 @@ import FileManager from '../components/FileManager';
 import './SessionView.css';
 
 const SOCKET_PATH = '/remote/socket.io';
-const MONITORS = [1, 2, 3, 4];
+const DEFAULT_MONITORS = []; // populated dynamically from helper
+const QUALITY_PRESETS = ['speed', 'balanced', 'quality'];
 
-/* ---------- SDP bitrate booster ---------- */
+/* ---------- SDP bitrate booster (match helper: 16 Mbps) ---------- */
 function boostSdpBitrate(sdp) {
     const lines = sdp.split('\r\n');
     const out = [];
     let inVideo = false;
     for (const line of lines) {
-        if (line.startsWith('m=video')) inVideo = true;
-        else if (line.startsWith('m=')) inVideo = false;
-        if (inVideo && line.startsWith('b=AS:')) {
-            out.push('b=AS:8000');
-            continue;
-        }
+        if (line.startsWith('m=video')) { inVideo = true; out.push(line); continue; }
+        if (line.startsWith('m=') && !line.startsWith('m=video')) inVideo = false;
+        // Remove existing b=AS for video — we insert our own
+        if (inVideo && line.startsWith('b=AS:')) continue;
         out.push(line);
-    }
-    if (inVideo) {
-        // no b=AS found, insert one
-        const idx = out.findIndex(l => l.startsWith('m=video'));
-        if (idx !== -1) out.splice(idx + 1, 0, 'b=AS:8000');
+        // After c= in video section, insert bitrate
+        if (inVideo && line.startsWith('c=')) {
+            out.push('b=AS:16000');
+        }
+        // Append google bitrate hints to fmtp lines for faster ramp-up
+        if (inVideo && line.startsWith('a=fmtp:') && !line.includes('x-google-min-bitrate')) {
+            out[out.length - 1] = line + ';x-google-min-bitrate=4000;x-google-start-bitrate=16000;x-google-max-bitrate=16000';
+        }
     }
     return out.join('\r\n');
 }
@@ -44,6 +46,7 @@ export default function SessionView({ user }) {
     const pcRef = useRef(null);
     const socketRef = useRef(null);
     const chatEndRef = useRef(null);
+    const splitVideoRef = useRef(null);
 
     // Connection state
     const [connected, setConnected] = useState(false);
@@ -55,10 +58,11 @@ export default function SessionView({ user }) {
     // Video / control
     const [isControlEnabled, setControlEnabled] = useState(true);
     const [isSplitView, setSplitView] = useState(false);
-    const [selectedMonitor, setMonitor] = useState(1);
-    const [monitors, setMonitors] = useState(MONITORS);
+    const [selectedMonitor, setMonitor] = useState(0);
+    const [monitors, setMonitors] = useState(DEFAULT_MONITORS);
     const [viewing, setViewing] = useState(true);
     const [vncFallback, setVncFallback] = useState(false);
+    const [quality, setQuality] = useState('balanced');
 
     // Chat
     const [chatOpen, setChatOpen] = useState(false);
@@ -89,6 +93,9 @@ export default function SessionView({ user }) {
     // Timer for viewing seconds
     const viewingTimerRef = useRef(null);
 
+    // Mouse throttle ref (RustDesk pattern: cap at ~60fps = 16ms)
+    const lastMouseSendRef = useRef(0);
+
     /* ---------- Socket.io setup ---------- */
     useEffect(() => {
         const socket = io(window.location.origin, {
@@ -111,9 +118,33 @@ export default function SessionView({ user }) {
             setPeerConnected(false);
         });
 
+        // Helper joined after us — update status
+        socket.on('peer-joined', (data) => {
+            if (data?.role === 'helper') setHelperOnline(true);
+        });
+        socket.on('peer-disconnected', (data) => {
+            if (data?.role === 'helper') {
+                setHelperOnline(false);
+                setPeerConnected(false);
+            }
+        });
+
+        // Helper capabilities (includes monitor info)
+        socket.on('helper-capabilities', (data) => {
+            if (data?.displays && data.displays.length > 0) {
+                setMonitors(data.displays.map((d, i) => ({
+                    index: i,
+                    label: d.label || `Display ${i + 1}`,
+                    width: d.width || 0,
+                    height: d.height || 0,
+                    primary: !!d.primary,
+                })));
+            }
+        });
+
         // Chat from helper
         socket.on('chat-message', (msg) => {
-            setChat(prev => [...prev, { from: 'helper', text: msg.text, time: ts() }]);
+            setChat(prev => [...prev, { from: 'helper', text: msg.text || msg.message, time: ts() }]);
             if (!chatOpen) setUnread(u => u + 1);
         });
 
@@ -134,7 +165,7 @@ export default function SessionView({ user }) {
             }
         });
 
-        // WebRTC signalling
+        // WebRTC signalling (event names must match websocketHandler.js)
         socket.on('webrtc-offer', async (data) => {
             try {
                 await handleIncomingOffer(data.offer, data.candidates || []);
@@ -142,7 +173,7 @@ export default function SessionView({ user }) {
                 console.error('Error handling offer:', err);
             }
         });
-        socket.on('webrtc-candidate', (data) => {
+        socket.on('webrtc-ice-candidate', (data) => {
             if (pcRef.current && data.candidate) {
                 pcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(() => { });
             }
@@ -171,8 +202,8 @@ export default function SessionView({ user }) {
             }
         });
 
-        // Tell server we joined
-        socket.emit('technician-join', { sessionId, technicianName: user?.username });
+        // Tell server we joined (must match websocketHandler's 'join-session' event)
+        socket.emit('join-session', { sessionId, role: 'technician', technicianName: user?.username });
 
         return () => { socket.disconnect(); };
     }, [sessionId]);
@@ -187,13 +218,12 @@ export default function SessionView({ user }) {
         ];
 
         try {
-            // Fetch TURN credentials if the endpoint exists
             const res = await axios.get('/api/turn-servers');
             if (res.data && Array.isArray(res.data.servers)) {
                 iceServers = res.data.servers;
             }
         } catch (e) {
-            // Fallback to STUN if API fails or not implemented
+            // Fallback to STUN
         }
 
         const pc = new RTCPeerConnection({ iceServers });
@@ -211,9 +241,10 @@ export default function SessionView({ user }) {
 
         pc.onicecandidate = (e) => {
             if (e.candidate && socketRef.current) {
-                socketRef.current.emit('webrtc-candidate', {
+                socketRef.current.emit('webrtc-ice-candidate', {
                     sessionId,
                     candidate: e.candidate,
+                    role: 'technician',
                 });
             }
         };
@@ -226,15 +257,17 @@ export default function SessionView({ user }) {
             }
         };
 
-        // Receive DataChannel from helper
+        // Receive DataChannels from helper
         pc.ondatachannel = (e) => {
             const ch = e.channel;
             if (ch.label === 'files') {
                 filesChannel.current = ch;
+                ch.binaryType = 'arraybuffer';
                 ch.onopen = () => console.log('Files channel open');
                 return;
             }
             // Control channel
+            ch.binaryType = 'arraybuffer';
             ch.onopen = () => { controlChannel.current = ch; setDcState('open'); };
             ch.onclose = () => {
                 if (controlChannel.current === ch) {
@@ -253,7 +286,7 @@ export default function SessionView({ user }) {
             };
         };
 
-        // Set remote description
+        // Set remote description (boost bitrate to match helper's 16 Mbps)
         let boosted = offer;
         if (offer.sdp) boosted = { ...offer, sdp: boostSdpBitrate(offer.sdp) };
         await pc.setRemoteDescription(new RTCSessionDescription(boosted));
@@ -278,6 +311,7 @@ export default function SessionView({ user }) {
             pcRef.current = null;
         }
         controlChannel.current = null;
+        filesChannel.current = null;
         setPeerConnected(false);
         setDcState('closed');
         setIceState('new');
@@ -298,7 +332,6 @@ export default function SessionView({ user }) {
         const x = Math.max(0, Math.min(65535, Math.round(data.x * 65535)));
         const y = Math.max(0, Math.min(65535, Math.round(data.y * 65535)));
 
-        let buf;
         const dv = new DataView(new ArrayBuffer(data.type === 'scroll' ? 9 : (data.type === 'move' ? 5 : 6)));
 
         if (data.type === 'move') {
@@ -330,7 +363,6 @@ export default function SessionView({ user }) {
                 ch.send(JSON.stringify(data));
             }
         } else if (socketRef.current) {
-            // Socket fallback uses normalized coords too, helper must handle it
             if (data.kind === 'mouse') socketRef.current.emit('remote-mouse', data);
             if (data.kind === 'keyboard') socketRef.current.emit('remote-keyboard', data);
         }
@@ -342,16 +374,19 @@ export default function SessionView({ user }) {
         const rect = vid.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return null;
 
-        // Normalized coordinates 0.0 - 1.0
         return {
             x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
             y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))
         };
     }, []);
 
-    /* ---------- Mouse handlers ---------- */
+    /* ---------- Mouse handlers (with 16ms throttle for move) ---------- */
     const handleMouseMove = useCallback((e) => {
         if (!isControlEnabled) return;
+        // Throttle: max ~60 events/sec (RustDesk-inspired — reduces wire traffic and input lag)
+        const now = performance.now();
+        if (now - lastMouseSendRef.current < 16) return;
+        lastMouseSendRef.current = now;
         const coords = getVideoCoords(e);
         if (!coords) return;
         sendInput({ kind: 'mouse', type: 'move', ...coords });
@@ -409,9 +444,16 @@ export default function SessionView({ user }) {
     const blockCtx = useCallback((e) => { if (isControlEnabled) e.preventDefault(); }, [isControlEnabled]);
 
     /* ---------- Monitor switch ---------- */
-    const switchMonitor = useCallback((mon) => {
-        setMonitor(mon);
-        socketRef.current?.emit('switch-monitor', { sessionId, monitor: mon });
+    const switchMonitor = useCallback((monIdx) => {
+        setMonitor(monIdx);
+        // Helper expects monitorIndex (0-based)
+        socketRef.current?.emit('switch-monitor', { sessionId, monitorIndex: monIdx });
+    }, [sessionId]);
+
+    /* ---------- Quality switch ---------- */
+    const switchQuality = useCallback((preset) => {
+        setQuality(preset);
+        socketRef.current?.emit('set-stream-quality', { sessionId, quality: preset });
     }, [sessionId]);
 
     /* ---------- Chat ---------- */
@@ -420,7 +462,6 @@ export default function SessionView({ user }) {
         if (!text) return;
         setChat(prev => [...prev, { from: 'technician', text, time: ts() }]);
         setChatInput('');
-        // Send via DC if available, else socket
         const ch = controlChannel.current;
         if (ch && ch.readyState === 'open') {
             ch.send(JSON.stringify({ kind: 'chat', text }));
@@ -510,7 +551,7 @@ export default function SessionView({ user }) {
         setLeaving(true);
         closePeer();
         if (socketRef.current) {
-            socketRef.current.emit('technician-leave', { sessionId });
+            socketRef.current.emit('leave-session', { sessionId });
             socketRef.current.disconnect();
         }
         navigate('/dashboard');
@@ -551,16 +592,36 @@ export default function SessionView({ user }) {
 
                 <div className="toolbar-center">
                     {/* Monitor selector */}
-                    {monitors.length > 1 && (
+                    {monitors.length > 0 && (
                         <div className="monitor-selector">
-                            {monitors.map(m => (
+                            {monitors.map((m) => (
                                 <button
-                                    key={m}
-                                    className={`monitor-btn ${selectedMonitor === m ? 'active' : ''}`}
-                                    onClick={() => switchMonitor(m)}
-                                    title={`Monitor ${m}`}
+                                    key={m.index}
+                                    className={`monitor-btn ${selectedMonitor === m.index ? 'active' : ''}`}
+                                    onClick={() => switchMonitor(m.index)}
+                                    title={`${m.label}${m.width ? ` (${m.width}x${m.height})` : ''}`}
                                 >
-                                    {m}
+                                    <span className="monitor-num">{m.index + 1}</span>
+                                    <span className="monitor-desc">
+                                        {m.primary ? 'Primary' : m.label.replace(/^Display\s*/i, '').replace(/^Screen\s*/i, 'Scr ') || `#${m.index + 1}`}
+                                        {m.width ? ` ${m.width}x${m.height}` : ''}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Quality selector */}
+                    {peerConnected && (
+                        <div className="quality-selector">
+                            {QUALITY_PRESETS.map(q => (
+                                <button
+                                    key={q}
+                                    className={`quality-btn ${quality === q ? 'active' : ''}`}
+                                    onClick={() => switchQuality(q)}
+                                    title={q === 'speed' ? 'Lower quality, less lag' : q === 'quality' ? 'Best quality, 60fps' : 'Balanced'}
+                                >
+                                    {q === 'speed' ? 'Fast' : q === 'quality' ? 'HD' : 'Bal'}
                                 </button>
                             ))}
                         </div>
@@ -575,7 +636,7 @@ export default function SessionView({ user }) {
                         onClick={() => setControlEnabled(c => !c)}
                         title={isControlEnabled ? 'Disable control' : 'Enable control'}
                     >
-                        {isControlEnabled ? '🖱' : '👁'}
+                        {isControlEnabled ? '\uD83D\uDDB1' : '\uD83D\uDC41'}
                     </button>
 
                     <button
@@ -583,7 +644,7 @@ export default function SessionView({ user }) {
                         onClick={() => setSplitView(s => !s)}
                         title="Split view"
                     >
-                        ⬛
+                        {'\u2B1B'}
                     </button>
 
                     <button
@@ -591,7 +652,7 @@ export default function SessionView({ user }) {
                         onClick={() => setChatOpen(o => !o)}
                         title="Chat"
                     >
-                        💬{unread > 0 && <span className="chat-badge">{unread}</span>}
+                        {'\uD83D\uDCAC'}{unread > 0 && <span className="chat-badge">{unread}</span>}
                     </button>
 
                     <button
@@ -599,11 +660,11 @@ export default function SessionView({ user }) {
                         onClick={() => setCaseOpen(o => !o)}
                         title="Case report"
                     >
-                        📋
+                        {'\uD83D\uDCCB'}
                     </button>
 
                     <label className="toolbar-btn file-upload-label" title="Send file (legacy)">
-                        📎
+                        {'\uD83D\uDCCE'}
                         <input
                             type="file"
                             hidden
@@ -616,7 +677,7 @@ export default function SessionView({ user }) {
                         onClick={() => setShowFileManager(s => !s)}
                         title="File Manager"
                     >
-                        📂
+                        {'\uD83D\uDCC2'}
                     </button>
                 </div>
             </div>
@@ -681,8 +742,20 @@ export default function SessionView({ user }) {
                 {/* Split view: second monitor */}
                 {isSplitView && monitors.length > 1 && (
                     <div className="video-container split-secondary">
-                        <div className="split-label">Monitor {selectedMonitor === 1 ? 2 : 1}</div>
-                        <video className="remote-video" autoPlay playsInline />
+                        <div className="split-label">
+                            Monitor {monitors.find(m => m.index !== selectedMonitor)?.index + 1 || 2}
+                            {' \u2013 '}click to switch
+                        </div>
+                        <video
+                            ref={splitVideoRef}
+                            className="remote-video"
+                            autoPlay
+                            playsInline
+                            onClick={() => {
+                                const other = monitors.find(m => m.index !== selectedMonitor);
+                                if (other) switchMonitor(other.index);
+                            }}
+                        />
                     </div>
                 )}
             </div>
@@ -692,7 +765,7 @@ export default function SessionView({ user }) {
                 <div className="chat-panel">
                     <div className="chat-header">
                         <span>Chat</span>
-                        <button onClick={() => setChatOpen(false)}>✕</button>
+                        <button onClick={() => setChatOpen(false)}>{'\u00D7'}</button>
                     </div>
                     <div className="chat-messages">
                         {chatMessages.map((msg, i) => (
@@ -721,7 +794,7 @@ export default function SessionView({ user }) {
                 <div className="case-panel">
                     <div className="case-header">
                         <span>Case Report</span>
-                        <button onClick={() => setCaseOpen(false)}>✕</button>
+                        <button onClick={() => setCaseOpen(false)}>{'\u00D7'}</button>
                     </div>
                     <div className="case-body">
                         <div className="case-field">
@@ -786,8 +859,8 @@ export default function SessionView({ user }) {
             <div className="zoom-controls">
                 <button onClick={() => setZoom(z => Math.min(z + 0.25, 4))}>+</button>
                 <span>{Math.round(zoom * 100)}%</span>
-                <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.25))}>−</button>
-                <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>⟳</button>
+                <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.25))}>{'\u2013'}</button>
+                <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>{'\u21BB'}</button>
             </div>
             {showFileManager && (
                 <FileManager

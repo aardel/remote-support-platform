@@ -179,6 +179,12 @@ class WebSocketHandler {
                     socket.to(`session-${sessionId}`).emit('technician-joined', { sessionId, technicianId: techId, technicianName: techName, technicianSocketId: socket.id });
                 }
 
+                // If technician joining, tell them whether helper is already online
+                if (role === 'technician' || role === 'technician-panel') {
+                    const helperOnline = !!conn.helper;
+                    socket.emit('helper-status', { online: helperOnline, sessionId });
+                }
+
                 // Notify others in the session (legacy)
                 socket.to(`session-${sessionId}`).emit('peer-joined', { role, sessionId });
 
@@ -410,6 +416,12 @@ class WebSocketHandler {
                 }
                 // Forward to helper
                 socket.to(`session-${sessionId}`).emit('remote-keyboard', data);
+            });
+
+            // Monitor switch: technician requests different monitor
+            socket.on('switch-monitor', (data) => {
+                const { sessionId } = data;
+                socket.to(`session-${sessionId}`).emit('switch-monitor', data);
             });
 
             // Stream quality: technician chooses quality/speed preset

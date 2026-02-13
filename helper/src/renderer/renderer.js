@@ -373,8 +373,18 @@ async function connectSignaling(sessionId) {
     // Avoid duplicated IPC listeners across reconnects.
     clearSignalingListeners();
 
-    // Emit capabilities so technician sees them immediately
-    window.helperApi.socketEmit('helper-capabilities', { sessionId, capabilities });
+    // Emit capabilities + monitor info so technician sees them immediately
+    let displays = [];
+    try {
+      displays = await window.helperApi.getAllDisplays();
+    } catch (e) {
+      log(`Could not get displays: ${e.message}`);
+    }
+    // If getAllDisplays returned nothing, fall back to screenSources count
+    if (!displays.length && screenSources.length) {
+      displays = screenSources.map((s, i) => ({ index: i, label: s.name || `Display ${i + 1}`, width: 0, height: 0, primary: i === 0 }));
+    }
+    window.helperApi.socketEmit('helper-capabilities', { sessionId, capabilities, displays });
 
     signalingUnsubscribers.push(window.helperApi.onFileAvailable((data) => {
       if (data.direction === 'technician-to-user' || !data.direction) {
