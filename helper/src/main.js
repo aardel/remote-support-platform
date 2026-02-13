@@ -82,6 +82,16 @@ function injectMouse(data) {
       robot.moveMouse(x, y);
       robot.mouseToggle(data.type === 'mousedown' ? 'down' : 'up', btn);
       console.log(`[mouse] ${data.type} button=${btn} at (${x}, ${y})`);
+    } else if (data.type === 'scroll') {
+      // Robotjs scrollMouse(x, y) - x is horizontal, y is vertical
+      // We reduce sensitivity slightly as raw deltas might be large
+      if (data.deltaX || data.deltaY) {
+        robot.moveMouse(x, y);
+        const dx = data.deltaX ? (Math.abs(data.deltaX) < 40 ? Math.sign(data.deltaX) : data.deltaX / 40) : 0;
+        const dy = data.deltaY ? (Math.abs(data.deltaY) < 40 ? Math.sign(data.deltaY) : data.deltaY / 40) : 0;
+        robot.scrollMouse(dx, dy);
+        console.log(`[mouse] scroll (${dx}, ${dy}) at (${x}, ${y})`);
+      }
     }
   } catch (e) {
     console.error('Mouse injection error:', e.message, e.stack);

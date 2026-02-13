@@ -44,7 +44,7 @@ let signalingUnsubscribers = [];
 
 function clearSignalingListeners() {
   for (const fn of signalingUnsubscribers) {
-    try { fn(); } catch (_) {}
+    try { fn(); } catch (_) { }
   }
   signalingUnsubscribers = [];
 }
@@ -642,7 +642,9 @@ async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
   const rtcConfig = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
+      { urls: 'stun:stun1.l.google.com:19302' },
+      // Plain TURN server placeholder - replace with actual credentials
+      // { urls: 'turn:turn.example.com:3478', username: 'user', credential: 'password' }
     ]
   };
 
@@ -660,17 +662,45 @@ async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
   // Create data channel for low-latency mouse/keyboard (unreliable, unordered = UDP-like)
   try {
     const controlChannel = pc.createDataChannel('control', { ordered: false, maxRetransmits: 0 });
+    controlChannel.binaryType = 'arraybuffer';
     controlChannel.onopen = () => log('[DataChannel] control channel open');
     controlChannel.onclose = () => log('[DataChannel] control channel closed');
-    controlChannel.onmessage = (evt) => {
+
+    controlChannel.onmessage = async (evt) => {
       try {
-        const msg = JSON.parse(evt.data);
-        if (msg.kind === 'mouse') {
-          window.helperApi.injectControl({ type: 'mouse', data: msg });
-        } else if (msg.kind === 'keyboard') {
-          window.helperApi.injectControl({ type: 'keyboard', data: msg });
+        let input = evt.data;
+        if (input instanceof Blob) input = await input.arrayBuffer();
+
+        if (input instanceof ArrayBuffer) {
+          const dv = new DataView(input);
+          const type = dv.getUint8(0);
+          const nx = dv.getUint16(1, true) / 65535;
+          const ny = dv.getUint16(3, true) / 65535;
+
+          if (type === 0x01) { // Move
+            window.helperApi.injectControl({ type: 'mouse', data: { type: 'mousemove', x: nx, y: ny } });
+          } else if (type === 0x02 || type === 0x03) { // Down/Up
+            const btnIdx = dv.getUint8(5);
+            window.helperApi.injectControl({ type: 'mouse', data: { type: type === 0x02 ? 'mousedown' : 'mouseup', x: nx, y: ny, button: btnIdx } });
+          } else if (type === 0x04) { // Scroll
+            const dx = dv.getInt16(5, true);
+            const dy = dv.getInt16(7, true);
+            window.helperApi.injectControl({ type: 'mouse', data: { type: 'scroll', x: nx, y: ny, deltaX: dx, deltaY: dy } });
+          }
+          return;
         }
-      } catch (_) {}
+
+        if (typeof input === 'string') {
+          const msg = JSON.parse(input);
+          if (msg.kind === 'mouse') {
+            window.helperApi.injectControl({ type: 'mouse', data: msg });
+          } else if (msg.kind === 'keyboard') {
+            window.helperApi.injectControl({ type: 'keyboard', data: msg });
+          } else if (msg.kind === 'chat') {
+            showChatNotification(msg.text);
+          }
+        }
+      } catch (e) { console.error('DC error', e); }
     };
   } catch (e) {
     log('[DataChannel] Failed to create: ' + e.message);
