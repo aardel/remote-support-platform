@@ -2,10 +2,10 @@ const pool = require('../config/database');
 
 async function migrate() {
     const client = await pool.connect();
-    
+
     try {
         await client.query('BEGIN');
-        
+
         // Create sessions table
         await client.query(`
             CREATE TABLE IF NOT EXISTS sessions (
@@ -29,7 +29,7 @@ async function migrate() {
             ALTER TABLE sessions
             ADD COLUMN IF NOT EXISTS device_id VARCHAR(255)
         `);
-        
+
         // Create technicians table
         await client.query(`
             CREATE TABLE IF NOT EXISTS technicians (
@@ -41,7 +41,7 @@ async function migrate() {
                 last_login TIMESTAMP
             )
         `);
-        
+
         // Create file_transfers table
         await client.query(`
             CREATE TABLE IF NOT EXISTS file_transfers (
@@ -79,7 +79,7 @@ async function migrate() {
                 updated_at TIMESTAMP DEFAULT NOW()
             )
         `);
-        
+
         // Create session_monitors table
         await client.query(`
             CREATE TABLE IF NOT EXISTS session_monitors (
@@ -94,7 +94,7 @@ async function migrate() {
                 created_at TIMESTAMP DEFAULT NOW()
             )
         `);
-        
+
         // --- Dashboard redesign: new columns ---
 
         // Devices: customer/machine name + geolocation
@@ -103,6 +103,7 @@ async function migrate() {
         await client.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_country VARCHAR(100)`);
         await client.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_region VARCHAR(100)`);
         await client.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_city VARCHAR(100)`);
+        await client.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS mac_address VARCHAR(17)`);
 
         // Sessions: ended_at for duration + snapshot customer/machine at connect time
         await client.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS ended_at TIMESTAMP`);
@@ -123,10 +124,16 @@ async function migrate() {
                 technician_id VARCHAR(255) UNIQUE NOT NULL,
                 dashboard_layout JSONB,
                 session_history_retention_days INTEGER,
+                phone_support_rate NUMERIC(10,2) DEFAULT 0,
+                whatsapp_support_rate NUMERIC(10,2) DEFAULT 0,
+                remote_control_support_rate NUMERIC(10,2) DEFAULT 0,
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW()
             )
         `);
+        await client.query(`ALTER TABLE technician_preferences ADD COLUMN IF NOT EXISTS phone_support_rate NUMERIC(10,2) DEFAULT 0`);
+        await client.query(`ALTER TABLE technician_preferences ADD COLUMN IF NOT EXISTS whatsapp_support_rate NUMERIC(10,2) DEFAULT 0`);
+        await client.query(`ALTER TABLE technician_preferences ADD COLUMN IF NOT EXISTS remote_control_support_rate NUMERIC(10,2) DEFAULT 0`);
 
         // Cases / reports (billing + problem description)
         await client.query(`
@@ -160,10 +167,10 @@ async function migrate() {
         await client.query('CREATE INDEX IF NOT EXISTS idx_devices_pending ON devices(pending_session_id)');
         await client.query('CREATE INDEX IF NOT EXISTS idx_cases_device ON cases(device_id)');
         await client.query('CREATE INDEX IF NOT EXISTS idx_cases_created ON cases(created_at)');
-        
+
         await client.query('COMMIT');
         console.log('✅ Database migration completed successfully');
-        
+
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('❌ Migration failed:', error);

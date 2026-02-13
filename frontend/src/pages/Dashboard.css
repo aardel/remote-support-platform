@@ -3,13 +3,9 @@
   background: #f5f5f5;
 }
 
+/* Lower header removed: Layout already provides top header (hamburger, Generate, user, Logout) */
 .dashboard-header {
-  background: white;
-  padding: 20px 40px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: none;
 }
 
 .dashboard-header-brand {

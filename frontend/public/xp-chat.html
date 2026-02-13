@@ -10,6 +10,8 @@
     h2 { font-size: 16px; margin: 0 0 8px 0; }
     .panel { background: #fff; border: 1px solid #d9e2ec; margin-bottom: 10px; }
     .panel-head { background: #2563eb; color: #fff; padding: 6px 10px; font-weight: bold; font-size: 13px; }
+    .panel-head-draggable { cursor: move; }
+    .panel-drag-hint { color: #dbeafe; font-size: 11px; float: right; }
     .panel-body { padding: 10px; }
 
     /* Chat */
@@ -42,8 +44,11 @@
       <img id="brandLogo" alt="Lasercomb" />
       <div class="brand-name">Lasercomb GmbH Support</div>
     </div>
-    <div class="panel">
-      <div class="panel-head">Chat with Technician</div>
+    <div class="panel" id="chat-panel">
+      <div class="panel-head panel-head-draggable" id="chat-panel-head">
+        Chat with Technician
+        <span class="panel-drag-hint">Drag to move</span>
+      </div>
       <div class="panel-body">
         <div id="chat-messages"><span class="status">Waiting for messages...</span></div>
         <div>
@@ -283,6 +288,74 @@
       pollFiles();
     }
 
+    // --- Draggable chat panel ---
+    function setupDraggableChatPanel() {
+      var panel = document.getElementById('chat-panel');
+      var handle = document.getElementById('chat-panel-head');
+      if (!panel || !handle) return;
+
+      var dragging = false;
+      var startX = 0;
+      var startY = 0;
+      var startLeft = 0;
+      var startTop = 0;
+      var originSet = false;
+
+      function getPageX(e) {
+        if (e.pageX !== undefined) return e.pageX;
+        return e.clientX + (document.documentElement.scrollLeft || document.body.scrollLeft || 0);
+      }
+
+      function getPageY(e) {
+        if (e.pageY !== undefined) return e.pageY;
+        return e.clientY + (document.documentElement.scrollTop || document.body.scrollTop || 0);
+      }
+
+      function onMouseDown(e) {
+        e = e || window.event;
+        dragging = true;
+        startX = getPageX(e);
+        startY = getPageY(e);
+
+        if (!originSet) {
+          panel.style.position = 'relative';
+          panel.style.left = '0px';
+          panel.style.top = '0px';
+          originSet = true;
+        }
+
+        startLeft = parseInt(panel.style.left, 10) || 0;
+        startTop = parseInt(panel.style.top, 10) || 0;
+
+        if (e.preventDefault) e.preventDefault();
+        e.returnValue = false;
+        return false;
+      }
+
+      function onMouseMove(e) {
+        if (!dragging) return;
+        e = e || window.event;
+        var dx = getPageX(e) - startX;
+        var dy = getPageY(e) - startY;
+        panel.style.left = (startLeft + dx) + 'px';
+        panel.style.top = (startTop + dy) + 'px';
+      }
+
+      function onMouseUp() {
+        dragging = false;
+      }
+
+      if (handle.attachEvent) {
+        handle.attachEvent('onmousedown', onMouseDown);
+        document.attachEvent('onmousemove', onMouseMove);
+        document.attachEvent('onmouseup', onMouseUp);
+      } else {
+        handle.addEventListener('mousedown', onMouseDown, false);
+        document.addEventListener('mousemove', onMouseMove, false);
+        document.addEventListener('mouseup', onMouseUp, false);
+      }
+    }
+
     // --- Init ---
     function init() {
       SESSION_ID = getQueryParam('session');
@@ -310,6 +383,7 @@
 
       // Setup upload form
       setupUpload();
+      setupDraggableChatPanel();
 
       // Send on button click
       var sendBtn = document.getElementById('chat-send');

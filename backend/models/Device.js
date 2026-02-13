@@ -41,14 +41,15 @@ class Device {
             hostname,
             arch,
             lastIp,
-            allowUnattended
+            allowUnattended,
+            macAddress
         } = device;
 
         const query = `
             INSERT INTO devices (
                 device_id, technician_id, display_name, os, hostname, arch, last_ip,
-                allow_unattended, last_seen, created_at, updated_at
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),NOW(),NOW())
+                allow_unattended, mac_address, last_seen, created_at, updated_at
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),NOW(),NOW())
             ON CONFLICT (device_id) DO UPDATE SET
                 technician_id = COALESCE(EXCLUDED.technician_id, devices.technician_id),
                 display_name = COALESCE(EXCLUDED.display_name, devices.display_name),
@@ -57,6 +58,7 @@ class Device {
                 arch = COALESCE(EXCLUDED.arch, devices.arch),
                 last_ip = COALESCE(EXCLUDED.last_ip, devices.last_ip),
                 allow_unattended = COALESCE(EXCLUDED.allow_unattended, devices.allow_unattended),
+                mac_address = COALESCE(EXCLUDED.mac_address, devices.mac_address),
                 last_seen = NOW(),
                 updated_at = NOW()
             RETURNING *
@@ -70,7 +72,8 @@ class Device {
             hostname || null,
             arch || null,
             lastIp || null,
-            typeof allowUnattended === 'boolean' ? allowUnattended : null
+            typeof allowUnattended === 'boolean' ? allowUnattended : null,
+            macAddress || null
         ];
 
         const result = await pool.query(query, values);

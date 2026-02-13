@@ -38,6 +38,27 @@ let isQuitting = false;
 
 const MOUSE_BUTTONS = ['left', 'middle', 'right'];
 
+// Get the primary MAC address of this machine (first non-internal, non-loopback interface)
+function getMacAddress() {
+  const interfaces = os.networkInterfaces();
+  for (const [, addrs] of Object.entries(interfaces)) {
+    for (const addr of addrs) {
+      if (!addr.internal && addr.mac && addr.mac !== '00:00:00:00:00:00' && addr.family === 'IPv4') {
+        return addr.mac;
+      }
+    }
+  }
+  // Fallback: try any non-internal interface (IPv6)
+  for (const [, addrs] of Object.entries(interfaces)) {
+    for (const addr of addrs) {
+      if (!addr.internal && addr.mac && addr.mac !== '00:00:00:00:00:00') {
+        return addr.mac;
+      }
+    }
+  }
+  return null;
+}
+
 function injectMouse(data) {
   if (!robot) {
     console.warn('Mouse injection failed: robotjs not available');
@@ -47,9 +68,9 @@ function injectMouse(data) {
     const bounds = screen.getPrimaryDisplay().bounds;
     const x = Math.round(bounds.x + data.x * bounds.width);
     const y = Math.round(bounds.y + data.y * bounds.height);
-    
+
     console.log(`[mouse] ${data.type} at normalized (${data.x?.toFixed(3)}, ${data.y?.toFixed(3)}) -> screen (${x}, ${y})`);
-    
+
     if (data.type === 'mousemove') {
       robot.moveMouse(x, y);
     } else if (data.type === 'mousedown' || data.type === 'mouseup') {
@@ -154,7 +175,7 @@ function writePrefs(next) {
     const dir = getAppDataDir();
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(getPrefsPath(), JSON.stringify(next || {}, null, 2), 'utf8');
-  } catch (_) {}
+  } catch (_) { }
 }
 
 function getDeviceId() {
@@ -314,7 +335,7 @@ function createWindow() {
       if (size && size.height) {
         mainWindow.setSize(size.width, size.height);
       }
-    }).catch(() => {});
+    }).catch(() => { });
   });
 
   mainWindow.on('close', (e) => {
@@ -324,8 +345,8 @@ function createWindow() {
     // Defer to async dialog; avoid re-entrancy by disabling close until resolved.
     handleCloseRequested().catch(() => {
       // If something goes wrong, default to hiding to avoid accidental termination.
-      try { ensureTray(); } catch (_) {}
-      try { mainWindow.hide(); } catch (_) {}
+      try { ensureTray(); } catch (_) { }
+      try { mainWindow.hide(); } catch (_) { }
     });
   });
 }
@@ -364,14 +385,14 @@ function getHelperBuildTime() {
     if (exePath && fs.existsSync(exePath)) {
       return Math.floor(fs.statSync(exePath).mtimeMs);
     }
-  } catch (_) {}
+  } catch (_) { }
   try {
     // Fallback: use package.json mtime in the app directory
     const pkgPath = path.join(app.getAppPath(), 'package.json');
     if (fs.existsSync(pkgPath)) {
       return Math.floor(fs.statSync(pkgPath).mtimeMs);
     }
-  } catch (_) {}
+  } catch (_) { }
   return null;
 }
 
@@ -474,7 +495,7 @@ $s.Save()
       const scriptPath = path.join(app.getPath('temp'), 'create-shortcut.ps1');
       fs.writeFileSync(scriptPath, psScript, 'utf8');
       execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" "${lnkPath}" "${exePath}" "${workDir}"`, { stdio: 'pipe', windowsHide: true });
-      try { fs.unlinkSync(scriptPath); } catch (_) {}
+      try { fs.unlinkSync(scriptPath); } catch (_) { }
       return { success: true, path: lnkPath };
     } catch (e) {
       return { success: false, error: e.message || 'Failed to create shortcut' };
@@ -493,7 +514,7 @@ $s.Save()
       const appPathEsc = appPath.replace(/"/g, '\\"');
       const nameEsc = shortcutName.replace(/"/g, '\\"');
       const aliasPath = path.join(desktopPath, shortcutName);
-      try { if (fs.existsSync(aliasPath)) fs.unlinkSync(aliasPath); } catch (_) {}
+      try { if (fs.existsSync(aliasPath)) fs.unlinkSync(aliasPath); } catch (_) { }
 
       // Keep AppleScript as a single -e to avoid multi-line parsing edge cases.
       const script = `tell application "Finder" to make new alias file to (POSIX file "${appPathEsc}") at (path to desktop folder) with properties {name:"${nameEsc}"}`;
@@ -602,7 +623,8 @@ ipcMain.handle('helper:assign-session', async (_event, allowUnattended) => {
       os: `${os.platform()} ${os.release()}`,
       hostname: os.hostname(),
       arch: os.arch(),
-      allowUnattended: allowUnattended !== false
+      allowUnattended: allowUnattended !== false,
+      macAddress: getMacAddress()
     })
   });
   if (!res.ok) {
@@ -624,7 +646,8 @@ ipcMain.handle('helper:register-device', async (allowUnattended) => {
       os: `${os.platform()} ${os.release()}`,
       hostname: os.hostname(),
       arch: os.arch(),
-      allowUnattended
+      allowUnattended,
+      macAddress: getMacAddress()
     })
   });
   if (!res.ok) {
@@ -706,7 +729,7 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
   // We need base URL "https://backup.servicelc.com" and path "/remote/socket.io"
   let serverUrl = config.server;
   let socketPath = '/socket.io';
-  
+
   try {
     const url = new URL(config.server);
     if (url.pathname && url.pathname !== '/') {
@@ -896,7 +919,7 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
       try {
         // For non-existent paths (e.g. uploads), realpathSync throws. Fall back to resolved.
         real = fs.realpathSync(resolved);
-      } catch (_) {}
+      } catch (_) { }
       return isWithinSafeBase(real) ? real : safeBase;
     }
 
@@ -913,7 +936,7 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
             const stat = fs.statSync(fullPath);
             size = stat.size;
             mtime = stat.mtime ? stat.mtime.toISOString() : null;
-          } catch (_) {}
+          } catch (_) { }
           return {
             name: d.name,
             path: fullPath,

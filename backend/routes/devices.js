@@ -4,6 +4,7 @@ const Device = require('../models/Device');
 const SessionService = require('../services/sessionService');
 const { requireAuth } = require('../middleware/sessionAuth');
 const { geolocate, normalizeIp } = require('../services/geolocate');
+const { sendWolPacket } = require('../services/wol');
 
 function extractClientIp(req) {
     // Prefer x-forwarded-for when behind a proxy/load balancer.
@@ -26,7 +27,8 @@ router.post('/register', async (req, res) => {
             os,
             hostname,
             arch,
-            allowUnattended
+            allowUnattended,
+            macAddress
         } = req.body;
 
         if (!deviceId) {
@@ -42,7 +44,8 @@ router.post('/register', async (req, res) => {
             hostname,
             arch,
             allowUnattended,
-            lastIp: clientIp
+            lastIp: clientIp,
+            macAddress
         });
 
         // Async geolocation — don't block the response
@@ -60,8 +63,8 @@ router.post('/register', async (req, res) => {
                             last_city: updated.last_city
                         });
                     }
-                }).catch(() => {});
-            }).catch(() => {});
+                }).catch(() => { });
+            }).catch(() => { });
         }
 
         res.json({ success: true, device });
@@ -163,6 +166,36 @@ router.post('/:deviceId/request', requireAuth, async (req, res) => {
         });
     } catch (error) {
         console.error('Error requesting session:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Wake-on-LAN: send magic packet to wake an offline device
+router.post('/:deviceId/wake', requireAuth, async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+        const device = await Device.findByDeviceId(deviceId);
+
+        if (!device) {
+            return res.status(404).json({ error: 'Device not found' });
+        }
+
+        if (!device.mac_address) {
+            return res.status(400).json({
+                error: 'No MAC address stored for this device. The helper must be updated to send its MAC address during registration.'
+            });
+        }
+
+        await sendWolPacket(device.mac_address);
+
+        console.log(`[WOL] Magic packet sent for device ${deviceId} (MAC: ${device.mac_address})`);
+        res.json({
+            success: true,
+            message: 'Wake-on-LAN packet sent',
+            mac: device.mac_address
+        });
+    } catch (error) {
+        console.error('Error sending WOL packet:', error);
         res.status(500).json({ error: error.message });
     }
 });

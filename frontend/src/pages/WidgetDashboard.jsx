@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import axios from 'axios';
+import axios from '../api/axios';
 import GeneratePackageWidget from '../components/widgets/GeneratePackageWidget';
 import ActiveSessionsWidget from '../components/widgets/ActiveSessionsWidget';
 import RegisteredDevicesWidget from '../components/widgets/RegisteredDevicesWidget';
