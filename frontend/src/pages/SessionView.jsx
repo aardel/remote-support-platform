@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import axios from '../api/axios';
 import FileManager from '../components/FileManager';
+import './SessionView.css';
 
 const SOCKET_PATH = '/remote/socket.io';
 const MONITORS = [1, 2, 3, 4];
