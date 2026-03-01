@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Remote Support</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --primary: #3559e0;
+      --border: #e5e7eb;
+      --shadow: 0 10px 30px rgba(15,23,42,0.08);
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 900px;
+      margin: 48px auto;
+      padding: 0 20px 60px;
+    }
+    h1 { font-size: 30px; margin: 0 0 6px; }
+    p { margin: 0 0 16px; color: var(--muted); }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px;
+      margin-top: 16px;
+    }
+    .row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .tag {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: #e8f1ff;
+      color: #1d4ed8;
+    }
+    .btn {
+      display: inline-block;
+      border: 0;
+      background: var(--primary);
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn.secondary {
+      background: #eef2ff;
+      color: #1d4ed8;
+    }
+    .muted { color: var(--muted); font-size: 14px; }
+    .input {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    input[type="text"] {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      min-width: 260px;
+      font-size: 14px;
+    }
+    .list { margin-top: 8px; }
+    .item { padding: 12px 0; border-top: 1px solid var(--border); }
+    .item:first-child { border-top: 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row" style="align-items:center; gap:16px; margin-bottom:6px;">
+      <img id="pageLogo" alt="Remote Support" style="height:38px; width:auto; display:none;" />
+      <h1 style="margin:0;">Remote Support</h1>
+    </div>
+    <p>We can try to detect your recent support session and help you resume.</p>
+
+    <div class="card" id="suggestions">
+      <div class="muted">Checking for recent sessions...</div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 8px; font-size:20px;">Enter a Session Code</h2>
+      <p class="muted">If you already have a code from your technician, enter it below. If left blank, we will create a new support session for you.</p>
+      <div class="input">
+        <input id="sessionInput" type="text" placeholder="ABC-123-XYZ" />
+        <button class="btn" id="openSession" type="button">Open Support Page</button>
+      </div>
+      <div class="muted" id="createStatus" style="margin-top:8px;"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 8px; font-size:20px;">Need the Helper?</h2>
+      <p class="muted">If nothing is detected, you can create a new session and download the helper package.</p>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn" id="createSession" type="button">Create New Support Package</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Compute the app base path (e.g., "/remote/") from current URL
+    var basePath = (function() {
+      var p = window.location.pathname;
+      var idx = p.indexOf('/support');
+      return idx >= 0 ? p.substring(0, idx + 1) : '/';
+    })();
+
+    // Fix logo path
+    (function() {
+      var img = document.getElementById('pageLogo');
+      if (img) {
+        img.src = basePath + 'logo.png';
+        img.style.display = '';
+        img.onerror = function() { this.style.display = 'none'; };
+      }
+    })();
+
+    function formatLabel(s) {
+      const parts = [];
+      if (s.customerName) parts.push(s.customerName);
+      if (s.machineName) parts.push(s.machineName);
+      if (!parts.length && s.displayName) parts.push(s.displayName);
+      if (!parts.length && s.hostname) parts.push(s.hostname);
+      return parts.join(' / ') || 'Detected device';
+    }
+
+    function renderSuggestions(data) {
+      const root = document.getElementById('suggestions');
+      const list = data.suggestions || [];
+
+      if (!list.length) {
+        root.innerHTML = '<div class="muted">No recent sessions detected for this device or network.</div>';
+        return;
+      }
+
+      const items = list.map(s => {
+        const label = formatLabel(s);
+        const created = s.createdAt ? new Date(s.createdAt).toLocaleString() : 'Unknown';
+        const status = (s.status || 'waiting').toUpperCase();
+        return `
+          <div class="item">
+            <div class="row" style="justify-content: space-between;">
+              <div>
+                <div><strong>${label}</strong></div>
+                <div class="muted">Session ${s.sessionId} · ${created}</div>
+              </div>
+              <span class="tag">${status}</span>
+            </div>
+            <div class="row" style="margin-top:10px;">
+              <a class="btn" href="${s.supportUrl}">Open Support Page</a>
+              <a class="btn secondary" href="${s.downloadUrl}">Download Helper (ZIP)</a>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      root.innerHTML = `
+        <h2 style="margin:0 0 8px; font-size:20px;">Suggested Sessions</h2>
+        <div class="list">${items}</div>
+      `;
+    }
+
+    fetch(basePath + 'api/support/suggest')
+      .then(r => r.json())
+      .then(renderSuggestions)
+      .catch(() => {
+        document.getElementById('suggestions').innerHTML = '<div class="muted">Unable to check for recent sessions.</div>';
+      });
+
+    function openSupportPage() {
+      const raw = document.getElementById('sessionInput').value || '';
+      const cleaned = raw.trim().toUpperCase();
+      if (!cleaned) {
+        return createSupportSession();
+      }
+      window.location.href = basePath + 'support/' + encodeURIComponent(cleaned);
+    }
+
+    function createSupportSession() {
+      const status = document.getElementById('createStatus');
+      status.textContent = 'Creating a new support session...';
+      return fetch(basePath + 'api/support/create', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+          if (!data || !data.sessionId) throw new Error('Failed to create session');
+          status.textContent = 'Redirecting to support page...';
+          window.location.href = basePath + 'support/' + encodeURIComponent(data.sessionId);
+        })
+        .catch(() => {
+          status.textContent = 'Unable to create a support session. Please try again.';
+        });
+    }
+
+    document.getElementById('openSession').addEventListener('click', openSupportPage);
+    document.getElementById('sessionInput').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        openSupportPage();
+      }
+    });
+    document.getElementById('createSession').addEventListener('click', createSupportSession);
+  </script>
+</body>
+</html>

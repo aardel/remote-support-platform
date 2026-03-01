@@ -1,0 +1,484 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+  background: linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%);
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.container {
+  max-width: 440px;
+  margin: 12px auto;
+  background: #fff;
+  padding: 20px 24px 16px;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* Logo */
+.logo-header {
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.logo {
+  max-width: 240px;
+  width: 100%;
+  height: auto;
+}
+
+/* Status */
+.status-card {
+  text-align: center;
+  margin-bottom: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.status-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #94a3b8;
+  flex-shrink: 0;
+  transition: background 0.3s, box-shadow 0.3s;
+}
+
+.status-dot.dot-green {
+  background: #22c55e;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+}
+
+.status-dot.dot-amber {
+  background: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+.status-dot.dot-red {
+  background: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.9); }
+}
+
+.status-text {
+  font-size: 15px;
+  font-weight: 500;
+  color: #334155;
+}
+
+/* Session ID */
+.session-id-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.session-id-label {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.session-id-value {
+  color: #1e293b;
+  font-weight: 600;
+  font-family: monospace;
+  letter-spacing: 0.5px;
+}
+
+.session-id-input {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: monospace;
+}
+
+/* Connected technicians */
+.connected-technicians-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.connected-technicians-label {
+  color: #166534;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.connected-technicians-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.connected-technician-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  background: #22c55e;
+  color: #fff;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Update available banner */
+.update-banner {
+  margin-top: 16px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  background: #eff6ff;
+  border: 1px solid #93c5fd;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.update-banner-text {
+  color: #1e40af;
+  margin-bottom: 10px;
+}
+
+.update-banner-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.update-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.update-btn-primary {
+  background: #2563eb;
+  color: #fff;
+}
+
+.update-btn-primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.update-btn-secondary {
+  background: #fff;
+  color: #475569;
+  border-color: #94a3b8;
+}
+
+.update-btn-secondary:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+.update-progress-wrap {
+  margin-top: 10px;
+}
+
+.update-progress-bar-track {
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.update-progress-bar-fill {
+  height: 100%;
+  background: #2563eb;
+  border-radius: 4px;
+  width: 0%;
+  transition: width 0.15s ease;
+}
+
+.update-progress-text {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.update-progress {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.check-update-btn {
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: #64748b;
+  background: transparent;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.check-update-btn:hover {
+  color: #475569;
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.shortcut-message {
+  margin-top: 6px;
+  font-size: 12px;
+  text-align: center;
+}
+.shortcut-message-ok { color: #0f766e; }
+.shortcut-message-error { color: #b91c1c; }
+
+/* Settings */
+.settings {
+  margin-bottom: 10px;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #475569;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+
+.toggle-label:hover {
+  background: #f1f5f9;
+}
+
+.toggle-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
+.toggle-text {
+  flex: 1;
+}
+
+/* Primary button — base */
+.btn-primary {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  color: white;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  transition: transform 0.1s, box-shadow 0.2s, background 0.3s;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Traffic-light button states */
+/* Green — Request Support (default / idle) */
+.btn-primary.btn-request {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
+}
+
+.btn-primary.btn-request:hover {
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.45);
+}
+
+/* Orange — Support Requested (waiting for technician) */
+.btn-primary.btn-waiting {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.btn-primary.btn-waiting:hover {
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.45);
+}
+
+/* Red — Stop Support (connected / active) */
+.btn-primary.btn-stop {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+}
+
+.btn-primary.btn-stop:hover {
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.45);
+}
+
+/* File notification */
+.file-notification {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #1e40af;
+}
+
+.file-notification span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-notification button {
+  padding: 5px 12px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Chat notification bar */
+.chat-notification {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #1e40af;
+}
+
+.chat-notification-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-open-btn {
+  padding: 6px 14px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.chat-open-btn:hover {
+  background: #1d4ed8;
+}
+
+/* Details toggle */
+.details-toggle {
+  text-align: center;
+  margin-top: 14px;
+}
+
+.details-toggle-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 10px;
+  transition: color 0.15s;
+}
+
+.details-toggle-btn:hover {
+  color: #64748b;
+}
+
+/* Log */
+.log {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #64748b;
+  max-height: 120px;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  font-family: monospace;
+}
+
+/* Version */
+.helper-version-row {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.helper-version {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.helper-version-row .helper-version {
+  margin-top: 0;
+}
+
+.helper-mac-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #f59e0b;
+  text-align: center;
+  max-width: 320px;
+  margin-left: auto;
+  margin-right: auto;
+}

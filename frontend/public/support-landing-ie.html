@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Remote Support</title>
+  <style type="text/css">
+    body { font-family: Arial, Helvetica, sans-serif; background: #f4f6f8; color: #1e293b; margin: 0; padding: 0; font-size: 13px; }
+    .wrap { width: 600px; margin: 20px auto; }
+    .panel { background: #fff; border: 1px solid #d9e2ec; margin-bottom: 12px; }
+    .panel-head { background: #2563eb; color: #fff; padding: 8px 12px; font-weight: bold; font-size: 14px; }
+    .panel-body { padding: 14px; }
+    .sid-input { width: 220px; padding: 6px 8px; border: 1px solid #cbd5e1; font-size: 16px; font-family: "Courier New", monospace; letter-spacing: 2px; }
+    .btn { display: inline-block; padding: 8px 16px; background: #2563eb; color: #fff; text-decoration: none; font-weight: bold; font-size: 13px; border: 1px solid #1d4ed8; cursor: pointer; }
+    .btn:hover { background: #1d4ed8; }
+    .muted { color: #64748b; font-size: 12px; }
+    .status { margin-top: 8px; font-size: 12px; }
+    .err { color: #dc2626; }
+    p { margin: 0 0 10px 0; }
+    .brand { text-align: center; margin-bottom: 12px; padding: 14px 0 6px 0; }
+    .brand img { height: 48px; width: auto; }
+    .brand-name { font-size: 18px; font-weight: bold; color: #1e293b; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <img src="___HTTPBASE___/logo.png" alt="Lasercomb" />
+      <div class="brand-name">Lasercomb GmbH Support</div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">Remote Support</div>
+      <div class="panel-body">
+        <p>Enter the session code your technician gave you, then click <strong>Go</strong>.</p>
+        <div>
+          <input type="text" id="session-input" class="sid-input" placeholder="ABC-123-XYZ" />
+          <button type="button" class="btn" id="go-btn">Go</button>
+        </div>
+        <div class="status" id="status"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">No Session Code?</div>
+      <div class="panel-body">
+        <p>If you don't have a code, click below to create a new support session.</p>
+        <button type="button" class="btn" id="create-btn">Create New Session</button>
+        <div class="status" id="create-status"></div>
+      </div>
+    </div>
+
+    <div class="muted" style="text-align: center; margin-top: 8px;">
+      Remote Support &mdash; Windows XP Compatible
+    </div>
+  </div>
+
+  <script type="text/javascript">
+    var BASE_URL = '___HTTPBASE___';
+
+    function createXHR() {
+      var xhr;
+      try { xhr = new XMLHttpRequest(); } catch (e) {
+        try { xhr = new ActiveXObject('MSXML2.XMLHTTP'); } catch (e2) {
+          try { xhr = new ActiveXObject('Microsoft.XMLHTTP'); } catch (e3) { xhr = null; }
+        }
+      }
+      return xhr;
+    }
+
+    function goToSession() {
+      var input = document.getElementById('session-input');
+      var code = input.value.replace(/^\s+|\s+$/g, '').toUpperCase();
+      if (!code) {
+        document.getElementById('status').innerHTML = '<span class="err">Please enter a session code.</span>';
+        return;
+      }
+      window.location.href = BASE_URL + '/support/' + code;
+    }
+
+    function createSession() {
+      var st = document.getElementById('create-status');
+      st.innerHTML = 'Creating session...';
+      var xhr = createXHR();
+      if (!xhr) {
+        st.innerHTML = '<span class="err">Your browser does not support this feature.</span>';
+        return;
+      }
+      xhr.open('POST', BASE_URL + '/api/support/create', true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState !== 4) return;
+        if (xhr.status === 200) {
+          try {
+            var resp;
+            if (typeof JSON !== 'undefined') {
+              resp = JSON.parse(xhr.responseText);
+            } else {
+              resp = eval('(' + xhr.responseText + ')');
+            }
+            if (resp && resp.sessionId) {
+              st.innerHTML = 'Redirecting...';
+              window.location.href = BASE_URL + '/support/' + resp.sessionId;
+              return;
+            }
+          } catch (e) {}
+        }
+        st.innerHTML = '<span class="err">Failed to create session. Please ask your technician for a code.</span>';
+      };
+      xhr.send('{}');
+    }
+
+    // Bind events (IE8-compatible)
+    var goBtn = document.getElementById('go-btn');
+    if (goBtn.attachEvent) {
+      goBtn.attachEvent('onclick', goToSession);
+    } else {
+      goBtn.addEventListener('click', goToSession, false);
+    }
+
+    var createBtn = document.getElementById('create-btn');
+    if (createBtn.attachEvent) {
+      createBtn.attachEvent('onclick', createSession);
+    } else {
+      createBtn.addEventListener('click', createSession, false);
+    }
+
+    // Enter key on input
+    var sessionInput = document.getElementById('session-input');
+    var onKey = function (e) {
+      var key = e.keyCode || e.which;
+      if (key === 13) goToSession();
+    };
+    if (sessionInput.attachEvent) {
+      sessionInput.attachEvent('onkeydown', onKey);
+    } else {
+      sessionInput.addEventListener('keydown', onKey, false);
+    }
+  </script>
+</body>
+</html>

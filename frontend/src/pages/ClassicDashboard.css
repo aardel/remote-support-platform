@@ -1,0 +1,392 @@
+.dashboard {
+  min-height: 100vh;
+  background: #f5f5f5;
+}
+
+/* Lower header removed: Layout already provides top header (hamburger, Generate, user, Logout) */
+.dashboard-header {
+  display: none;
+}
+
+.dashboard-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.dashboard-logo {
+  height: 52px;
+  width: auto;
+}
+
+.dashboard-header h1 {
+  color: #333;
+  font-size: 24px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.technician-name {
+  color: #666;
+}
+
+.logout-btn {
+  padding: 8px 16px;
+  background: #f44336;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.logout-btn:hover {
+  background: #da190b;
+}
+
+.dashboard-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+.dashboard-search {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dashboard-search label {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+}
+
+.dashboard-search-input {
+  flex: 1;
+  max-width: 320px;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.dashboard-search-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.dashboard-actions {
+  margin-bottom: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.generate-btn {
+  padding: 15px 30px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.generate-btn:hover:not(:disabled) {
+  background: #5568d3;
+}
+
+.generate-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.template-card {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.template-title {
+  font-weight: bold;
+  margin-bottom: 10px;
+  color: #333;
+}
+
+.template-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.template-new-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  user-select: none;
+}
+
+.template-status {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.template-status-item {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.template-status-item.ready {
+  background: #d4edda;
+  color: #155724;
+}
+
+.template-status-item.missing {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.template-meta {
+  margin-bottom: 10px;
+  color: #666;
+  font-size: 12px;
+}
+
+.template-meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px dashed #e5e7eb;
+}
+
+.template-meta-row:last-child {
+  border-bottom: none;
+}
+
+.template-meta-label {
+  font-weight: bold;
+  color: #444;
+}
+
+.template-meta-value {
+  font-family: 'Courier New', monospace;
+}
+
+.template-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.template-select {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+}
+
+.template-file {
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  background: #fafafa;
+}
+
+.template-upload-btn {
+  padding: 8px 14px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.template-upload-btn:disabled {
+  background: #9bb3f5;
+  cursor: not-allowed;
+}
+
+.template-hint {
+  margin-top: 8px;
+  color: #777;
+  font-size: 12px;
+}
+
+.template-version {
+  color: #059669;
+  font-weight: 500;
+}
+
+.sessions-list h2 {
+  color: #333;
+  margin-bottom: 20px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  background: white;
+  border-radius: 8px;
+  color: #666;
+}
+
+.sessions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.session-card {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.session-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.session-id {
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  color: #667eea;
+  font-size: 18px;
+}
+
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.status-badge.waiting {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status-badge.connected {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-badges {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.session-info {
+  margin-bottom: 15px;
+}
+
+.client-info {
+  margin-bottom: 10px;
+  color: #666;
+  font-size: 14px;
+}
+
+.session-meta {
+  color: #999;
+  font-size: 12px;
+}
+
+.session-actions {
+  display: flex;
+  gap: 10px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.connect-btn {
+  padding: 10px 20px;
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  min-width: 140px;
+  height: 40px;
+}
+
+.connect-btn:hover {
+  background: #45a049;
+}
+
+.delete-btn {
+  padding: 10px 20px;
+  background: #dc2626;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  min-width: 140px;
+  height: 40px;
+}
+
+.delete-btn:hover {
+  background: #b91c1c;
+}
+
+.waiting-text {
+  color: #999;
+  font-style: italic;
+  text-align: center;
+  padding: 10px;
+}
+
+.download-link {
+  text-align: center;
+  color: #667eea;
+  text-decoration: none;
+  padding: 8px;
+  border: 1px solid #667eea;
+  border-radius: 6px;
+}
+
+.download-link:hover {
+  background: #f0f4ff;
+}
+
+.dashboard-footer {
+  text-align: center;
+  padding: 12px;
+  font-size: 12px;
+  color: #666;
+  border-top: 1px solid #e5e7eb;
+  background: #fafafa;
+}

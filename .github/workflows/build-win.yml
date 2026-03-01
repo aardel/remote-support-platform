@@ -1,0 +1,37 @@
+# Superseded by build-helper.yml (one run builds Win + Mac). Kept for manual "Windows only" runs.
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label (optional)"
+        required: false
+        default: ""
+
+jobs:
+  build-win:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install helper dependencies
+        working-directory: helper
+        run: npm install
+
+      - name: Build EXE
+        working-directory: helper
+        run: npm run build:win
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-support-helper-exe
+          path: helper/dist/*.exe

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Remote Support</title>
+  <style type="text/css">
+    body { font-family: Arial, Helvetica, sans-serif; background: #f4f6f8; color: #1e293b; margin: 0; padding: 0; font-size: 13px; }
+    .wrap { width: 600px; margin: 20px auto; }
+    .panel { background: #fff; border: 1px solid #d9e2ec; margin-bottom: 12px; }
+    .panel-head { background: #2563eb; color: #fff; padding: 8px 12px; font-weight: bold; font-size: 14px; }
+    .panel-body { padding: 14px; }
+    .sid { font-family: "Courier New", monospace; font-weight: bold; font-size: 24px; letter-spacing: 2px; color: #2563eb; margin: 6px 0 10px 0; }
+    .btn { display: inline-block; padding: 10px 20px; background: #2563eb; color: #fff; text-decoration: none; font-weight: bold; font-size: 14px; border: 1px solid #1d4ed8; cursor: pointer; }
+    .btn:hover { background: #1d4ed8; }
+    .btn-green { background: #16a34a; border-color: #15803d; }
+    .btn-green:hover { background: #15803d; }
+    .btn-disabled { background: #94a3b8; border-color: #64748b; cursor: default; }
+    ol { margin: 10px 0 0 0; padding-left: 22px; line-height: 1.8; }
+    .muted { color: #64748b; font-size: 12px; }
+    .progress-wrap { display: none; margin-top: 12px; }
+    .progress-outer { width: 100%; height: 22px; background: #e2e8f0; border: 1px solid #cbd5e1; position: relative; }
+    .progress-inner { height: 100%; width: 0; background: #2563eb; }
+    .progress-text { font-size: 12px; color: #1e293b; margin-top: 4px; font-weight: bold; }
+    .status { margin-top: 8px; font-size: 12px; }
+    .err { color: #dc2626; }
+    .ok { color: #16a34a; font-weight: bold; }
+    .brand { text-align: center; margin-bottom: 12px; padding: 14px 0 6px 0; }
+    .brand img { height: 48px; width: auto; }
+    .brand-name { font-size: 18px; font-weight: bold; color: #1e293b; margin-top: 6px; }
+    p { margin: 0 0 10px 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <img src="___HTTPBASE___/logo.png" alt="Lasercomb" />
+      <div class="brand-name">Lasercomb GmbH Support</div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">Remote Support</div>
+      <div class="panel-body">
+        <div><strong>Session ID:</strong></div>
+        <div class="sid">___SESSID___</div>
+
+        <div>
+          <button type="button" class="btn" id="download-btn">Download Support Package (ZIP)</button>
+        </div>
+
+        <div class="progress-wrap" id="progress-wrap">
+          <div class="progress-outer"><div class="progress-inner" id="progress-inner"></div></div>
+          <div class="progress-text" id="progress-text">Preparing download...</div>
+        </div>
+
+        <div class="status" id="download-status"></div>
+
+        <iframe name="dl_frame" id="dl-frame" style="display:none;"></iframe>
+
+        <ol>
+          <li>Click the button above to download the ZIP file.</li>
+          <li>Save the file to your Desktop.</li>
+          <li>Right-click the ZIP and select <strong>Extract All</strong>.</li>
+          <li>Open the extracted folder and double-click <strong>launch.bat</strong>.</li>
+          <li>A chat window will open automatically &mdash; keep it open.</li>
+          <li>Wait for your technician to connect.</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">Chat with Technician</div>
+      <div class="panel-body">
+        <p>After running the support package, a chat window opens automatically.</p>
+        <p>If it did not open, click below to open it manually:</p>
+        <a class="btn btn-green" href="___HTTPBASE___/customer/xp-chat.html?session=___SESSID___" target="_blank">Open Chat Window</a>
+      </div>
+    </div>
+
+    <div class="muted" style="margin-top: 8px; text-align: center;">
+      Remote Support &mdash; Windows XP Compatible
+    </div>
+  </div>
+
+  <script type="text/javascript">
+    var BASE_URL = '___HTTPBASE___';
+    var SESSION_ID = '___SESSID___';
+    var downloading = false;
+    var pollTimer = null;
+    var animTimer = null;
+    var animStep = 0;
+
+    function getCookie(name) {
+      var parts = ('; ' + document.cookie).split('; ' + name + '=');
+      if (parts.length === 2) return parts[1].split(';')[0];
+      return null;
+    }
+
+    function deleteCookie(name) {
+      document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+    }
+
+    function startDownload() {
+      if (downloading) return;
+      downloading = true;
+
+      var btn = document.getElementById('download-btn');
+      btn.className = 'btn btn-disabled';
+      btn.innerHTML = 'Downloading...';
+
+      // Generate unique token
+      var token = 'dl_' + new Date().getTime();
+
+      // Clear any old cookie
+      deleteCookie('downloadComplete');
+
+      // Show progress bar
+      var wrap = document.getElementById('progress-wrap');
+      wrap.style.display = 'block';
+      document.getElementById('download-status').innerHTML = '';
+
+      // Start animated progress (indeterminate-ish: crawls to 90%, then jumps to 100% on completion)
+      animStep = 0;
+      animTimer = setInterval(function () {
+        animStep++;
+        // Slow curve: approaches 90% over ~30 seconds
+        var pct = Math.min(90, Math.floor(animStep * 3));
+        document.getElementById('progress-inner').style.width = pct + '%';
+        var label;
+        if (pct < 20) {
+          label = 'Preparing package...';
+        } else if (pct < 60) {
+          label = 'Building package... ' + pct + '%';
+        } else {
+          label = 'Almost ready... ' + pct + '%';
+        }
+        document.getElementById('progress-text').innerHTML = label;
+      }, 1000);
+
+      // Start download in hidden iframe
+      var url = BASE_URL + '/api/packages/download/' + SESSION_ID + '?type=zip&dltoken=' + token;
+      var frame = document.getElementById('dl-frame');
+      frame.src = url;
+
+      // Poll for completion cookie
+      pollTimer = setInterval(function () {
+        var val = getCookie('downloadComplete');
+        if (val === token) {
+          onDownloadComplete();
+        }
+      }, 500);
+
+      // Safety timeout: if cookie never arrives (e.g. download dialog blocks cookie),
+      // assume complete after 45 seconds
+      setTimeout(function () {
+        if (downloading) {
+          onDownloadComplete();
+        }
+      }, 45000);
+    }
+
+    function onDownloadComplete() {
+      downloading = false;
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      if (animTimer) { clearInterval(animTimer); animTimer = null; }
+
+      deleteCookie('downloadComplete');
+
+      // Fill progress to 100%
+      document.getElementById('progress-inner').style.width = '100%';
+      document.getElementById('progress-text').innerHTML = 'Download complete!';
+
+      document.getElementById('download-status').innerHTML = '<span class="ok">File downloaded. Save it to your Desktop and follow the steps below.</span>';
+
+      // Re-enable button
+      var btn = document.getElementById('download-btn');
+      btn.className = 'btn';
+      btn.innerHTML = 'Download Again';
+    }
+
+    // Bind click (IE8-compatible)
+    var dlBtn = document.getElementById('download-btn');
+    if (dlBtn.attachEvent) {
+      dlBtn.attachEvent('onclick', startDownload);
+    } else {
+      dlBtn.addEventListener('click', startDownload, false);
+    }
+  </script>
+</body>
+</html>

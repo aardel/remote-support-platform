@@ -1,0 +1,79 @@
+# On push of tag v* (e.g. v1.0.0): build Win + Mac, create GitHub Release, attach EXE and DMG.
+# Run: git tag v1.0.0 && git push origin v1.0.0
+
+name: Release Helper
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  build-win:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Set helper version from tag
+        run: node scripts/set-helper-version.js ${{ github.ref_name }}
+      - run: npm install
+        working-directory: helper
+      - run: npm run build:win
+        working-directory: helper
+      - uses: actions/upload-artifact@v4
+        with:
+          name: helper-exe
+          path: helper/dist/*.exe
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Set helper version from tag
+        run: node scripts/set-helper-version.js ${{ github.ref_name }}
+      - run: npm install
+        working-directory: helper
+      - run: npm run build:mac
+        working-directory: helper
+      - uses: actions/upload-artifact@v4
+        with:
+          name: helper-dmg
+          path: helper/dist/*.dmg
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [build-win, build-mac]
+    permissions:
+      contents: write
+    steps:
+      - name: Download EXE
+        uses: actions/download-artifact@v4
+        with:
+          name: helper-exe
+          path: release
+      - name: Download DMG
+        uses: actions/download-artifact@v4
+        with:
+          name: helper-dmg
+          path: release
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Helper ${{ github.ref_name }}
+          body: |
+            **Windows:** use the `.exe` installer.
+            **macOS:** use the `.dmg` image.
+            Upload as templates in the dashboard (Helper Templates) or copy to server `packages/` as `support-template.exe` and `support-template.dmg`.
+          files: release/*
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

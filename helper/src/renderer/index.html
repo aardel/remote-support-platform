@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Remote Support</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="logo-header">
+        <img src="logo.png" alt="Logo" class="logo" />
+      </div>
+
+      <div class="status-card">
+        <div class="status-indicator" id="statusIndicator">
+          <div class="status-dot" id="statusDot"></div>
+          <span class="status-text" id="status">Preparing...</span>
+        </div>
+      </div>
+
+      <div class="session-id-row" id="sessionIdRow">
+        <span class="session-id-label">Session:</span>
+        <span class="session-id-value" id="sessionIdDisplay"></span>
+        <input type="text" id="sessionId" class="session-id-input" placeholder="ABC-123-XYZ" style="display:none" />
+      </div>
+
+      <div id="connectedTechniciansRow" class="connected-technicians-row" style="display: none;">
+        <span class="connected-technicians-label">Connected:</span>
+        <div id="connectedTechniciansList" class="connected-technicians-list"></div>
+      </div>
+
+      <div class="settings">
+        <label class="toggle-label">
+          <input type="checkbox" id="allowUnattended" checked />
+          <span class="toggle-text">Allow unattended connections</span>
+        </label>
+      </div>
+
+      <button id="startBtn" class="btn-primary btn-request">Request Support</button>
+
+      <div id="updateBanner" class="update-banner" style="display: none;">
+        <div class="update-banner-text">
+          <strong>Update available:</strong> Version <span id="updateLatestVersion"></span> is available. You can upgrade now or at your next session.
+        </div>
+        <div class="update-banner-actions">
+          <button type="button" id="updateNowBtn" class="update-btn update-btn-primary">Upgrade now</button>
+          <button type="button" id="updateNextSessionBtn" class="update-btn update-btn-secondary">Next session</button>
+        </div>
+        <div id="updateProgressWrap" class="update-progress-wrap" style="display: none;">
+          <div class="update-progress-bar-track">
+            <div id="updateProgressBarFill" class="update-progress-bar-fill"></div>
+          </div>
+          <span id="updateProgressText" class="update-progress-text">Downloading...</span>
+        </div>
+      </div>
+
+      <div id="fileNotification" class="file-notification" style="display: none;">
+        <span id="fileNotificationText"></span>
+        <button type="button" id="fileDownloadBtn">Download</button>
+      </div>
+
+      <div id="chatNotification" class="chat-notification" style="display: none;">
+        <span id="chatNotificationText" class="chat-notification-text">New message from technician</span>
+        <button type="button" id="chatOpenBtn" class="chat-open-btn">Open Chat</button>
+      </div>
+
+      <div class="details-toggle">
+        <button type="button" id="detailsToggle" class="details-toggle-btn">Show details</button>
+      </div>
+      <div class="log" id="log" style="display: none;"></div>
+
+      <div class="helper-version-row">
+        <span class="helper-version" id="helperVersion"></span>
+        <button type="button" id="checkUpdateBtn" class="check-update-btn">Check for updates</button>
+        <button type="button" id="createShortcutBtn" class="check-update-btn">Create desktop shortcut</button>
+      </div>
+      <p id="shortcutMessage" class="shortcut-message" style="display: none;"></p>
+      <p class="helper-mac-hint" id="helperMacHint" style="display: none;">On Mac: Screen Recording permission is required for sharing (System Settings → Privacy & Security → Screen Recording).</p>
+    </div>
+    <script src="renderer.js"></script>
+  </body>
+</html>

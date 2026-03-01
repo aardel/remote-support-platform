@@ -1,0 +1,366 @@
+/* Control panel – dark theme, compact layout */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #1a1a2e;
+  color: #e2e8f0;
+  font-size: 13px;
+  overflow: hidden;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* Normal view */
+#normalView {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.cp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #16213e;
+  border-bottom: 1px solid #0f3460;
+  flex-shrink: 0;
+}
+
+.cp-title {
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.cp-session-id {
+  font-size: 11px;
+  color: #64748b;
+  font-family: monospace;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cp-controls {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.cp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cp-row label:not(.cp-checkbox) {
+  min-width: 52px;
+  color: #94a3b8;
+}
+
+.cp-row select {
+  flex: 1;
+  padding: 6px 8px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cp-row select:focus {
+  outline: none;
+  border-color: #2563eb;
+}
+
+.cp-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: #e2e8f0;
+}
+
+.cp-checkbox input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.cp-sections {
+  display: flex;
+  gap: 8px;
+  padding: 0 12px 8px;
+  flex-shrink: 0;
+}
+
+.cp-section-btn {
+  flex: 1;
+  padding: 8px 10px;
+  background: #16213e;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.cp-section-btn:hover {
+  background: #1e293b;
+  border-color: #475569;
+}
+
+.cp-unread-badge {
+  background: #dc2626;
+  color: white;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 18px;
+  text-align: center;
+}
+
+/* Expandable sections */
+.cp-expandable {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid #334155;
+}
+
+.cp-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cp-chat-empty {
+  color: #64748b;
+  font-style: italic;
+  font-size: 12px;
+  padding: 16px;
+}
+
+.cp-chat-msg {
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  max-width: 90%;
+  word-wrap: break-word;
+}
+
+.cp-chat-msg.from-tech {
+  background: #1e40af;
+  color: #dbeafe;
+  align-self: flex-end;
+}
+
+.cp-chat-msg.from-user {
+  background: #334155;
+  color: #e2e8f0;
+  align-self: flex-start;
+}
+
+.cp-chat-msg-time {
+  font-size: 10px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.cp-chat-input-area {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid #334155;
+  background: #16213e;
+  flex-shrink: 0;
+}
+
+.cp-chat-input-area input {
+  flex: 1;
+  padding: 8px 10px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.cp-chat-input-area input:focus {
+  outline: none;
+  border-color: #2563eb;
+}
+
+.cp-chat-input-area button {
+  padding: 8px 14px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cp-chat-input-area button:hover {
+  background: #1d4ed8;
+}
+
+/* Files section */
+.cp-files-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #16213e;
+  border-bottom: 1px solid #334155;
+  flex-shrink: 0;
+}
+
+.cp-files-toolbar button {
+  padding: 6px 10px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.cp-files-toolbar button:hover:not(:disabled) {
+  background: #1e293b;
+}
+
+.cp-files-toolbar button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cp-files-path {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: #64748b;
+  font-family: monospace;
+  border-bottom: 1px solid #334155;
+  flex-shrink: 0;
+}
+
+.cp-files-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  font-size: 12px;
+}
+
+.cp-files-item {
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cp-files-item:hover {
+  background: #1e293b;
+}
+
+.cp-files-item .icon {
+  font-size: 14px;
+}
+
+/* Actions */
+.cp-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  flex-shrink: 0;
+  border-top: 1px solid #334155;
+}
+
+.cp-btn {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.cp-btn-secondary {
+  background: #334155;
+  color: #e2e8f0;
+}
+
+.cp-btn-secondary:hover {
+  background: #475569;
+}
+
+.cp-btn-exit {
+  background: #1e40af;
+  color: #dbeafe;
+}
+
+.cp-btn-exit:hover {
+  background: #2563eb;
+}
+
+.cp-btn-danger {
+  background: #991b1b;
+  color: #fecaca;
+}
+
+.cp-btn-danger:hover {
+  background: #b91c1c;
+}
+
+/* Minimized view */
+#minimizedView {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background: #16213e;
+}
+
+.cp-expand-btn {
+  width: 44px;
+  height: 32px;
+  font-size: 18px;
+  font-weight: bold;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.cp-expand-btn:hover {
+  background: #1d4ed8;
+}

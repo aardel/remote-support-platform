@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>noVNC VNC Client</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            overflow: hidden;
+        }
+        #screen {
+            width: 100vw;
+            height: 100vh;
+        }
+        #status {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #aaa;
+            font-family: sans-serif;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="screen"></div>
+    <div id="status">Loading noVNC...</div>
+    <script>
+        // Global error handler to catch module loading failures
+        window.onerror = function(msg, url, line, col, err) {
+            document.getElementById('status').textContent = 'JS Error: ' + msg;
+            console.error('noVNC page error:', msg, url, line, col, err);
+        };
+    </script>
+    <script type="module">
+        const status = document.getElementById('status');
+
+        let RFB;
+        try {
+            // Compute base path from current location (e.g. /remote/)
+            const custIdx = window.location.pathname.indexOf('/customer');
+            const pathPrefix = custIdx > 0 ? window.location.pathname.substring(0, custIdx) : '';
+            const mod = await import(pathPrefix + '/customer/novnc-bundle.js');
+            RFB = mod.default;
+            console.log('noVNC module loaded OK');
+        } catch (err) {
+            status.textContent = 'Module load error: ' + err.message;
+            console.error('noVNC module load failed:', err);
+            throw err;
+        }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const sessionId = urlParams.get('session') || window.location.pathname.split('/').pop();
+
+        if (!sessionId) {
+            status.textContent = 'Error: no session ID in URL';
+            throw new Error('No session ID');
+        }
+
+        // WebSocket URL — connect through same origin (nginx proxies /websockify)
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsHost = window.location.hostname;
+        const wsPort = window.location.port ? `:${window.location.port}` : '';
+        const wsUrl = `${wsProtocol}//${wsHost}${wsPort}${pathPrefix}/websockify?session=${sessionId}`;
+
+        status.textContent = 'Connecting to ' + wsUrl;
+        console.log('noVNC connecting to:', wsUrl);
+
+        try {
+            const rfb = new RFB(document.getElementById('screen'), wsUrl, {
+                credentials: { password: '' }
+            });
+
+            rfb.scaleViewport = true;
+            rfb.resizeSession = false;
+
+            rfb.addEventListener('connect', () => {
+                console.log('Connected to VNC');
+                status.style.display = 'none';
+            });
+
+            rfb.addEventListener('disconnect', (e) => {
+                console.log('Disconnected:', e.detail);
+                status.style.display = 'block';
+                status.textContent = 'VNC disconnected' + (e.detail.clean ? '' : ' (connection lost)');
+            });
+
+            rfb.addEventListener('securityfailure', (e) => {
+                console.error('Security failure:', e.detail);
+                status.textContent = 'VNC security failure: ' + (e.detail.reason || 'unknown');
+            });
+        } catch (err) {
+            console.error('noVNC init error:', err);
+            status.textContent = 'Failed to initialize VNC: ' + err.message;
+        }
+    </script>
+</body>
+</html>

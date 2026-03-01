@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remote Support</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%);
+            min-height: 100vh;
+            color: #1e293b;
+        }
+
+        .container {
+            max-width: 520px;
+            margin: 40px auto;
+            background: #fff;
+            padding: 32px 28px 24px;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04);
+        }
+
+        .logo-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .logo-header img {
+            max-width: 200px;
+            width: 100%;
+            height: auto;
+        }
+
+        .logo-header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #334155;
+            margin-top: 8px;
+        }
+
+        /* Session ID — prominent */
+        .session-card {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 16px;
+            background: #f8fafc;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .session-label {
+            font-size: 12px;
+            font-weight: 500;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+
+        .session-id {
+            font-size: 28px;
+            font-weight: 700;
+            font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+            color: #1e293b;
+            letter-spacing: 2px;
+        }
+
+        /* Download */
+        .download-section {
+            margin-bottom: 20px;
+        }
+
+        .download-btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            border: none;
+            color: white;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            text-align: center;
+            text-decoration: none;
+            transition: transform 0.1s, box-shadow 0.2s;
+            box-shadow: 0 2px 8px rgba(37,99,235,0.25);
+        }
+
+        .download-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(37,99,235,0.35);
+        }
+
+        .download-btn:active { transform: translateY(0); }
+        .download-btn:disabled, .download-btn.disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            pointer-events: none;
+        }
+
+        .download-btn.success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            box-shadow: 0 2px 8px rgba(16,185,129,0.25);
+        }
+        .progress-wrap {
+            margin-top: 10px;
+            display: none;
+        }
+        .progress-bar {
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 999px;
+            overflow: hidden;
+            border: 1px solid #cbd5e1;
+        }
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            transition: width 0.15s ease;
+        }
+        .progress-text {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #64748b;
+            text-align: center;
+        }
+
+        .os-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .os-row label {
+            font-size: 12px;
+            color: #64748b;
+            font-weight: 500;
+        }
+
+        .os-row select {
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid #cbd5e1;
+            font-size: 13px;
+            background: #fff;
+            color: #334155;
+        }
+
+        /* Steps */
+        .steps {
+            margin-bottom: 16px;
+        }
+
+        .steps-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #334155;
+            margin-bottom: 10px;
+        }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-bottom: 10px;
+            font-size: 13px;
+            color: #475569;
+            line-height: 1.5;
+        }
+
+        .step-num {
+            flex-shrink: 0;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #2563eb;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .step-text { flex: 1; }
+        .step-text strong { color: #1e293b; }
+
+        /* Security note */
+        .security-note {
+            background: #fef3c7;
+            border: 1px solid #fde68a;
+            border-radius: 8px;
+            padding: 12px 14px;
+            font-size: 12px;
+            color: #92400e;
+            line-height: 1.5;
+        }
+
+        .security-note strong { color: #78350f; }
+
+        /* Error / loading */
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        .error-box {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 16px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        @media (max-width: 560px) {
+            .container { margin: 16px; padding: 20px 16px 16px; }
+            .session-id { font-size: 22px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo-header">
+            <img id="pageLogo" alt="Logo" style="display:none;" />
+            <h1>Lasercomb GmbH Support</h1>
+        </div>
+
+        <div id="loading" class="loading">Loading session...</div>
+
+        <div id="content" style="display: none;">
+            <!-- Session ID — prominent -->
+            <div class="session-card">
+                <div class="session-label">Session ID</div>
+                <div class="session-id" id="sessionIdDisplay">—</div>
+            </div>
+
+            <!-- Download -->
+            <div class="download-section">
+                <a id="downloadBtn" href="#" class="download-btn" onclick="downloadPackage(event)">
+                    Download Support Helper
+                </a>
+                <div id="progressWrap" class="progress-wrap">
+                    <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+                    <div id="progressText" class="progress-text">Downloading...</div>
+                </div>
+                <div class="os-row">
+                    <label for="osSelect">OS:</label>
+                    <select id="osSelect"></select>
+                    <label for="packageSelect">Package:</label>
+                    <select id="packageSelect"></select>
+                </div>
+                <div class="os-row" style="margin-top: 6px;">
+                    <label><input type="checkbox" id="refreshPackage" /> Get latest version (force refresh)</label>
+                    <span class="muted" style="font-size: 11px; margin-left: 8px;">Use this if the window closes too fast or you see an old script without [DEBUG] messages.</span>
+                </div>
+            </div>
+
+            <!-- Steps -->
+            <div class="steps">
+                <div class="steps-title">How it works</div>
+                <div class="step">
+                    <span class="step-num">1</span>
+                    <span class="step-text"><strong>Download</strong> the support helper above.</span>
+                </div>
+                <div class="step">
+                    <span class="step-num">2</span>
+                    <span class="step-text" id="instructionsRun"><strong>Run</strong> the file you downloaded.</span>
+                </div>
+                <div class="step">
+                    <span class="step-num">3</span>
+                    <span class="step-text"><strong>Keep the window open</strong> — your technician will connect automatically.</span>
+                </div>
+            </div>
+
+            <!-- Security -->
+            <div class="security-note">
+                <strong>Security:</strong> Only download and run this if you trust the person who sent you this link. The helper allows remote access to your computer.
+            </div>
+        </div>
+
+        <div id="errorBox" class="error-box" style="display:none;"></div>
+    </div>
+
+    <script>
+        // Compute the app base path (e.g., "/remote/") from current URL
+        var basePath = (function() {
+            var p = window.location.pathname;
+            var idx = p.indexOf('/support');
+            return idx >= 0 ? p.substring(0, idx + 1) : '/';
+        })();
+
+        // Fix logo path
+        (function() {
+            var img = document.getElementById('pageLogo');
+            if (img) {
+                img.src = basePath + 'logo.png';
+                img.style.display = '';
+                img.onerror = function() { this.style.display = 'none'; };
+            }
+        })();
+
+        function getSessionIdFromURL() {
+            const match = window.location.pathname.match(/\/support\/([A-Z0-9-]+)/i);
+            return match ? match[1] : null;
+        }
+
+        const sessionId = getSessionIdFromURL();
+        let packageManifest = [];
+        let selectedPackageType = 'zip';
+        // Temporary safety switch:
+        // current EXE/DMG templates were built with backup-domain defaults.
+        // Keep customer downloads on ZIP until new templates are uploaded.
+        const FORCE_ZIP_ONLY = true;
+
+        if (!sessionId) {
+            showError('Invalid session link. Please check the URL.');
+        } else {
+            loadSessionInfo();
+        }
+
+        function showError(msg) {
+            document.getElementById('loading').style.display = 'none';
+            const box = document.getElementById('errorBox');
+            box.textContent = msg;
+            box.style.display = 'block';
+        }
+
+        async function loadSessionInfo() {
+            try {
+                const response = await fetch(basePath + 'api/support/session/' + sessionId);
+                if (!response.ok) throw new Error('Session not found or expired.');
+                const session = await response.json();
+
+                document.getElementById('sessionIdDisplay').textContent = session.sessionId || sessionId;
+
+                await loadPackageManifest();
+
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        function detectOS() {
+            const ua = navigator.userAgent.toLowerCase();
+            if (ua.includes('windows nt 5.1') || ua.includes('windows xp')) return 'windows-xp';
+            if (ua.includes('windows')) return 'windows';
+            if (ua.includes('mac')) return 'mac';
+            if (ua.includes('linux')) return 'linux';
+            return 'other';
+        }
+
+        async function loadPackageManifest() {
+            const os = detectOS();
+            const response = await fetch(basePath + 'api/packages/manifest/' + sessionId);
+            const data = await response.json();
+            packageManifest = data.packages || [];
+
+            const osSelect = document.getElementById('osSelect');
+            osSelect.innerHTML = '';
+            ['windows', 'windows-xp', 'mac', 'linux', 'other'].forEach(function (value) {
+                const opt = document.createElement('option');
+                opt.value = value;
+                if (value === 'windows-xp') {
+                    opt.textContent = 'Windows XP';
+                } else {
+                    opt.textContent = value === 'mac' ? 'macOS' : value.charAt(0).toUpperCase() + value.slice(1);
+                }
+                osSelect.appendChild(opt);
+            });
+            osSelect.value = os;
+
+            const packageSelect = document.getElementById('packageSelect');
+            packageSelect.innerHTML = '';
+
+            function allowedTypesForOs(os) {
+                if (FORCE_ZIP_ONLY) return ['zip'];
+                if (os === 'windows-xp') return ['zip'];
+                if (os === 'windows') return ['exe', 'zip'];
+                if (os === 'mac') return ['dmg', 'zip'];
+                if (os === 'linux') return ['zip'];
+                return ['zip'];
+            }
+
+            function renderPackagesForOs(os) {
+                const allowed = allowedTypesForOs(os);
+                packageSelect.innerHTML = '';
+                packageManifest.forEach(function (pkg) {
+                    if (allowed.indexOf(pkg.type) === -1) return;
+                    const opt = document.createElement('option');
+                    opt.value = pkg.type;
+                    opt.textContent = pkg.available ? pkg.label : pkg.label + ' (Not Ready)';
+                    opt.disabled = !pkg.available;
+                    packageSelect.appendChild(opt);
+                });
+            }
+
+            renderPackagesForOs(os);
+            autoSelectPackage(os);
+
+            osSelect.addEventListener('change', function () {
+                renderPackagesForOs(osSelect.value);
+                autoSelectPackage(osSelect.value);
+            });
+            packageSelect.addEventListener('change', function () {
+                selectedPackageType = packageSelect.value;
+                updateDownloadLink();
+            });
+        }
+
+        function autoSelectPackage(os) {
+            if (FORCE_ZIP_ONLY) {
+                selectedPackageType = 'zip';
+            } else if (os === 'windows' || os === 'windows-xp') {
+                selectedPackageType = (packageManifest.find(function (p) { return p.type === 'exe' && p.available; }) || {}).type || 'zip';
+                if (os === 'windows-xp') selectedPackageType = 'zip';
+            } else if (os === 'mac') {
+                selectedPackageType = (packageManifest.find(function (p) { return p.type === 'dmg' && p.available; }) || {}).type || 'zip';
+            } else {
+                selectedPackageType = 'zip';
+            }
+            document.getElementById('packageSelect').value = selectedPackageType;
+            updateDownloadLink();
+        }
+
+        function updateDownloadLink() {
+            var btn = document.getElementById('downloadBtn');
+            var os = document.getElementById('osSelect').value;
+            var osParam = selectedPackageType === 'zip' ? ('&os=' + encodeURIComponent(os)) : '';
+            var refreshParam = document.getElementById('refreshPackage') && document.getElementById('refreshPackage').checked ? '&refresh=1' : '';
+            btn.href = basePath + 'api/packages/download/' + sessionId + '?type=' + selectedPackageType + osParam + refreshParam;
+
+            var run = document.getElementById('instructionsRun');
+            if (selectedPackageType === 'exe') {
+                run.innerHTML = '<strong>Run</strong> the EXE — follow the on-screen helper.';
+            } else if (selectedPackageType === 'dmg') {
+                run.innerHTML = '<strong>Open</strong> the DMG and run the Remote Support app inside.';
+            } else {
+                run.innerHTML = '<strong>Extract</strong> the ZIP and run the launcher inside.';
+            }
+        }
+
+        function downloadPackage(event) {
+            if (event) event.preventDefault();
+            var btn = document.getElementById('downloadBtn');
+            var href = btn.href;
+            var progressWrap = document.getElementById('progressWrap');
+            var progressFill = document.getElementById('progressFill');
+            var progressText = document.getElementById('progressText');
+            btn.textContent = 'Downloading...';
+            btn.classList.add('disabled');
+            progressWrap.style.display = 'block';
+            progressFill.style.width = '0%';
+            progressText.textContent = 'Downloading...';
+
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', href, true);
+            xhr.responseType = 'blob';
+            xhr.onprogress = function (e) {
+                if (e.lengthComputable) {
+                    var pct = Math.round((e.loaded / e.total) * 100);
+                    progressFill.style.width = pct + '%';
+                    progressText.textContent = 'Downloading... ' + pct + '%';
+                } else {
+                    progressText.textContent = 'Downloading...';
+                }
+            };
+            xhr.onload = function () {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    var blob = xhr.response;
+                    var url = window.URL.createObjectURL(blob);
+                    var a = document.createElement('a');
+                    a.href = url;
+                    
+                    // Extract filename from Content-Disposition header, or construct it
+                    var filename = null;
+                    var contentDisposition = xhr.getResponseHeader('Content-Disposition');
+                    if (contentDisposition) {
+                        var filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                        if (filenameMatch && filenameMatch[1]) {
+                            filename = filenameMatch[1].replace(/['"]/g, '');
+                            // Handle RFC 5987 encoded filename (filename*=UTF-8''...)
+                            if (filename.startsWith("UTF-8''")) {
+                                filename = decodeURIComponent(filename.substring(7));
+                            }
+                        }
+                    }
+                    
+                    // Fallback: construct filename from sessionId and type/os
+                    if (!filename) {
+                        var urlParts = href.split('?')[0].split('/');
+                        var sessionIdFromUrl = urlParts[urlParts.length - 1];
+                        var urlParams = new URLSearchParams(href.split('?')[1] || '');
+                        var type = urlParams.get('type') || 'zip';
+                        var os = urlParams.get('os') || '';
+                        var osSuffix = (type === 'zip' && os) ? '-' + os : '';
+                        var ext = type === 'exe' ? '.exe' : (type === 'dmg' ? '.dmg' : '.zip');
+                        filename = 'support-helper-' + sessionIdFromUrl + osSuffix + ext;
+                    }
+                    
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                    btn.textContent = 'Download Complete';
+                    btn.classList.remove('disabled');
+                    btn.classList.add('success');
+                    progressText.textContent = 'Download complete';
+                    progressFill.style.width = '100%';
+                } else {
+                    btn.textContent = 'Download Failed';
+                    btn.classList.remove('disabled');
+                    progressText.textContent = 'Download failed';
+                }
+            };
+            xhr.onerror = function () {
+                btn.textContent = 'Download Failed';
+                btn.classList.remove('disabled');
+                progressText.textContent = 'Download failed';
+            };
+            xhr.send();
+        }
+    </script>
+</body>
+</html>

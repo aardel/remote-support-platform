@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Session Controls</title>
+  <link rel="stylesheet" href="control-panel.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="normalView">
+      <div class="cp-header">
+        <span class="cp-title">Session Controls</span>
+        <span class="cp-session-id" id="sessionLabel"></span>
+      </div>
+
+      <div class="cp-controls">
+        <div class="cp-row">
+          <label>Monitor:</label>
+          <select id="monitorSelect">
+            <option value="0">Monitor 1</option>
+            <option value="1">Monitor 2</option>
+            <option value="2">Monitor 3</option>
+            <option value="3">Monitor 4</option>
+          </select>
+        </div>
+        <div class="cp-row">
+          <label>Stream:</label>
+          <select id="qualitySelect">
+            <option value="quality">Best quality</option>
+            <option value="balanced" selected>Balanced</option>
+            <option value="speed">Optimize for speed</option>
+          </select>
+        </div>
+        <div class="cp-row">
+          <label class="cp-checkbox">
+            <input type="checkbox" id="splitViewToggle" />
+            <span>Split view</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="cp-sections">
+        <button type="button" class="cp-section-btn" id="chatToggleBtn">
+          💬 Chat
+          <span class="cp-unread-badge" id="chatBadge" style="display:none"></span>
+        </button>
+        <button type="button" class="cp-section-btn" id="filesToggleBtn">
+          📁 Files
+        </button>
+      </div>
+
+      <div id="chatSection" class="cp-expandable" style="display:none">
+        <div class="cp-chat-messages" id="chatMessages">
+          <div class="cp-chat-empty" id="chatEmpty">No messages yet.</div>
+        </div>
+        <div class="cp-chat-input-area">
+          <input type="text" id="chatInput" placeholder="Type a message..." />
+          <button type="button" id="chatSendBtn">Send</button>
+        </div>
+      </div>
+
+      <div id="filesSection" class="cp-expandable" style="display:none">
+        <div class="cp-files-toolbar">
+          <button type="button" id="filesUpBtn" disabled>↑ Up</button>
+          <button type="button" id="filesRefreshBtn">Refresh</button>
+          <button type="button" id="filesAddBtn">Add files</button>
+          <button type="button" id="filesSendBtn" disabled>Send →</button>
+          <button type="button" id="filesReceiveBtn" disabled>← Receive</button>
+        </div>
+        <div class="cp-files-path" id="filesPath">Home</div>
+        <div class="cp-files-list" id="filesList"></div>
+      </div>
+
+      <div class="cp-actions">
+        <button type="button" class="cp-btn cp-btn-secondary" id="minimizeBtn">─ Minimize</button>
+        <button type="button" class="cp-btn cp-btn-exit" id="exitFullscreenBtn">Exit Fullscreen</button>
+        <button type="button" class="cp-btn cp-btn-danger" id="disconnectBtn">Disconnect</button>
+      </div>
+    </div>
+
+    <div id="minimizedView" style="display:none">
+      <button type="button" class="cp-expand-btn" id="expandBtn">+</button>
+    </div>
+  </div>
+
+  <script src="/remote/socket.io/socket.io.js"></script>
+  <script src="control-panel.js"></script>
+</body>
+</html>

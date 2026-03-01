@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Support Chat</title>
+  <style type="text/css">
+    body { font-family: Arial, Helvetica, sans-serif; background: #f4f6f8; color: #1e293b; margin: 0; padding: 0; font-size: 13px; }
+    .wrap { width: 600px; margin: 10px auto; }
+    h2 { font-size: 16px; margin: 0 0 8px 0; }
+    .panel { background: #fff; border: 1px solid #d9e2ec; margin-bottom: 10px; }
+    .panel-head { background: #2563eb; color: #fff; padding: 6px 10px; font-weight: bold; font-size: 13px; }
+    .panel-head-draggable { cursor: move; }
+    .panel-drag-hint { color: #dbeafe; font-size: 11px; float: right; }
+    .panel-body { padding: 10px; }
+
+    /* Chat */
+    #chat-messages { height: 200px; overflow-y: auto; border: 1px solid #e2e8f0; padding: 6px; margin-bottom: 6px; background: #fafbfc; }
+    .msg { margin-bottom: 6px; }
+    .msg-tech { color: #2563eb; }
+    .msg-cust { color: #16a34a; }
+    .msg-time { color: #94a3b8; font-size: 11px; }
+    #chat-input { width: 75%; padding: 4px; border: 1px solid #cbd5e1; }
+    #chat-send { padding: 4px 12px; background: #2563eb; color: #fff; border: 1px solid #1d4ed8; cursor: pointer; }
+
+    /* Files */
+    #file-list { margin-bottom: 8px; }
+    table.files { width: 100%; border-collapse: collapse; }
+    table.files th { background: #f1f5f9; text-align: left; padding: 4px 6px; border-bottom: 1px solid #e2e8f0; font-size: 12px; }
+    table.files td { padding: 4px 6px; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
+    table.files a { color: #2563eb; }
+    .upload-form { margin-top: 8px; }
+
+    .status { color: #64748b; font-size: 11px; margin-top: 4px; }
+    .err { color: #dc2626; }
+    .brand { text-align: center; margin-bottom: 8px; padding: 8px 0 4px 0; }
+    .brand img { height: 36px; width: auto; }
+    .brand-name { font-size: 14px; font-weight: bold; color: #1e293b; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <img id="brandLogo" alt="Lasercomb" />
+      <div class="brand-name">Lasercomb GmbH Support</div>
+    </div>
+    <div class="panel" id="chat-panel">
+      <div class="panel-head panel-head-draggable" id="chat-panel-head">
+        Chat with Technician
+        <span class="panel-drag-hint">Drag to move</span>
+      </div>
+      <div class="panel-body">
+        <div id="chat-messages"><span class="status">Waiting for messages...</span></div>
+        <div>
+          <input type="text" id="chat-input" placeholder="Type a message..." />
+          <button id="chat-send" type="button">Send</button>
+        </div>
+        <div id="chat-status" class="status"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">Files</div>
+      <div class="panel-body">
+        <div id="file-list"><span class="status">No files yet.</span></div>
+
+        <div class="upload-form">
+          <strong>Send file to technician:</strong><br />
+          <iframe name="upload_target" style="display:none;"></iframe>
+          <form id="upload-form" method="POST" enctype="multipart/form-data" target="upload_target">
+            <input type="file" name="file" id="file-input" />
+            <button type="submit">Upload</button>
+          </form>
+          <div id="upload-status" class="status"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="status" id="conn-status">Connecting...</div>
+  </div>
+
+  <script type="text/javascript">
+    // --- IE8-compatible helpers ---
+    var SESSION_ID = '';
+    var BASE_URL = '';
+    var lastTimestamp = 0;
+    var pollTimer = null;
+    var filePollTimer = null;
+
+    function getQueryParam(name) {
+      var match = window.location.search.match(new RegExp('[?&]' + name + '=([^&]*)'));
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+
+    function createXHR() {
+      var xhr;
+      try { xhr = new XMLHttpRequest(); } catch (e) {
+        try { xhr = new ActiveXObject('MSXML2.XMLHTTP'); } catch (e2) {
+          try { xhr = new ActiveXObject('Microsoft.XMLHTTP'); } catch (e3) { xhr = null; }
+        }
+      }
+      return xhr;
+    }
+
+    function escapeHtml(str) {
+      var div = document.createElement('div');
+      div.appendChild(document.createTextNode(str));
+      return div.innerHTML;
+    }
+
+    function formatTime(ts) {
+      var d = new Date(ts);
+      var h = d.getHours();
+      var m = d.getMinutes();
+      return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+    }
+
+    function formatSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    // --- Chat ---
+    function pollMessages() {
+      var xhr = createXHR();
+      if (!xhr) return;
+      xhr.open('GET', BASE_URL + '/api/bridge/' + SESSION_ID + '/messages?since=' + lastTimestamp, true);
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState !== 4) return;
+        if (xhr.status === 200) {
+          try {
+            var resp;
+            if (typeof JSON !== 'undefined') {
+              resp = JSON.parse(xhr.responseText);
+            } else {
+              resp = eval('(' + xhr.responseText + ')');
+            }
+            var msgs = resp.messages;
+            if (msgs && msgs.length > 0) {
+              var container = document.getElementById('chat-messages');
+              // Remove placeholder
+              if (container.getElementsByTagName('span').length > 0 && lastTimestamp === 0) {
+                container.innerHTML = '';
+              }
+              for (var i = 0; i < msgs.length; i++) {
+                var m = msgs[i];
+                if (m.role === 'customer') continue; // Don't echo own messages
+                var div = document.createElement('div');
+                div.className = 'msg';
+                var cls = m.role === 'technician' ? 'msg-tech' : 'msg-cust';
+                div.innerHTML = '<span class="msg-time">[' + formatTime(m.timestamp) + ']</span> '
+                  + '<span class="' + cls + '">' + escapeHtml(m.sender || m.role) + ':</span> '
+                  + escapeHtml(m.message);
+                container.appendChild(div);
+                if (m.timestamp > lastTimestamp) lastTimestamp = m.timestamp;
+              }
+              container.scrollTop = container.scrollHeight;
+            }
+          } catch (e) { /* ignore parse errors */ }
+        }
+        document.getElementById('conn-status').innerHTML = 'Connected - polling every 3s';
+      };
+      xhr.send(null);
+    }
+
+    function sendMessage() {
+      var input = document.getElementById('chat-input');
+      var msg = input.value;
+      if (!msg) return;
+
+      // Show message immediately (optimistic UI) and clear input
+      var container = document.getElementById('chat-messages');
+      if (container.getElementsByTagName('span').length > 0 && lastTimestamp === 0) {
+        container.innerHTML = '';
+      }
+      var div = document.createElement('div');
+      div.className = 'msg';
+      div.innerHTML = '<span class="msg-time">[' + formatTime(new Date().getTime()) + ']</span> '
+        + '<span class="msg-cust">You:</span> '
+        + escapeHtml(msg);
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
+      input.value = '';
+
+      // Send to server in background
+      try {
+        var xhr = createXHR();
+        if (!xhr) return;
+        xhr.open('POST', BASE_URL + '/api/bridge/' + SESSION_ID + '/messages', true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.onreadystatechange = function () {
+          try {
+            if (xhr.readyState === 4 && (xhr.status < 200 || xhr.status >= 300)) {
+              document.getElementById('chat-status').innerHTML = '<span class="err">Send failed (status ' + xhr.status + ')</span>';
+            }
+          } catch (e) { /* IE may throw accessing status */ }
+        };
+        var body = '{"message":"' + msg.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n') + '","sender":"Customer"}';
+        xhr.send(body);
+      } catch (e) {
+        document.getElementById('chat-status').innerHTML = '<span class="err">Send error: ' + e.message + '</span>';
+      }
+    }
+
+    // --- Files ---
+    function pollFiles() {
+      var xhr = createXHR();
+      if (!xhr) return;
+      xhr.open('GET', BASE_URL + '/api/bridge/' + SESSION_ID + '/files?direction=to-customer', true);
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState !== 4) return;
+        if (xhr.status === 200) {
+          try {
+            var resp;
+            if (typeof JSON !== 'undefined') {
+              resp = JSON.parse(xhr.responseText);
+            } else {
+              resp = eval('(' + xhr.responseText + ')');
+            }
+            var files = resp.files;
+            var container = document.getElementById('file-list');
+            if (!files || files.length === 0) {
+              container.innerHTML = '<span class="status">No files from technician yet.</span>';
+              return;
+            }
+            var html = '<table class="files"><tr><th>File</th><th>Size</th><th>Action</th></tr>';
+            for (var i = 0; i < files.length; i++) {
+              var f = files[i];
+              html += '<tr>'
+                + '<td>' + escapeHtml(f.name) + '</td>'
+                + '<td>' + formatSize(f.size) + '</td>'
+                + '<td><a href="' + BASE_URL + '/api/bridge/' + SESSION_ID + '/files/' + f.id + '/download">Download</a></td>'
+                + '</tr>';
+            }
+            html += '</table>';
+            container.innerHTML = html;
+          } catch (e) { /* ignore */ }
+        }
+      };
+      xhr.send(null);
+    }
+
+    // --- Upload handling ---
+    function setupUpload() {
+      var form = document.getElementById('upload-form');
+      form.action = BASE_URL + '/api/bridge/' + SESSION_ID + '/files/upload';
+
+      // Listen for iframe load to detect upload completion
+      var iframe;
+      try {
+        iframe = document.getElementsByName('upload_target')[0];
+      } catch (e) { return; }
+
+      if (iframe.attachEvent) {
+        iframe.attachEvent('onload', onUploadDone);
+      } else if (iframe.addEventListener) {
+        iframe.addEventListener('load', onUploadDone, false);
+      }
+
+      form.onsubmit = function () {
+        var fileInput = document.getElementById('file-input');
+        if (!fileInput.value) {
+          document.getElementById('upload-status').innerHTML = 'Please select a file first.';
+          return false;
+        }
+        document.getElementById('upload-status').innerHTML = 'Uploading...';
+        return true; // allow form submit
+      };
+    }
+
+    function onUploadDone() {
+      var status = document.getElementById('upload-status');
+      try {
+        var iframe = document.getElementsByName('upload_target')[0];
+        var doc = iframe.contentDocument || iframe.contentWindow.document;
+        var text = doc.body ? doc.body.innerHTML : '';
+        if (text && text.indexOf('successful') >= 0) {
+          status.innerHTML = 'Upload complete!';
+          document.getElementById('file-input').value = '';
+        } else if (text) {
+          status.innerHTML = text;
+        }
+      } catch (e) {
+        status.innerHTML = 'Upload finished.';
+      }
+      // Refresh file list
+      pollFiles();
+    }
+
+    // --- Draggable chat panel ---
+    function setupDraggableChatPanel() {
+      var panel = document.getElementById('chat-panel');
+      var handle = document.getElementById('chat-panel-head');
+      if (!panel || !handle) return;
+
+      var dragging = false;
+      var startX = 0;
+      var startY = 0;
+      var startLeft = 0;
+      var startTop = 0;
+      var originSet = false;
+
+      function getPageX(e) {
+        if (e.pageX !== undefined) return e.pageX;
+        return e.clientX + (document.documentElement.scrollLeft || document.body.scrollLeft || 0);
+      }
+
+      function getPageY(e) {
+        if (e.pageY !== undefined) return e.pageY;
+        return e.clientY + (document.documentElement.scrollTop || document.body.scrollTop || 0);
+      }
+
+      function onMouseDown(e) {
+        e = e || window.event;
+        dragging = true;
+        startX = getPageX(e);
+        startY = getPageY(e);
+
+        if (!originSet) {
+          panel.style.position = 'relative';
+          panel.style.left = '0px';
+          panel.style.top = '0px';
+          originSet = true;
+        }
+
+        startLeft = parseInt(panel.style.left, 10) || 0;
+        startTop = parseInt(panel.style.top, 10) || 0;
+
+        if (e.preventDefault) e.preventDefault();
+        e.returnValue = false;
+        return false;
+      }
+
+      function onMouseMove(e) {
+        if (!dragging) return;
+        e = e || window.event;
+        var dx = getPageX(e) - startX;
+        var dy = getPageY(e) - startY;
+        panel.style.left = (startLeft + dx) + 'px';
+        panel.style.top = (startTop + dy) + 'px';
+      }
+
+      function onMouseUp() {
+        dragging = false;
+      }
+
+      if (handle.attachEvent) {
+        handle.attachEvent('onmousedown', onMouseDown);
+        document.attachEvent('onmousemove', onMouseMove);
+        document.attachEvent('onmouseup', onMouseUp);
+      } else {
+        handle.addEventListener('mousedown', onMouseDown, false);
+        document.addEventListener('mousemove', onMouseMove, false);
+        document.addEventListener('mouseup', onMouseUp, false);
+      }
+    }
+
+    // --- Init ---
+    function init() {
+      SESSION_ID = getQueryParam('session');
+      if (!SESSION_ID) {
+        document.getElementById('conn-status').innerHTML = '<span class="err">No session ID in URL</span>';
+        return;
+      }
+
+      // Determine base URL (use current origin + path prefix)
+      var proto = window.location.protocol;
+      var host = window.location.hostname;
+      var port = window.location.port;
+      var origin = proto + '//' + host + (port ? ':' + port : '');
+      // Detect path prefix from the customer page path (e.g. /remote/customer/ -> /remote)
+      var pathPrefix = '';
+      var custIdx = window.location.pathname.indexOf('/customer');
+      if (custIdx > 0) pathPrefix = window.location.pathname.substring(0, custIdx);
+      BASE_URL = origin + pathPrefix;
+
+      // Fix brand logo
+      var brandLogo = document.getElementById('brandLogo');
+      if (brandLogo) brandLogo.src = BASE_URL + '/logo.png';
+
+      document.getElementById('conn-status').innerHTML = 'Session: ' + SESSION_ID;
+
+      // Setup upload form
+      setupUpload();
+      setupDraggableChatPanel();
+
+      // Send on button click
+      var sendBtn = document.getElementById('chat-send');
+      if (sendBtn.attachEvent) {
+        sendBtn.attachEvent('onclick', sendMessage);
+      } else {
+        sendBtn.addEventListener('click', sendMessage, false);
+      }
+
+      // Send on Enter key
+      var chatInput = document.getElementById('chat-input');
+      var onKey = function (e) {
+        var key = e.keyCode || e.which;
+        if (key === 13) sendMessage();
+      };
+      if (chatInput.attachEvent) {
+        chatInput.attachEvent('onkeydown', onKey);
+      } else {
+        chatInput.addEventListener('keydown', onKey, false);
+      }
+
+      // Start polling
+      pollMessages();
+      pollFiles();
+      pollTimer = setInterval(pollMessages, 3000);
+      filePollTimer = setInterval(pollFiles, 10000);
+    }
+
+    // Run on load
+    if (window.attachEvent) {
+      window.attachEvent('onload', init);
+    } else {
+      window.addEventListener('load', init, false);
+    }
+  </script>
+</body>
+</html>
