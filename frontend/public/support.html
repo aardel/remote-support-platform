@@ -319,10 +319,8 @@
         const sessionId = getSessionIdFromURL();
         let packageManifest = [];
         let selectedPackageType = 'zip';
-        // Temporary safety switch:
-        // current EXE/DMG templates were built with backup-domain defaults.
-        // Keep customer downloads on ZIP until new templates are uploaded.
-        const FORCE_ZIP_ONLY = true;
+        // When false: Windows = EXE only, macOS = DMG only, Windows XP / Linux / other = ZIP only.
+        const FORCE_ZIP_ONLY = false;
 
         if (!sessionId) {
             showError('Invalid session link. Please check the URL.');
@@ -389,8 +387,8 @@
             function allowedTypesForOs(os) {
                 if (FORCE_ZIP_ONLY) return ['zip'];
                 if (os === 'windows-xp') return ['zip'];
-                if (os === 'windows') return ['exe', 'zip'];
-                if (os === 'mac') return ['dmg', 'zip'];
+                if (os === 'windows') return ['exe'];
+                if (os === 'mac') return ['dmg'];
                 if (os === 'linux') return ['zip'];
                 return ['zip'];
             }
@@ -421,20 +419,21 @@
             });
         }
 
-        function autoSelectPackage(os) {
-            if (FORCE_ZIP_ONLY) {
-                selectedPackageType = 'zip';
-            } else if (os === 'windows' || os === 'windows-xp') {
-                selectedPackageType = (packageManifest.find(function (p) { return p.type === 'exe' && p.available; }) || {}).type || 'zip';
-                if (os === 'windows-xp') selectedPackageType = 'zip';
-            } else if (os === 'mac') {
-                selectedPackageType = (packageManifest.find(function (p) { return p.type === 'dmg' && p.available; }) || {}).type || 'zip';
-            } else {
-                selectedPackageType = 'zip';
+            function autoSelectPackage(os) {
+                if (FORCE_ZIP_ONLY) {
+                    selectedPackageType = 'zip';
+                } else if (os === 'windows-xp') {
+                    selectedPackageType = 'zip';
+                } else if (os === 'windows') {
+                    selectedPackageType = 'exe';
+                } else if (os === 'mac') {
+                    selectedPackageType = 'dmg';
+                } else {
+                    selectedPackageType = 'zip';
+                }
+                document.getElementById('packageSelect').value = selectedPackageType;
+                updateDownloadLink();
             }
-            document.getElementById('packageSelect').value = selectedPackageType;
-            updateDownloadLink();
-        }
 
         function updateDownloadLink() {
             var btn = document.getElementById('downloadBtn');

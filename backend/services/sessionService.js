@@ -205,7 +205,7 @@ class SessionService {
      * Assign a session for a device: return existing active session for this device,
      * or pending session from technician request, or create a new one.
      */
-    static async assignSessionForDevice({ deviceId, deviceName, os, hostname, arch, allowUnattended, lastIp }) {
+    static async assignSessionForDevice({ deviceId, deviceName, os, hostname, arch, allowUnattended, lastIp, sessionId: clientSessionId }) {
         const Device = require('../models/Device');
         const defaultTechnicianId = process.env.DEFAULT_TECHNICIAN_ID || 'system';
 
@@ -221,7 +221,32 @@ class SessionService {
                 };
             }
 
-            // 2. Device has pending_session_id (technician sent "request session" for this device)
+            // 2. Helper sent sessionId (e.g. from support-ABC-123-XYZ.exe or config): use that session if it exists and is waiting
+            if (clientSessionId) {
+                const inviteSession = await Session.findBySessionId(clientSessionId);
+                if (inviteSession && inviteSession.status === 'waiting' && new Date() < new Date(inviteSession.expires_at)) {
+                    await Session.update(clientSessionId, { device_id: deviceId });
+                    await Device.upsert({
+                        deviceId,
+                        technicianId: inviteSession.technician_id,
+                        displayName: deviceName,
+                        os,
+                        hostname,
+                        arch,
+                        allowUnattended,
+                        lastIp
+                    });
+                    return {
+                        sessionId: clientSessionId,
+                        link: `${DEFAULT_SERVER_URL}/support/${clientSessionId}`,
+                        expiresAt: inviteSession.expires_at,
+                        existing: false,
+                        fromInviteLink: true
+                    };
+                }
+            }
+
+            // 3. Device has pending_session_id (technician sent "request session" for this device)
             const device = await Device.findByDeviceId(deviceId);
             if (device?.pending_session_id) {
                 const pendingSession = await Session.findBySessionId(device.pending_session_id);
@@ -237,7 +262,7 @@ class SessionService {
                 }
             }
 
-            // 3. Create new session for this device
+            // 4. Create new session for this device
             const technicianId = device?.technician_id || defaultTechnicianId;
             const session = await Session.create({
                 technicianId,

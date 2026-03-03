@@ -180,12 +180,32 @@ function getDeviceId() {
   return id;
 }
 
+function getSessionIdFromExecutablePath() {
+  try {
+    const exePath = app.getPath('exe') || process.execPath;
+    if (!exePath) return '';
+    const basename = path.basename(exePath, path.extname(exePath));
+    // Session-specific build: support-ABC-123-XYZ.exe → ABC-123-XYZ
+    if (basename.toLowerCase().startsWith('support-') && basename.length > 8) {
+      const id = basename.slice(8);
+      if (/^[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+$/i.test(id)) return id;
+    }
+  } catch (_) {}
+  return '';
+}
+
 function readConfig() {
   const configPath = path.join(process.resourcesPath, 'config.json');
-  if (fs.existsSync(configPath)) return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  if (fs.existsSync(configPath)) {
+    const data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    if (data.sessionId) return data;
+    data.sessionId = getSessionIdFromExecutablePath() || data.sessionId || '';
+    return data;
+  }
   const embeddedId = '___SESSID___';
   let sessionId = '';
   if (!embeddedId.startsWith('___')) sessionId = embeddedId.replace(/_+$/, '');
+  if (!sessionId) sessionId = getSessionIdFromExecutablePath();
   return { sessionId, server: process.env.SERVER_URL || '', port: 5500 };
 }
 
@@ -379,18 +399,20 @@ ipcMain.handle('helper:check-pending', async () => {
 
 ipcMain.handle('helper:assign-session', async (_event, allowUnattended) => {
   const config = readConfig();
+  const payload = {
+    deviceId: getDeviceId(),
+    deviceName: os.hostname(),
+    os: `${os.platform()} ${os.release()}`,
+    hostname: os.hostname(),
+    arch: os.arch(),
+    allowUnattended: allowUnattended !== false,
+    macAddress: getMacAddress()
+  };
+  if (config.sessionId && config.sessionId.trim()) payload.sessionId = config.sessionId.trim();
   const res = await fetch(`${config.server}/api/sessions/assign`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      deviceId: getDeviceId(),
-      deviceName: os.hostname(),
-      os: `${os.platform()} ${os.release()}`,
-      hostname: os.hostname(),
-      arch: os.arch(),
-      allowUnattended: allowUnattended !== false,
-      macAddress: getMacAddress()
-    })
+    body: JSON.stringify(payload)
   });
   if (!res.ok) throw new Error(await res.text());
   return res.json();

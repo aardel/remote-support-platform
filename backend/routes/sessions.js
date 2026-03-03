@@ -30,7 +30,7 @@ function computeRemoteViewingSeconds(sessionRow) {
 // Assign session for device (helper calls on launch – no auth)
 router.post('/assign', async (req, res) => {
     try {
-        const { deviceId, deviceName, os, hostname, arch, allowUnattended } = req.body;
+        const { deviceId, deviceName, os, hostname, arch, allowUnattended, sessionId: clientSessionId } = req.body;
         if (!deviceId) {
             return res.status(400).json({ error: 'deviceId required' });
         }
@@ -42,7 +42,8 @@ router.post('/assign', async (req, res) => {
             hostname: hostname || req.body.clientInfo?.hostname,
             arch: arch || req.body.clientInfo?.arch,
             allowUnattended: allowUnattended !== false,
-            lastIp: clientIp
+            lastIp: clientIp,
+            sessionId: clientSessionId && String(clientSessionId).trim() ? String(clientSessionId).trim() : null
         });
 
         // Async geolocation update for device list
