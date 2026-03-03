@@ -36,7 +36,7 @@ Use SCP or SFTP to upload the entire project folder to your server.
 
 ```bash
 # SSH into server
-ssh root@YOUR_SERVER_IP
+ssh -p 56789 root@YOUR_SERVER_IP
 # or
 ssh ubuntu@YOUR_SERVER_IP
 ```

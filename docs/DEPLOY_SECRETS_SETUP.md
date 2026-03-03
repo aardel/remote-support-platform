@@ -95,7 +95,14 @@ This tells the workflow to run the deploy job. (GitHub doesn’t allow workflows
    - `/opt/remote-support/packages`
 4. Click **Add secret**.
 
-You should now have 1 variable (**DEPLOY_ENABLED** = `true`) and 4 secrets: `DEPLOY_SSH_KEY`, `SERVER_HOST`, `SERVER_USER`, `SERVER_PACKAGES_PATH`.
+### Step 2.7 - Add SERVER_SSH_PORT
+
+1. Click **New repository secret**.
+2. **Name:** `SERVER_SSH_PORT`
+3. **Secret:** `56789`
+4. Click **Add secret**.
+
+You should now have 1 variable (**DEPLOY_ENABLED** = `true`) and 5 secrets: `DEPLOY_SSH_KEY`, `SERVER_HOST`, `SERVER_USER`, `SERVER_SSH_PORT`, `SERVER_PACKAGES_PATH`.
 
 ---
 
@@ -108,7 +115,7 @@ The server must accept the new key. Do this once from a terminal where you can a
 Use your normal login (same user as SERVER_USER, same host as SERVER_HOST):
 
 ```bash
-ssh root@YOUR_SERVER_IP
+ssh -p 56789 root@YOUR_SERVER_IP
 ```
 
 (or `ssh youruser@your-server.com`).
@@ -131,7 +138,7 @@ chmod 600 ~/.ssh/authorized_keys
 From your **local** terminal (not the server), run (replace `root` and `YOUR_SERVER_IP` with your SERVER_USER and SERVER_HOST):
 
 ```bash
-ssh-copy-id -i ~/.ssh/github_remote_support_deploy.pub root@YOUR_SERVER_IP
+ssh-copy-id -p 56789 -i ~/.ssh/github_remote_support_deploy.pub root@YOUR_SERVER_IP
 ```
 
 Enter your normal SSH password when asked. After that, the new key is in `~/.ssh/authorized_keys` on the server.
@@ -158,7 +165,7 @@ Enter your normal SSH password when asked. After that, the new key is in `~/.ssh
 From your **local** machine:
 
 ```bash
-ssh -i ~/.ssh/github_remote_support_deploy root@YOUR_SERVER_IP
+ssh -p 56789 -i ~/.ssh/github_remote_support_deploy root@YOUR_SERVER_IP
 ```
 
 You should get a shell without a password. Type `exit` to close.
@@ -201,6 +208,7 @@ Use the same path you put in **SERVER_PACKAGES_PATH**.
 - [ ] Secret **DEPLOY_SSH_KEY** = full private key
 - [ ] Secret **SERVER_HOST** = server IP or hostname
 - [ ] Secret **SERVER_USER** = SSH user (e.g. `root`)
+- [ ] Secret **SERVER_SSH_PORT** = `56789`
 - [ ] Secret **SERVER_PACKAGES_PATH** = e.g. `/opt/remote-support/packages`
 - [ ] Public key added to server `~/.ssh/authorized_keys`
 - [ ] `packages` directory exists on server
