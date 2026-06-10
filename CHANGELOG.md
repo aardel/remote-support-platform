@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.1.1] – 2026-06-10
+
+### Fixed
+
+- **Helper CI builds** — upgraded `robotjs` 0.6.0 → 0.7.x (rewritten on N-API/node-addon-api instead of the abandoned `nan`), fixing `npm install` failures on the Windows/macOS release runners and making Electron rebuilds ABI-stable. Same API surface (moveMouse, mouseToggle, scrollMouse, keyToggle, keyTap).
+
 ## [1.1.0] – 2026-06-10
 
 ### Security
