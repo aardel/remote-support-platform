@@ -87,7 +87,7 @@ router.post('/templates', requireAuth, upload.single('file'), async (req, res) =
         try {
             const io = req.app.get('io');
             if (io) {
-                io.emit('templates-updated', { templates: getTemplateStatus() });
+                io.to('technicians').emit('templates-updated', { templates: getTemplateStatus() });
             }
         } catch (_) {}
 
@@ -150,7 +150,7 @@ router.post('/generate', requireAuth, async (req, res) => {
         // Broadcast to all dashboards so other technicians see it
         const io = req.app.get('io');
         if (io) {
-            io.emit('session-created', {
+            io.to('technicians').emit('session-created', {
                 sessionId,
                 status: 'waiting',
                 technician_id: technicianId,

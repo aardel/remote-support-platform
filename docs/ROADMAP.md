@@ -64,7 +64,9 @@ Candidate features for the Remote Support Platform. Aligned with current stack (
 - **Session recording**: Record screen + optional audio for compliance (helper captures; upload or store on server).
 - **Unattended access**: ✅ "Allow unattended connections" checkbox in helper; stored per session; when enabled, technician can leave and reconnect without user action; helper stays ready for next connection.
 - **Technician groups/tags**: Tag sessions or devices (e.g. "Team A", "VIP"); filter by tag.
-- **Health/uptime**: Device `last_seen` is updated on register; dashboard can order by it. Session-level "last active" or heartbeat for stale-session display still in backlog.
+- **Health/uptime**: ✅ (1.1.0) Persistent device presence: helper keeps an authenticated socket with 30s heartbeats; dashboard shows live Online/Offline (`online` flag + `device-status` event); `last_seen` updated on connect/heartbeat/disconnect.
+- **Socket + REST auth**: ✅ (1.1.0) Authenticated socket handshakes (cookie / helperToken / deviceToken), server-side role enforcement, proxy-header hardening, rate limiting. See `docs/SECURITY.md`.
+- **Session binding hardening**: Bind a session to the first registering device and reject re-registration (closes the register-then-approve window noted in `docs/SECURITY.md`).
 
 ## Larger
 

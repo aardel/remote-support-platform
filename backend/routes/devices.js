@@ -5,6 +5,8 @@ const SessionService = require('../services/sessionService');
 const { requireAuth } = require('../middleware/sessionAuth');
 const { geolocate, normalizeIp } = require('../services/geolocate');
 const { sendWolPacket } = require('../services/wol');
+const { signDeviceToken } = require('../utils/agentTokens');
+const { rateLimit } = require('../middleware/rateLimit');
 
 function extractClientIp(req) {
     // Prefer x-forwarded-for when behind a proxy/load balancer.
@@ -18,7 +20,7 @@ function extractClientIp(req) {
 }
 
 // Register or update device (called by helper)
-router.post('/register', async (req, res) => {
+router.post('/register', rateLimit({ windowMs: 60 * 1000, max: 30 }), async (req, res) => {
     try {
         const {
             deviceId,
@@ -55,7 +57,7 @@ router.post('/register', async (req, res) => {
                 Device.updateGeo(deviceId, geo).then((updated) => {
                     const io = req.app.get('io');
                     if (io && updated) {
-                        io.emit('device-updated', {
+                        io.to('technicians').emit('device-updated', {
                             deviceId,
                             last_ip: updated.last_ip,
                             last_country: updated.last_country,
@@ -67,7 +69,10 @@ router.post('/register', async (req, res) => {
             }).catch(() => { });
         }
 
-        res.json({ success: true, device });
+        // Token for the persistent presence socket (and device-scoped session joins)
+        const deviceToken = signDeviceToken({ deviceId });
+
+        res.json({ success: true, device, deviceToken });
     } catch (error) {
         console.error('Error registering device:', error);
         res.status(500).json({ error: error.message });
@@ -102,7 +107,12 @@ router.get('/pending/:deviceId', async (req, res) => {
 router.get('/', requireAuth, async (req, res) => {
     try {
         const devices = await Device.listAll();
-        res.json({ devices });
+        const ws = req.app.get('wsHandler');
+        const withPresence = devices.map(d => ({
+            ...d,
+            online: ws ? ws.isDeviceOnline(d.device_id) : false
+        }));
+        res.json({ devices: withPresence });
     } catch (error) {
         console.error('Error listing devices:', error);
         res.status(500).json({ error: error.message });
@@ -159,10 +169,18 @@ router.post('/:deviceId/request', requireAuth, async (req, res) => {
         const sessionId = session.session_id || session.sessionId;
         await Device.setPendingSession(deviceId, sessionId);
 
+        // If the device agent is online, push the request immediately —
+        // no need to ask the user to open the helper.
+        const ws = req.app.get('wsHandler');
+        const pushed = ws ? ws.notifyDevice(deviceId, 'pending-session', { sessionId }) : false;
+
         res.json({
             success: true,
             sessionId,
-            message: 'Session requested. Ask the user to open the helper.'
+            pushed,
+            message: pushed
+                ? 'Session request sent to the online device.'
+                : 'Session requested. Ask the user to open the helper.'
         });
     } catch (error) {
         console.error('Error requesting session:', error);

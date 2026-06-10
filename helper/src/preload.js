@@ -57,6 +57,15 @@ contextBridge.exposeInMainWorld('helperApi', {
     ipcRenderer.on('signaling:connection-request', h);
     return () => ipcRenderer.removeListener('signaling:connection-request', h);
   },
+  onPendingSession: (callback) => {
+    const h = (_event, data) => callback(data);
+    ipcRenderer.on('signaling:pending-session', h);
+    return () => ipcRenderer.removeListener('signaling:pending-session', h);
+  },
+
+  // Auto-start on login
+  getAutoStart: () => ipcRenderer.invoke('helper:get-auto-start'),
+  setAutoStart: (enabled) => ipcRenderer.invoke('helper:set-auto-start', enabled),
   onConnectionResponse: (callback) => {
     const h = (_event, data) => callback(data);
     ipcRenderer.on('signaling:connection-response', h);

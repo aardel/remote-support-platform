@@ -144,7 +144,7 @@ router.post('/create', async (req, res) => {
 
         const io = req.app.get('io');
         if (io) {
-            io.emit('session-created', {
+            io.to('technicians').emit('session-created', {
                 sessionId,
                 status: 'waiting',
                 technician_id: null,

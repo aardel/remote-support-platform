@@ -55,6 +55,9 @@ const sessionParser = session({
 });
 app.use(sessionParser);
 
+// Let socket handshakes resolve the logged-in technician from the remote.sid cookie
+wsHandler.setSessionParser(sessionParser);
+
 // Serve static files (customer UI)
 app.use('/customer', express.static(path.join(__dirname, '../frontend/public')));
 
@@ -188,11 +191,13 @@ app.get('/api/turn-servers', (req, res) => {
 
 // Make io and services available to routes
 app.set('io', io);
+app.set('wsHandler', wsHandler);
 app.set('approvalHandler', approvalHandler);
 
 // Start VNC Bridge
 const vncBridge = new VNCBridge(server);
 vncBridge.setIo(io);
+vncBridge.setSessionParser(sessionParser);
 vncBridge.start();
 wsHandler.setVncBridge(vncBridge);
 

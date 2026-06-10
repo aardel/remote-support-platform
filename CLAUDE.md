@@ -10,9 +10,9 @@ Browser-based remote support platform. A technician logs into a web dashboard, g
 |-------|------|
 | Backend | Node.js, Express, Socket.io, PostgreSQL, Redis (optional), JWT + express-session |
 | Frontend | React 18, Vite, Socket.io-client, WebRTC |
-| Helper | Electron (main + renderer + preload), screen capture, optional robotjs |
-| CI/CD | GitHub Actions (`build-helper.yml`), PM2 in production |
-| Auth | JWT tokens, bcrypt passwords, session middleware on protected routes |
+| Helper | Electron (main + renderer + preload), screen capture, optional robotjs, persistent presence agent |
+| CI/CD | GitHub Actions (`build-helper.yml`); production runs in Docker (`remote-app` container, see Production below) |
+| Auth | Technicians: express-session cookie (SSO via nginx `auth_request` + `X-Proxy-Auth` secret, or local login). Helpers/devices: JWTs (`helperToken`/`deviceToken`). Sockets authenticated at handshake — see `docs/API_AND_EVENTS.md` |
 
 ## Project Structure
 
@@ -54,9 +54,12 @@ npm run deploy           # Run deploy.sh
 
 ## Production
 
-- PM2 process name: `remote-support-backend`
-- Restart backend: `pm2 restart remote-support-backend`
-- Frontend serves from `frontend/dist/` (static, built by Vite)
+- Runs as Docker container `remote-app` defined in `/srv/docker-compose.yml` (NOT PM2 — older docs are wrong)
+- `backend/` is bind-mounted read-only into the container → backend-only changes: `docker restart remote-app`
+- Frontend is built at image build time → frontend changes need `docker compose -f /srv/docker-compose.yml up -d --build remote-app`
+- Secrets (`SESSION_SECRET`, `JWT_SECRET`, `PROXY_SHARED_SECRET`, `DB_PASSWORD`) come from `/srv/.env` via compose interpolation
+- Edge proxy: `/srv/proxy/nginx.conf` (container `edge-nginx`); reload with `docker exec edge-nginx nginx -s reload`
+- Reverse-VNC for XP clients: host TCP 5500 published to the container
 - Env vars: see `.env.example` — never commit `.env`
 
 ## Versioning

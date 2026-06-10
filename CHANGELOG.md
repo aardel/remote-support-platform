@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.1.0] – 2026-06-10
+
+### Security
+
+- **Socket.io authentication** — handshakes are now authenticated: technicians via the `remote.sid` dashboard cookie, helpers/devices via signed JWTs (`helperToken` from `/api/sessions/assign|register`, `deviceToken` from `/api/devices/register`). Unauthenticated sockets are receive-only "customer" connections. Roles are derived server-side; control events are accepted from technicians only, capture/results from helpers only, all scoped to the joined session.
+- **Proxy identity hardening** — `X-User-Id`/`X-Display-Name` headers are only trusted with the `X-Proxy-Auth` shared secret (`PROXY_SHARED_SECRET`), closing a header-forgery auth bypass through public nginx locations.
+- **Approval/settings endpoints** — require the session's `helperToken` (Bearer) once an Electron helper is attached; token-less writes only for legacy VNC/XP sessions, rate limited.
+- **`/websockify` (noVNC)** — WebSocket upgrade now requires a logged-in technician session.
+- **VNC auto-created sessions** — disabled by default (`VNC_AUTO_CREATE_SESSIONS=true` to enable); unmapped inbound VNC connections are dropped.
+- **Rate limiting** — per-IP fixed-window limits on all unauthenticated session/device endpoints.
+- **Secrets** — production `SESSION_SECRET`/`JWT_SECRET` moved to strong generated values in host `.env` (placeholders removed from compose).
+- Trimmed unauthenticated `GET /api/sessions/:id` to minimal status fields; dashboard broadcasts now go to the `technicians` room only.
+
+### Added
+
+- **Persistent agent mode (helper 1.1.0)** — helper auto-starts at login (toggle in UI, default on), keeps an authenticated presence socket with 30s heartbeats, and reconnects automatically. Dashboard Devices page and widget show live Online/Offline from socket presence (`online` flag + `device-status` event) instead of guessing from `last_seen`.
+- **Instant session requests** — "Request session" on an online device pushes `pending-session` over the presence socket; the helper opens and connects without asking the user to launch it.
+- **Reverse-VNC port published** — compose now publishes TCP 5500 (+ ufw rule) so the XP/TightVNC path works in the Docker deployment.
+
+## [1.0.4 – 1.0.14] (previously listed under Unreleased)
+
 ### Added
 
 - **VNC/XP support path** — TightVNC reverse connection with auto-created sessions when no prior registration; VNC bridge buffers data until noVNC WebSocket connects; session lookup by IP plus single-pending fallback for proxy/NAT. Windows launcher v2.2: crash protection, verbose logging, goto-based batch (XP-safe), HTTP fallback URL in config and VBScript registration/netcheck.

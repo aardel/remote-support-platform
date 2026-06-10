@@ -6,10 +6,16 @@ function getLoginPath() {
     return '/api/auth/login';
 }
 
-/** When behind workspace proxy: trust X-User-Id and X-Display-Name (set by nginx auth_request) */
+/**
+ * When behind workspace proxy: trust X-User-Id and X-Display-Name (set by nginx auth_request).
+ * Only when the request carries the proxy shared secret (X-Proxy-Auth) — otherwise any client
+ * could forge X-User-Id through nginx locations that proxy without auth_request.
+ */
 function trustedProxyUser(req) {
     const id = req.headers['x-user-id'];
     if (!id) return null;
+    const proxySecret = process.env.PROXY_SHARED_SECRET;
+    if (!proxySecret || req.headers['x-proxy-auth'] !== proxySecret) return null;
     return {
         id,
         displayName: req.headers['x-display-name'] || id,

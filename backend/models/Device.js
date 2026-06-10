@@ -115,6 +115,13 @@ class Device {
         return result.rows[0] || null;
     }
 
+    static async touchLastSeen(deviceId) {
+        await pool.query(
+            'UPDATE devices SET last_seen = NOW(), updated_at = NOW() WHERE device_id = $1',
+            [deviceId]
+        );
+    }
+
     static async clearPendingSession(deviceId) {
         const result = await pool.query(
             `UPDATE devices

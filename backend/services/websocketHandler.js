@@ -1,6 +1,8 @@
 const { Server } = require('socket.io');
 const SessionService = require('./sessionService');
 const sessionStore = require('./sessionStore');
+const Device = require('../models/Device');
+const { verifyAgentToken } = require('../utils/agentTokens');
 
 async function safeUpdateSession(sessionId, updates) {
     // Session schema can vary across deployments; tolerate missing columns by retrying without them.
@@ -25,12 +27,27 @@ async function safeUpdateSession(sessionId, updates) {
     return null;
 }
 
+const DEVICE_TOUCH_INTERVAL_MS = 60 * 1000;
+
 class WebSocketHandler {
     constructor(server) {
+        const corsOrigins = (process.env.CORS_ORIGINS || '')
+            .split(',')
+            .map(s => s.trim())
+            .filter(Boolean);
+
         this.io = new Server(server, {
             cors: {
-                origin: "*",
-                methods: ["GET", "POST"]
+                // Electron helpers and native clients send no Origin header; allow those.
+                // Browsers must match the allowlist (when configured).
+                origin: (origin, cb) => {
+                    if (!origin) return cb(null, true);
+                    if (corsOrigins.length === 0) return cb(null, true);
+                    if (corsOrigins.includes(origin)) return cb(null, true);
+                    return cb(new Error('Not allowed by CORS'));
+                },
+                methods: ["GET", "POST"],
+                credentials: true
             }
         });
 
@@ -43,14 +60,151 @@ class WebSocketHandler {
         // Cache offers and ICE candidates for late-joining technicians
         this.pendingOffers = new Map(); // sessionId -> { offer, from, iceCandidates }
 
-        this.vncBridge = null; // set via setVncBridge() after construction
+        // Live device presence (persistent helper agents)
+        this.deviceSockets = new Map(); // deviceId -> Set(socketId)
+        this.deviceLastTouch = new Map(); // deviceId -> ts of last DB last_seen write
 
+        this.vncBridge = null; // set via setVncBridge() after construction
+        this.sessionParser = null; // set via setSessionParser() so technician cookies can be read
+
+        this.setupAuth();
         this.setupHandlers();
     }
 
+    // Express session middleware, injected from server.js so socket handshakes can
+    // resolve the logged-in technician from the remote.sid cookie.
+    setSessionParser(parser) {
+        this.sessionParser = parser;
+    }
+
+    setupAuth() {
+        this.io.use((socket, next) => {
+            const authenticate = () => {
+                const auth = socket.handshake.auth || {};
+
+                // Customer-side agents authenticate with a signed token (helper or device).
+                if (auth.token) {
+                    const payload = verifyAgentToken(auth.token);
+                    if (!payload) return next(new Error('Invalid agent token'));
+                    socket.authRole = payload.role; // 'helper' | 'device'
+                    socket.agent = payload;
+                    return next();
+                }
+
+                // Technicians authenticate via their dashboard session cookie.
+                const user = socket.request.session?.user;
+                if (user) {
+                    socket.authRole = 'technician';
+                    socket.user = user;
+                    return next();
+                }
+
+                // Anything else is a customer page: receive-only (approval prompts, status).
+                socket.authRole = 'customer';
+                next();
+            };
+
+            if (this.sessionParser) {
+                this.sessionParser(socket.request, {}, () => authenticate());
+            } else {
+                authenticate();
+            }
+        });
+    }
+
+    // --- Device presence -------------------------------------------------
+
+    isDeviceOnline(deviceId) {
+        const set = this.deviceSockets.get(deviceId);
+        return !!(set && set.size > 0);
+    }
+
+    getOnlineDeviceIds() {
+        return [...this.deviceSockets.keys()].filter(id => this.isDeviceOnline(id));
+    }
+
+    // Push an event to all live sockets of a device. Returns true if at least one was online.
+    notifyDevice(deviceId, event, payload) {
+        const set = this.deviceSockets.get(deviceId);
+        if (!set || set.size === 0) return false;
+        for (const socketId of set) {
+            this.io.to(socketId).emit(event, payload);
+        }
+        return true;
+    }
+
+    hasHelperSocket(sessionId) {
+        const conn = this.sessionConnections.get(sessionId);
+        return !!(conn && conn.helper);
+    }
+
+    touchDeviceLastSeen(deviceId) {
+        const now = Date.now();
+        const last = this.deviceLastTouch.get(deviceId) || 0;
+        if (now - last < DEVICE_TOUCH_INTERVAL_MS) return;
+        this.deviceLastTouch.set(deviceId, now);
+        Device.touchLastSeen(deviceId).catch(() => { });
+    }
+
+    markDeviceOnline(deviceId, socketId) {
+        let set = this.deviceSockets.get(deviceId);
+        const wasOnline = !!(set && set.size > 0);
+        if (!set) {
+            set = new Set();
+            this.deviceSockets.set(deviceId, set);
+        }
+        set.add(socketId);
+        this.touchDeviceLastSeen(deviceId);
+        if (!wasOnline) {
+            this.io.to('technicians').emit('device-status', { deviceId, online: true, last_seen: new Date().toISOString() });
+        }
+    }
+
+    markDeviceOffline(deviceId, socketId) {
+        const set = this.deviceSockets.get(deviceId);
+        if (!set) return;
+        set.delete(socketId);
+        if (set.size === 0) {
+            this.deviceSockets.delete(deviceId);
+            this.deviceLastTouch.delete(deviceId);
+            Device.touchLastSeen(deviceId).catch(() => { });
+            this.io.to('technicians').emit('device-status', { deviceId, online: false, last_seen: new Date().toISOString() });
+        }
+    }
+
+    // --- Main handlers ----------------------------------------------------
+
     setupHandlers() {
         this.io.on('connection', (socket) => {
-            console.log('Client connected:', socket.id);
+            console.log(`Client connected: ${socket.id} (${socket.authRole})`);
+
+            // Dashboards get global updates via the technicians room (not broadcast to helpers/customers).
+            if (socket.authRole === 'technician') {
+                socket.join('technicians');
+            }
+
+            // Persistent device agents: mark online for the dashboard.
+            const agentDeviceId = socket.agent?.deviceId;
+            if ((socket.authRole === 'device' || socket.authRole === 'helper') && agentDeviceId) {
+                this.markDeviceOnline(agentDeviceId, socket.id);
+            }
+
+            socket.on('device-heartbeat', () => {
+                if (agentDeviceId) this.touchDeviceLastSeen(agentDeviceId);
+            });
+
+            // Only authenticated technicians may drive control/viewing events.
+            const requireTech = (handler) => (data) => {
+                if (socket.authRole !== 'technician') return;
+                handler(data);
+            };
+            // Only the session helper may publish capture/results.
+            const requireHelper = (handler) => (data) => {
+                if (socket.authRole !== 'helper' && socket.authRole !== 'device') return;
+                handler(data);
+            };
+            // Events are always scoped to the session this socket joined.
+            const inJoinedSession = (data) => data && data.sessionId && data.sessionId === socket.sessionId;
 
             const ensureConn = (sessionId) => {
                 if (!this.sessionConnections.has(sessionId)) {
@@ -87,10 +241,10 @@ class WebSocketHandler {
                         if (!started) {
                             const now = new Date();
                             await safeUpdateSession(sessionId, { viewing_technicians: viewing, billable_started_at: now });
-                            this.io.emit('session-updated', { sessionId, viewing_technicians: viewing, billable_started_at: now, billable_seconds: seconds, reason });
+                            this.io.to('technicians').emit('session-updated', { sessionId, viewing_technicians: viewing, billable_started_at: now, billable_seconds: seconds, reason });
                         } else {
                             await safeUpdateSession(sessionId, { viewing_technicians: viewing });
-                            this.io.emit('session-updated', { sessionId, viewing_technicians: viewing, billable_started_at: session.billable_started_at, billable_seconds: seconds, reason });
+                            this.io.to('technicians').emit('session-updated', { sessionId, viewing_technicians: viewing, billable_started_at: session.billable_started_at, billable_seconds: seconds, reason });
                         }
                         return;
                     }
@@ -100,10 +254,10 @@ class WebSocketHandler {
                         const delta = Math.max(0, Math.floor((Date.now() - started.getTime()) / 1000));
                         const nextSeconds = seconds + delta;
                         await safeUpdateSession(sessionId, { viewing_technicians: 0, billable_started_at: null, billable_seconds: nextSeconds });
-                        this.io.emit('session-updated', { sessionId, viewing_technicians: 0, billable_started_at: null, billable_seconds: nextSeconds, reason });
+                        this.io.to('technicians').emit('session-updated', { sessionId, viewing_technicians: 0, billable_started_at: null, billable_seconds: nextSeconds, reason });
                     } else {
                         await safeUpdateSession(sessionId, { viewing_technicians: 0 }).catch(() => {});
-                        this.io.emit('session-updated', { sessionId, viewing_technicians: 0, billable_started_at: null, billable_seconds: seconds, reason });
+                        this.io.to('technicians').emit('session-updated', { sessionId, viewing_technicians: 0, billable_started_at: null, billable_seconds: seconds, reason });
                     }
                 } catch (_) {
                     // ignore
@@ -124,13 +278,47 @@ class WebSocketHandler {
             };
 
             // Join session room
-            socket.on('join-session', (data) => {
-                const { sessionId, role, technicianId, technicianName } = data;
+            socket.on('join-session', async (data) => {
+                const { sessionId, technicianId, technicianName } = data || {};
+                if (!sessionId) return;
+
+                // Role comes from authentication, never from the client payload.
+                let role;
+                if (socket.authRole === 'technician') {
+                    role = (data.role === 'technician-panel') ? 'technician-panel' : 'technician';
+                } else if (socket.authRole === 'helper' || socket.authRole === 'device') {
+                    role = 'helper';
+                } else {
+                    role = 'customer';
+                }
+
+                if (role === 'helper') {
+                    const agent = socket.agent || {};
+                    if (agent.role === 'helper' && agent.sessionId && agent.sessionId !== sessionId) {
+                        socket.emit('join-error', { sessionId, error: 'Token not valid for this session' });
+                        return;
+                    }
+                    if (agent.role === 'device') {
+                        // Device tokens may only join sessions assigned to that device.
+                        let session = null;
+                        try { session = await SessionService.getSession(sessionId); } catch (_) { }
+                        const sessionDeviceId = session ? (session.device_id || session.deviceId) : null;
+                        if (!session || !agent.deviceId || sessionDeviceId !== agent.deviceId) {
+                            socket.emit('join-error', { sessionId, error: 'Token not valid for this session' });
+                            return;
+                        }
+                    }
+                }
+
                 socket.join(`session-${sessionId}`);
                 socket.sessionId = sessionId;
-                socket.role = role || 'unknown';
-                socket.technicianId = technicianId || socket.id;
-                socket.technicianName = technicianName || 'Technician';
+                socket.role = role;
+                // Prefer the authenticated identity over client-supplied names.
+                socket.technicianId = socket.user?.id || technicianId || socket.id;
+                socket.technicianName = socket.user?.displayName || technicianName || 'Technician';
+
+                // Customers only receive room events (approval prompts, status) — no presence tracking.
+                if (role === 'customer') return;
 
                 // Track connection
                 const conn = ensureConn(sessionId);
@@ -147,7 +335,7 @@ class WebSocketHandler {
                     }).catch(e => {
                         console.error('Failed to update session status on helper join:', e.message);
                     });
-                    this.io.emit('session-updated', {
+                    this.io.to('technicians').emit('session-updated', {
                         sessionId,
                         status: 'connected',
                         helper_connected: true,
@@ -170,7 +358,7 @@ class WebSocketHandler {
                         active_technicians: countUniqueTechnicians(conn),
                         viewing_technicians: countViewingTechnicians(conn)
                     }).catch(() => {});
-                    this.io.emit('session-updated', {
+                    this.io.to('technicians').emit('session-updated', {
                         sessionId,
                         active_technicians: countUniqueTechnicians(conn),
                         viewing_technicians: countViewingTechnicians(conn)
@@ -217,12 +405,12 @@ class WebSocketHandler {
             });
 
             // Billable presence: SessionView emits viewer-state=true only after WebRTC is actually connected.
-            socket.on('viewer-state', (data) => {
+            socket.on('viewer-state', requireTech((data) => {
                 const sessionId = (data && data.sessionId) ? data.sessionId : socket.sessionId;
-                if (!sessionId) return;
+                if (!sessionId || sessionId !== socket.sessionId) return;
                 const conn = ensureConn(sessionId);
 
-                const techId = data?.technicianId || socket.technicianId || socket.id;
+                const techId = socket.technicianId || socket.id;
                 const viewing = !!data?.viewing;
 
                 const prev = countViewingTechnicians(conn);
@@ -249,7 +437,7 @@ class WebSocketHandler {
                 if (nowCount !== prev) {
                     recomputeBillable(sessionId, conn, 'viewer-state').catch(() => {});
                 }
-            });
+            }));
 
             // Leave session room
             socket.on('leave-session', (data) => {
@@ -272,7 +460,7 @@ class WebSocketHandler {
                             viewing_technicians: 0,
                             ended_at: new Date()
                         }).catch(() => {});
-                        this.io.emit('session-updated', {
+                        this.io.to('technicians').emit('session-updated', {
                             sessionId,
                             status: 'waiting',
                             helper_connected: false,
@@ -304,7 +492,7 @@ class WebSocketHandler {
                                 this.pendingOffers.delete(sessionId);
                             }
                             safeUpdateSession(sessionId, { active_technicians: countUniqueTechnicians(conn) }).catch(() => {});
-                            this.io.emit('session-updated', { sessionId, active_technicians: countUniqueTechnicians(conn), viewing_technicians: countViewingTechnicians(conn) });
+                            this.io.to('technicians').emit('session-updated', { sessionId, active_technicians: countUniqueTechnicians(conn), viewing_technicians: countViewingTechnicians(conn) });
                             this.io.to(`session-${sessionId}`).emit('technician-left', {
                                 sessionId,
                                 technicianId: tech.technicianId,
@@ -324,7 +512,8 @@ class WebSocketHandler {
             });
 
             // WebRTC Signaling: Offer from helper
-            socket.on('webrtc-offer', (data) => {
+            socket.on('webrtc-offer', requireHelper((data) => {
+                if (!inJoinedSession(data)) return;
                 const { sessionId, offer } = data;
                 console.log(`WebRTC offer received for session ${sessionId}`);
 
@@ -342,10 +531,11 @@ class WebSocketHandler {
                 } else {
                     socket.to(`session-${sessionId}`).emit('webrtc-offer', payload);
                 }
-            });
+            }));
 
             // WebRTC Signaling: Answer from technician
-            socket.on('webrtc-answer', (data) => {
+            socket.on('webrtc-answer', requireTech((data) => {
+                if (!inJoinedSession(data)) return;
                 const { sessionId, answer } = data;
                 console.log(`WebRTC answer received for session ${sessionId}`);
                 // Forward to helper in the session
@@ -354,12 +544,14 @@ class WebSocketHandler {
                     answer,
                     from: socket.id
                 });
-            });
+            }));
 
-            // WebRTC Signaling: ICE candidates
+            // WebRTC Signaling: ICE candidates (helpers and technicians only)
             socket.on('webrtc-ice-candidate', (data) => {
-                const { sessionId, candidate, role } = data;
-                console.log(`ICE candidate from ${role} for session ${sessionId}`);
+                if (socket.authRole === 'customer') return;
+                if (!inJoinedSession(data)) return;
+                const { sessionId, candidate } = data;
+                const role = (socket.authRole === 'technician') ? 'technician' : 'helper';
 
                 // Cache ICE candidates from helper if no technician has joined yet
                 if (role === 'helper' && this.pendingOffers.has(sessionId)) {
@@ -385,28 +577,30 @@ class WebSocketHandler {
             });
 
             // Helper capabilities: forward to technician so they see control status
-            socket.on('helper-capabilities', (data) => {
+            socket.on('helper-capabilities', requireHelper((data) => {
+                if (!inJoinedSession(data)) return;
                 const { sessionId } = data;
                 console.log(`Helper capabilities for session ${sessionId}:`, JSON.stringify(data.capabilities));
                 socket.to(`session-${sessionId}`).emit('helper-capabilities', data);
-            });
+            }));
 
             // Remote control: Mouse events from technician
-            socket.on('remote-mouse', (data) => {
+            socket.on('remote-mouse', requireTech((data) => {
+                if (!inJoinedSession(data)) return;
                 const { sessionId } = data;
                 if (data.type === 'mousedown') console.log(`[mouse] forwarding ${data.type} to session-${sessionId} x=${data.x?.toFixed(3)} y=${data.y?.toFixed(3)}`);
-                // Forward to helper
                 socket.to(`session-${sessionId}`).emit('remote-mouse', data);
-            });
+            }));
 
             // Remote clipboard: technician sends clipboard text to paste on user PC
-            socket.on('remote-clipboard', (data) => {
-                const { sessionId } = data;
-                socket.to(`session-${sessionId}`).emit('remote-clipboard', data);
-            });
+            socket.on('remote-clipboard', requireTech((data) => {
+                if (!inJoinedSession(data)) return;
+                socket.to(`session-${data.sessionId}`).emit('remote-clipboard', data);
+            }));
 
             // Remote control: Keyboard events from technician
-            socket.on('remote-keyboard', (data) => {
+            socket.on('remote-keyboard', requireTech((data) => {
+                if (!inJoinedSession(data)) return;
                 const { sessionId } = data;
                 if (data.type === 'keydown') {
                     const room = this.io.sockets.adapter.rooms.get(`session-${sessionId}`);
@@ -414,32 +608,32 @@ class WebSocketHandler {
                     const others = roomMembers.filter(id => id !== socket.id);
                     console.log(`[keyboard] forwarding "${data.key}" to session-${sessionId} | sender=${socket.id} | room members=${roomMembers.length} | targets=${others.length} (${others.join(', ')})`);
                 }
-                // Forward to helper
                 socket.to(`session-${sessionId}`).emit('remote-keyboard', data);
-            });
+            }));
 
             // Monitor switch: technician requests different monitor
-            socket.on('switch-monitor', (data) => {
-                const { sessionId } = data;
-                socket.to(`session-${sessionId}`).emit('switch-monitor', data);
-            });
+            socket.on('switch-monitor', requireTech((data) => {
+                if (!inJoinedSession(data)) return;
+                socket.to(`session-${data.sessionId}`).emit('switch-monitor', data);
+            }));
 
             // Stream quality: technician chooses quality/speed preset
-            socket.on('set-stream-quality', (data) => {
-                const { sessionId } = data;
-                socket.to(`session-${sessionId}`).emit('set-stream-quality', data);
-            });
+            socket.on('set-stream-quality', requireTech((data) => {
+                if (!inJoinedSession(data)) return;
+                socket.to(`session-${data.sessionId}`).emit('set-stream-quality', data);
+            }));
 
             // Remote file browser: technician -> helper (forward to session room)
-            socket.on('list-remote-dir', (data) => {
-                const { sessionId } = data;
-                socket.to(`session-${sessionId}`).emit('list-remote-dir', data);
-            });
-            socket.on('get-remote-file', (data) => {
-                const { sessionId } = data;
-                socket.to(`session-${sessionId}`).emit('get-remote-file', data);
-            });
-            socket.on('put-remote-file', (data) => {
+            socket.on('list-remote-dir', requireTech((data) => {
+                if (!inJoinedSession(data)) return;
+                socket.to(`session-${data.sessionId}`).emit('list-remote-dir', data);
+            }));
+            socket.on('get-remote-file', requireTech((data) => {
+                if (!inJoinedSession(data)) return;
+                socket.to(`session-${data.sessionId}`).emit('get-remote-file', data);
+            }));
+            socket.on('put-remote-file', requireTech((data) => {
+                if (!inJoinedSession(data)) return;
                 const { sessionId } = data;
                 // If no helper connected (VNC-only session), store file server-side
                 const conn = this.sessionConnections.get(sessionId);
@@ -466,25 +660,26 @@ class WebSocketHandler {
                     return;
                 }
                 socket.to(`session-${sessionId}`).emit('put-remote-file', data);
-            });
+            }));
 
             // Remote file browser: helper -> technician (forward result to room excluding sender)
-            socket.on('list-remote-dir-result', (data) => {
-                const { sessionId } = data;
-                socket.to(`session-${sessionId}`).emit('list-remote-dir-result', data);
-            });
-            socket.on('get-remote-file-result', (data) => {
-                const { sessionId } = data;
-                socket.to(`session-${sessionId}`).emit('get-remote-file-result', data);
-            });
-            socket.on('put-remote-file-result', (data) => {
-                const { sessionId } = data;
-                socket.to(`session-${sessionId}`).emit('put-remote-file-result', data);
-            });
+            socket.on('list-remote-dir-result', requireHelper((data) => {
+                if (!inJoinedSession(data)) return;
+                socket.to(`session-${data.sessionId}`).emit('list-remote-dir-result', data);
+            }));
+            socket.on('get-remote-file-result', requireHelper((data) => {
+                if (!inJoinedSession(data)) return;
+                socket.to(`session-${data.sessionId}`).emit('get-remote-file-result', data);
+            }));
+            socket.on('put-remote-file-result', requireHelper((data) => {
+                if (!inJoinedSession(data)) return;
+                socket.to(`session-${data.sessionId}`).emit('put-remote-file-result', data);
+            }));
 
             // Chat messages: forward to session room with timestamp
             // Also store in sessionStore so HTTP-polling clients (XP) can retrieve them
             socket.on('chat-message', (data) => {
+                if (!inJoinedSession(data)) return;
                 const { sessionId } = data;
                 const msg = { ...data, timestamp: data.timestamp || Date.now() };
                 sessionStore.addMessage(sessionId, msg);
@@ -493,12 +688,16 @@ class WebSocketHandler {
 
             // Handle approval responses
             socket.on('approval-response', (data) => {
-                const { sessionId, approved } = data;
+                const { sessionId, approved } = data || {};
                 console.log(`Approval response for ${sessionId}: ${approved ? 'approved' : 'denied'}`);
             });
 
             socket.on('disconnect', () => {
                 console.log('Client disconnected:', socket.id);
+
+                if (agentDeviceId) {
+                    this.markDeviceOffline(agentDeviceId, socket.id);
+                }
 
                 // Clean up session connection tracking
                 if (socket.sessionId) {
@@ -535,7 +734,7 @@ class WebSocketHandler {
                             }).catch(e => {
                                 console.error('Failed to update session status on helper disconnect:', e.message);
                             });
-                            this.io.emit('session-updated', {
+                            this.io.to('technicians').emit('session-updated', {
                                 sessionId: socket.sessionId,
                                 status: 'waiting',
                                 helper_connected: false,
@@ -560,7 +759,7 @@ class WebSocketHandler {
                                     active_technicians: countUniqueTechnicians(conn),
                                     viewing_technicians: countViewingTechnicians(conn)
                                 }).catch(() => {});
-                                this.io.emit('session-updated', {
+                                this.io.to('technicians').emit('session-updated', {
                                     sessionId: socket.sessionId,
                                     active_technicians: countUniqueTechnicians(conn),
                                     viewing_technicians: countViewingTechnicians(conn)

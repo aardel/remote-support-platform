@@ -3,11 +3,9 @@ import { Link } from 'react-router-dom';
 import axios from '../../api/axios';
 import WidgetCard from './WidgetCard';
 
-const OFFLINE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
-
 function isOffline(device) {
-  if (!device.last_seen) return true;
-  return Date.now() - new Date(device.last_seen).getTime() > OFFLINE_THRESHOLD_MS;
+  // The API reports live socket presence; trust it over last_seen guessing.
+  return !device.online;
 }
 
 function RegisteredDevicesWidget({ size, linkTo }) {

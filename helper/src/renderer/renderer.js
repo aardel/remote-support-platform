@@ -253,6 +253,26 @@ async function init() {
 
   setupFileDownloadBtn();
 
+  // Auto-start preference toggle
+  const autoStartEl = document.getElementById('autoStart');
+  if (autoStartEl && window.helperApi.getAutoStart) {
+    try { autoStartEl.checked = await window.helperApi.getAutoStart(); } catch (_) {}
+    autoStartEl.addEventListener('change', () => {
+      window.helperApi.setAutoStart(autoStartEl.checked).catch(() => {});
+    });
+  }
+
+  // Technician requested a session while we were idle (pushed over the
+  // presence socket): reload so init() picks up the pending session.
+  if (window.helperApi.onPendingSession) {
+    window.helperApi.onPendingSession(() => {
+      if (connectedTechnicians.length === 0) {
+        log('Technician requested a session — connecting...');
+        window.location.reload();
+      }
+    });
+  }
+
   // Check for helper update (after we have config)
   checkForUpdateAndShowBanner();
 

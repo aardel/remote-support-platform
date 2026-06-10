@@ -4,8 +4,22 @@ const SessionService = require('../services/sessionService');
 const Session = require('../models/Session');
 const Device = require('../models/Device');
 const Case = require('../models/Case');
-const { requireAuth } = require('../middleware/sessionAuth');
+const { requireAuth, attachUser } = require('../middleware/sessionAuth');
 const { geolocate, normalizeIp } = require('../services/geolocate');
+const { signHelperToken, verifyAgentToken } = require('../utils/agentTokens');
+const { rateLimit } = require('../middleware/rateLimit');
+
+// Extract and verify a helper/device bearer token scoped to req.params.sessionId.
+// Returns the token payload or null.
+function agentForSession(req) {
+    const auth = req.headers.authorization || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    if (!token) return null;
+    const payload = verifyAgentToken(token);
+    if (!payload) return null;
+    if (payload.role === 'helper' && payload.sessionId !== req.params.sessionId) return null;
+    return payload;
+}
 
 function extractClientIp(req) {
     const xf = req.headers['x-forwarded-for'];
@@ -28,7 +42,7 @@ function computeRemoteViewingSeconds(sessionRow) {
 }
 
 // Assign session for device (helper calls on launch – no auth)
-router.post('/assign', async (req, res) => {
+router.post('/assign', rateLimit({ windowMs: 60 * 1000, max: 30 }), async (req, res) => {
     try {
         const { deviceId, deviceName, os, hostname, arch, allowUnattended, sessionId: clientSessionId } = req.body;
         if (!deviceId) {
@@ -53,7 +67,7 @@ router.post('/assign', async (req, res) => {
                 Device.updateGeo(deviceId, geo).then((updated) => {
                     const io = req.app.get('io');
                     if (io && updated) {
-                        io.emit('device-updated', {
+                        io.to('technicians').emit('device-updated', {
                             deviceId,
                             last_ip: updated.last_ip,
                             last_country: updated.last_country,
@@ -75,7 +89,7 @@ router.post('/assign', async (req, res) => {
                 sessionRow = await SessionService.getSession(result.sessionId);
                 if (sessionRow?.status) status = sessionRow.status;
             } catch (_) {}
-            io.emit('session-created', {
+            io.to('technicians').emit('session-created', {
                 sessionId: result.sessionId,
                 status,
                 created_at: new Date().toISOString(),
@@ -86,7 +100,10 @@ router.post('/assign', async (req, res) => {
             });
         }
 
-        res.json({ success: true, ...result });
+        // Token the helper uses to authenticate its socket and approval/settings calls
+        const helperToken = signHelperToken({ sessionId: result.sessionId, deviceId });
+
+        res.json({ success: true, ...result, helperToken });
     } catch (error) {
         console.error('Error assigning session:', error);
         res.status(500).json({ error: error.message });
@@ -120,25 +137,35 @@ router.post('/create', requireAuth, async (req, res) => {
 });
 
 // Get session info
-router.get('/:sessionId', async (req, res) => {
+// Technicians (session cookie) and the session's helper (bearer token) get full details;
+// anyone else (customer support page) only gets the minimal status fields.
+router.get('/:sessionId', rateLimit({ windowMs: 60 * 1000, max: 60 }), attachUser, async (req, res) => {
     try {
         const { sessionId } = req.params;
         const session = await SessionService.getSession(sessionId);
-        
+
         if (!session) {
             return res.status(404).json({ error: 'Session not found' });
         }
-        
-        // Format response
-        res.json({
+
+        const minimal = {
             sessionId: session.session_id || session.sessionId,
-            technicianId: session.technician_id || session.technicianId,
             status: session.status,
             allowUnattended: session.allow_unattended !== false,
+            expiresAt: session.expires_at || session.expiresAt
+        };
+
+        if (!req.user && !agentForSession(req)) {
+            return res.json(minimal);
+        }
+
+        // Format response
+        res.json({
+            ...minimal,
+            technicianId: session.technician_id || session.technicianId,
             clientInfo: session.client_info || session.clientInfo,
             vncPort: session.vnc_port || session.vncPort,
             createdAt: session.created_at || session.createdAt,
-            expiresAt: session.expires_at || session.expiresAt,
             connectedAt: session.connected_at || session.connectedAt
         });
     } catch (error) {
@@ -148,7 +175,7 @@ router.get('/:sessionId', async (req, res) => {
 });
 
 // Register session (when user connects)
-router.post('/register', async (req, res) => {
+router.post('/register', rateLimit({ windowMs: 60 * 1000, max: 30 }), async (req, res) => {
     try {
         const { sessionId, clientInfo, allowUnattended, vncPort, deviceId, deviceName, capabilities } = req.body;
 
@@ -237,7 +264,7 @@ router.post('/register', async (req, res) => {
                 status: 'connected'
             });
             // Also broadcast globally for dashboard updates
-            io.emit('session-updated', {
+            io.to('technicians').emit('session-updated', {
                 sessionId,
                 clientInfo: enrichedClientInfo,
                 status: 'connected'
@@ -247,7 +274,9 @@ router.post('/register', async (req, res) => {
         res.json({
             success: true,
             message: 'Session registered',
-            sessionId
+            sessionId,
+            // Token the helper uses to authenticate its socket and approval/settings calls
+            helperToken: signHelperToken({ sessionId, deviceId: deviceId || null })
         });
     } catch (error) {
         console.error('Error registering session:', error);
@@ -255,11 +284,26 @@ router.post('/register', async (req, res) => {
     }
 });
 
+// Customer-side writes (settings, approval) accept either:
+//  - a valid helper token for this session (Electron helper), or
+//  - no token, but only while no authenticated helper is attached to the session
+//    (legacy VNC/XP customer pages, which only know the session ID).
+// Once an Electron helper owns the session, token-less writes are rejected.
+function allowCustomerWrite(req) {
+    if (agentForSession(req)) return true;
+    const ws = req.app.get('wsHandler');
+    return !(ws && ws.hasHelperSocket(req.params.sessionId));
+}
+
 // Update session settings (customer controls)
-router.patch('/:sessionId/settings', async (req, res) => {
+router.patch('/:sessionId/settings', rateLimit({ windowMs: 60 * 1000, max: 30 }), async (req, res) => {
     try {
         const { sessionId } = req.params;
         const { allowUnattended } = req.body;
+
+        if (!allowCustomerWrite(req)) {
+            return res.status(401).json({ error: 'Helper token required' });
+        }
 
         const session = await SessionService.getSession(sessionId);
         if (!session) {
@@ -314,11 +358,15 @@ router.post('/:sessionId/connect', requireAuth, async (req, res) => {
 });
 
 // Handle approval response
-router.post('/:sessionId/approval', async (req, res) => {
+router.post('/:sessionId/approval', rateLimit({ windowMs: 60 * 1000, max: 30 }), async (req, res) => {
     try {
         const { sessionId } = req.params;
         const { approved } = req.body;
-        
+
+        if (!allowCustomerWrite(req)) {
+            return res.status(401).json({ error: 'Helper token required' });
+        }
+
         // Handle via approval handler if available
         const approvalHandler = req.app.get('approvalHandler');
         if (approvalHandler) {
@@ -449,7 +497,7 @@ router.delete('/:sessionId', requireAuth, async (req, res) => {
         // Notify via WebSocket (broadcast globally so all dashboards update)
         const io = req.app.get('io');
         if (io) {
-            io.emit('session-ended', { sessionId });
+            io.to('technicians').emit('session-ended', { sessionId });
         }
 
         res.json({ success: true, message: 'Session deleted' });

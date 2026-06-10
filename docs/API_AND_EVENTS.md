@@ -4,6 +4,23 @@ Single source of truth for REST routes and Socket.io events. Keep this in sync w
 
 **Base URL:** `/api` for REST. Socket.io connects to server origin.
 
+## Authentication model (since 1.1.0)
+
+Three identities exist; every socket and customer-side write is tied to one of them:
+
+| Identity | Credential | Issued by |
+|----------|-----------|-----------|
+| **Technician** | `remote.sid` session cookie (login / workspace SSO) | `/api/auth/*`, or nginx `auth_request` + `X-Proxy-Auth` shared secret |
+| **Helper** (session-scoped) | `helperToken` JWT — returned by `POST /api/sessions/assign` and `POST /api/sessions/register` | backend, signed with `JWT_SECRET`, 7d expiry |
+| **Device** (persistent agent) | `deviceToken` JWT — returned by `POST /api/devices/register` | backend, signed with `JWT_SECRET`, 30d expiry |
+
+- Socket.io handshakes carry `auth: { token }` for helper/device, or the technician cookie. Sockets with neither are classified **customer**: they may join a session room to *receive* events (approval prompts, status) but all control/signaling emits from them are dropped, and they never receive cached WebRTC offers.
+- `X-User-Id`/`X-Display-Name` proxy headers are only trusted when the request also carries the `X-Proxy-Auth` shared secret (`PROXY_SHARED_SECRET` env), which nginx adds exclusively on `auth_request`-protected locations.
+- `POST /api/sessions/:id/approval` and `PATCH /api/sessions/:id/settings` require a `Authorization: Bearer <helperToken>` once an authenticated Electron helper is attached to the session. Token-less calls are only accepted for legacy VNC/XP sessions (no helper socket) and are rate limited.
+- Unauthenticated `GET /api/sessions/:id` returns only `sessionId, status, allowUnattended, expiresAt`.
+- Unauthenticated endpoints (`assign`, `register`, device `register`, session GET, approval, settings) are rate limited per IP (30–60 req/min).
+- Dashboard-wide broadcasts (`session-created/updated/ended`, `device-updated/status`, `templates-updated`) go to the `technicians` room only.
+
 ---
 
 ## REST API
@@ -21,13 +38,13 @@ Single source of truth for REST routes and Socket.io events. Keep this in sync w
 | POST | /api/auth/local/register | No | Register (local auth) |
 | POST | /api/auth/local/login | No | Login (local auth) |
 | **Sessions** | | | |
-| POST | /api/sessions/assign | No | Assign session by deviceId (helper) |
+| POST | /api/sessions/assign | No (rate limited) | Assign session by deviceId (helper). Returns `helperToken` |
 | POST | /api/sessions/create | Yes | Create session (technician) |
-| GET | /api/sessions/:sessionId | No | Get session |
-| POST | /api/sessions/register | No | Register session (helper) |
-| PATCH | /api/sessions/:sessionId/settings | No | Update session settings |
+| GET | /api/sessions/:sessionId | Partial | Full details for technician/helper token; minimal status otherwise |
+| POST | /api/sessions/register | No (rate limited) | Register session (helper). Returns `helperToken` |
+| PATCH | /api/sessions/:sessionId/settings | Helper token* | Update session settings (*token-less allowed only for VNC/XP sessions) |
 | POST | /api/sessions/:sessionId/connect | Yes | Request connect (technician) |
-| POST | /api/sessions/:sessionId/approval | No | Approval response |
+| POST | /api/sessions/:sessionId/approval | Helper token* | Approval response (*token-less allowed only for VNC/XP sessions) |
 | GET | /api/sessions | Yes | List sessions |
 | DELETE | /api/sessions/:sessionId | Yes | Delete session |
 | **Packages** | | | |
@@ -44,9 +61,9 @@ Single source of truth for REST routes and Socket.io events. Keep this in sync w
 | GET | /api/monitors/session/:sessionId | Yes | Get monitor info |
 | POST | /api/monitors/session/:sessionId/switch | Yes | Switch monitor (monitorIndex) |
 | **Devices** | | | |
-| POST | /api/devices/register | No | Register device (helper) |
+| POST | /api/devices/register | No (rate limited) | Register device (helper). Returns `deviceToken` |
 | GET | /api/devices/pending/:deviceId | No | Pending session for device |
-| GET | /api/devices | Yes | List devices |
+| GET | /api/devices | Yes | List devices (each includes live `online` flag) |
 | DELETE | /api/devices/:deviceId | Yes | Deregister device |
 | PATCH | /api/devices/:deviceId | Yes | Update device (customerName, machineName) |
 | POST | /api/devices/:deviceId/request | Yes | Request session for device |
@@ -107,6 +124,12 @@ All events are scoped by session: clients join `session-${sessionId}` via `join-
 | approval-response | Helper? | Server | sessionId, approved | User approval |
 | peer-joined | Server | Room | role, sessionId | Peer joined |
 | peer-disconnected | Server | Room | role, sessionId | Peer left |
+| device-heartbeat | Device agent | Server | — | Keep-alive from persistent helper agent (every 30s); refreshes `last_seen` |
+| device-status | Server | Technicians room | deviceId, online, last_seen | Device came online / went offline |
+| pending-session | Server | Device agent | sessionId | Technician requested a session for this device; helper opens and connects |
+| join-error | Server | Sender | sessionId, error | Join rejected (token not valid for session) |
+
+**Role enforcement:** the server derives each socket's role from its credentials (cookie / token), ignoring the role claimed in `join-session`. Control events (`remote-mouse`, `remote-keyboard`, `remote-clipboard`, `webrtc-answer`, file ops, `switch-monitor`, `set-stream-quality`, `viewer-state`) are accepted from technician sockets only; capture events (`webrtc-offer`, `helper-capabilities`, `*-result`) from helper sockets only. All session events must match the session the socket joined.
 
 ---
 
@@ -117,4 +140,4 @@ All events are scoped by session: clients join `session-${sessionId}` via `join-
 - **Helper**: POST /api/sessions/assign, POST /api/sessions/register, Socket: join-session (helper), helper-capabilities (sessionId, capabilities: robotjs, platform, displayCount), webrtc-offer, webrtc-ice-candidate, receives remote-mouse, remote-keyboard, set-stream-quality, list-remote-dir, get-remote-file, put-remote-file, switch-monitor, file-available, technicians-present, technician-joined, technician-left (to show “Connected: Technician (Name)” list).
 - **XP / VNC-only (no Electron)**: POST /api/sessions/register, GET/POST /api/bridge/:sessionId/messages, GET /api/bridge/:sessionId/files, POST /api/bridge/:sessionId/files/upload, GET /api/bridge/:sessionId/files/:fileId/download. Chat and files via HTTP; technician uses noVNC iframe and SessionView file panel.
 
-Last updated: 2025-02-10
+Last updated: 2026-06-10 (1.1.0 — socket/REST authentication, device presence)

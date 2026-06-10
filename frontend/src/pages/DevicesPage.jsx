@@ -30,6 +30,16 @@ function DevicesPage() {
                 )
             );
         });
+        socket.on('device-status', (d) => {
+            if (!d?.deviceId) return;
+            setDevices(prev =>
+                prev.map(dev =>
+                    dev.device_id === d.deviceId
+                        ? { ...dev, online: !!d.online, last_seen: d.last_seen ?? dev.last_seen }
+                        : dev
+                )
+            );
+        });
         return () => socket.disconnect();
     }, []);
 
@@ -157,8 +167,11 @@ function DevicesPage() {
                                     <td>{d.os || '—'}</td>
                                     <td className="mono">{d.last_ip || '—'}</td>
                                     <td>{location(d) || '—'}</td>
-                                    <td>{d.last_seen ? new Date(d.last_seen).toLocaleString() : 'Never'}</td>
-                                    <td><span className={`badge ${d.pending_session_id ? 'badge-warn' : 'badge-ok'}`}>{d.pending_session_id ? 'Pending' : 'Ready'}</span></td>
+                                    <td>{d.online ? 'Online now' : (d.last_seen ? new Date(d.last_seen).toLocaleString() : 'Never')}</td>
+                                    <td>
+                                        <span className={`badge ${d.online ? 'badge-ok' : 'badge-neutral'}`}>{d.online ? 'Online' : 'Offline'}</span>
+                                        {d.pending_session_id && <span className="badge badge-warn">Pending</span>}
+                                    </td>
                                     <td className="actions-cell">
                                         {editId === d.device_id ? (
                                             <>

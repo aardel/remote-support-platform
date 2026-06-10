@@ -35,6 +35,10 @@ let chatWindow = null;
 let socket = null;
 let currentSessionId = null;
 let currentAllowUnattended = true;
+let currentHelperToken = null; // session-scoped token from /assign or /register
+let presenceSocket = null; // persistent device-presence connection
+let presenceHeartbeat = null;
+let presenceRetryTimer = null;
 let chatHistory = [];
 let tray = null;
 let isQuitting = false;
@@ -281,8 +285,125 @@ function createWindow() {
   });
 }
 
-app.on('before-quit', () => { isQuitting = true; });
-app.whenReady().then(createWindow);
+// --- Auto-start on login (persistent agent) ---
+function isAutoStartEnabled() {
+  const prefs = readPrefs();
+  return prefs.autoStart !== false; // default ON
+}
+
+function applyAutoStart() {
+  if (!app.isPackaged) return; // don't register dev runs as login items
+  try {
+    app.setLoginItemSettings({ openAtLogin: isAutoStartEnabled(), openAsHidden: true });
+  } catch (e) {
+    console.warn('Could not set login item:', e.message);
+  }
+}
+
+// --- Persistent device presence ---
+// Keeps a lightweight authenticated socket open so the dashboard shows this
+// machine as online, and technician "Request session" reaches us instantly.
+async function registerDeviceAndGetToken() {
+  const config = readConfig();
+  if (!config.server) return null;
+  const res = await fetch(`${config.server}/api/devices/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      deviceId: getDeviceId(),
+      displayName: os.hostname(),
+      os: `${os.platform()} ${os.release()}`,
+      hostname: os.hostname(),
+      arch: os.arch(),
+      macAddress: getMacAddress()
+    })
+  });
+  if (!res.ok) throw new Error(`Device register failed: ${res.status}`);
+  const data = await res.json();
+  if (data.deviceToken) {
+    writePrefs({ ...readPrefs(), deviceToken: data.deviceToken });
+  }
+  return data.deviceToken || null;
+}
+
+function schedulePresenceRetry(delayMs) {
+  if (presenceRetryTimer) clearTimeout(presenceRetryTimer);
+  presenceRetryTimer = setTimeout(() => { startPresenceAgent().catch(() => { }); }, delayMs);
+  if (presenceRetryTimer.unref) presenceRetryTimer.unref();
+}
+
+async function startPresenceAgent() {
+  const config = readConfig();
+  if (!config.server) return;
+
+  let token = readPrefs().deviceToken;
+  if (!token) {
+    try {
+      token = await registerDeviceAndGetToken();
+    } catch (e) {
+      console.warn('Presence: device registration failed, retrying in 60s:', e.message);
+      schedulePresenceRetry(60 * 1000);
+      return;
+    }
+  }
+  if (!token) return;
+
+  let serverUrl = config.server;
+  let socketPath = '/socket.io';
+  try {
+    const url = new URL(config.server);
+    if (url.pathname && url.pathname !== '/') {
+      serverUrl = `${url.protocol}//${url.host}`;
+      socketPath = `${url.pathname}/socket.io`.replace(/\/+/g, '/');
+    }
+  } catch (_) { }
+
+  if (presenceSocket) { try { presenceSocket.disconnect(); } catch (_) { } }
+  presenceSocket = io(serverUrl, {
+    path: socketPath,
+    transports: ['websocket', 'polling'],
+    auth: { token },
+    rejectUnauthorized: !allowSelfSigned,
+    reconnection: true,
+    reconnectionDelayMax: 30000
+  });
+
+  presenceSocket.on('connect', () => {
+    console.log('Presence agent connected');
+    if (presenceHeartbeat) clearInterval(presenceHeartbeat);
+    presenceHeartbeat = setInterval(() => {
+      if (presenceSocket && presenceSocket.connected) presenceSocket.emit('device-heartbeat');
+    }, 30 * 1000);
+  });
+
+  presenceSocket.on('connect_error', (e) => {
+    // Token rejected (expired/secret rotated): re-register for a fresh one.
+    if (/token/i.test(e.message || '')) {
+      writePrefs({ ...readPrefs(), deviceToken: null });
+      try { presenceSocket.disconnect(); } catch (_) { }
+      schedulePresenceRetry(10 * 1000);
+    }
+  });
+
+  // Technician requested a session for this device — surface the helper UI.
+  presenceSocket.on('pending-session', (data) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.webContents.send('signaling:pending-session', data);
+    }
+  });
+}
+
+app.on('before-quit', () => {
+  isQuitting = true;
+  if (presenceHeartbeat) clearInterval(presenceHeartbeat);
+  if (presenceSocket) { try { presenceSocket.disconnect(); } catch (_) { } }
+});
+app.whenReady().then(() => {
+  createWindow();
+  applyAutoStart();
+  startPresenceAgent().catch(e => console.warn('Presence agent failed to start:', e.message));
+});
 app.on('activate', () => { if (!mainWindow || mainWindow.isDestroyed()) createWindow(); else mainWindow.show(); });
 
 ipcMain.handle('helper:get-info', () => ({ deviceId: getDeviceId(), config: readConfig(), platform: process.platform, hostname: os.hostname(), arch: os.arch() }));
@@ -378,15 +499,19 @@ ipcMain.handle('helper:register-session', async (_event, payload) => {
     })
   });
   if (!res.ok) throw new Error('Register failed');
-  return res.json();
+  const data = await res.json();
+  if (data.helperToken) currentHelperToken = data.helperToken;
+  return data;
 });
 
 async function sendApprovalResponse(sessionId, approved) {
   const config = readConfig();
   const base = config.server.replace(/\/$/, '');
+  const headers = { 'Content-Type': 'application/json' };
+  if (currentHelperToken) headers['Authorization'] = `Bearer ${currentHelperToken}`;
   await fetch(`${base}/api/sessions/${encodeURIComponent(sessionId)}/approval`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ approved: !!approved })
   });
 }
@@ -415,7 +540,9 @@ ipcMain.handle('helper:assign-session', async (_event, allowUnattended) => {
     body: JSON.stringify(payload)
   });
   if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  const data = await res.json();
+  if (data.helperToken) currentHelperToken = data.helperToken;
+  return data;
 });
 
 ipcMain.handle('helper:register-device', async (_event, allowUnattended) => {
@@ -434,7 +561,16 @@ ipcMain.handle('helper:register-device', async (_event, allowUnattended) => {
     })
   });
   if (!res.ok) throw new Error('Register device failed');
-  return res.json();
+  const data = await res.json();
+  if (data.deviceToken) writePrefs({ ...readPrefs(), deviceToken: data.deviceToken });
+  return data;
+});
+
+ipcMain.handle('helper:get-auto-start', () => isAutoStartEnabled());
+ipcMain.handle('helper:set-auto-start', (_event, enabled) => {
+  writePrefs({ ...readPrefs(), autoStart: enabled !== false });
+  applyAutoStart();
+  return isAutoStartEnabled();
 });
 
 ipcMain.handle('helper:get-sources', async () => {
@@ -472,6 +608,9 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
     socket = io(serverUrl, {
       path: socketPath,
       transports: ['websocket', 'polling'],
+      // Authenticate as this session's helper; without it the server treats us as a
+      // receive-only customer and screen sharing/control will not work.
+      auth: currentHelperToken ? { token: currentHelperToken } : undefined,
       rejectUnauthorized: !allowSelfSigned
     });
 

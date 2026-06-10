@@ -14,10 +14,15 @@ class VNCBridge {
         this.wss = null;
         this.httpServer = httpServer || null;
         this.io = null;
+        this.sessionParser = null; // injected from server.js to authenticate noVNC viewers
     }
 
     setIo(io) {
         this.io = io;
+    }
+
+    setSessionParser(parser) {
+        this.sessionParser = parser;
     }
 
     start() {
@@ -101,6 +106,16 @@ class VNCBridge {
                 }
             }
             
+            // Auto-creating sessions for unknown inbound VNC connections is an
+            // unauthenticated door (anyone hitting the port gets a live session on
+            // the dashboard). Off unless explicitly enabled; pre-registered XP
+            // sessions are mapped by IP/session above and are unaffected.
+            if (!sessionId && process.env.VNC_AUTO_CREATE_SESSIONS !== 'true') {
+                console.log(`[VNC] No session mapping for ${remoteIp} and auto-create is disabled — dropping connection`);
+                vncSocket.end();
+                return;
+            }
+
             if (!sessionId) {
                 console.log(`[VNC] No mapping for ${remoteIp}, auto-creating session...`);
                 console.log(`[SESSION-CREATE] VNC auto-create from IP: ${remoteIp}, existing sessions for this IP: ${[...this.vncConnections.values()].filter(s => this.normalizeIp(s.remoteAddress) === remoteIp).length}`);
@@ -138,7 +153,7 @@ class VNCBridge {
                     console.log(`[VNC] Auto-created session ${sessionId} for ${remoteIp}`);
                     // Notify dashboards
                     if (this.io) {
-                        this.io.emit('session-created', {
+                        this.io.to('technicians').emit('session-created', {
                             sessionId,
                             session_id: sessionId,
                             status: 'connected',
@@ -168,7 +183,7 @@ class VNCBridge {
             if (this.io) {
                 this.io.to(`session-${sessionId}`).emit('vnc-ready', { sessionId });
                 // Also update session status
-                this.io.emit('session-updated', {
+                this.io.to('technicians').emit('session-updated', {
                     sessionId,
                     status: 'connected',
                     helper_connected: true,
@@ -208,7 +223,7 @@ class VNCBridge {
                 if (this.io) {
                     this.io.to(`session-${sessionId}`).emit('vnc-disconnected', { sessionId });
                     // Update session status so dashboard shows offline
-                    this.io.emit('session-updated', {
+                    this.io.to('technicians').emit('session-updated', {
                         sessionId,
                         status: 'waiting',
                         helper_connected: false,
@@ -239,8 +254,22 @@ class VNCBridge {
                     return;
                 }
 
-                this.wss.handleUpgrade(req, socket, head, (ws) => {
-                    this.wss.emit('connection', ws, req);
+                const accept = () => {
+                    this.wss.handleUpgrade(req, socket, head, (ws) => {
+                        this.wss.emit('connection', ws, req);
+                    });
+                };
+
+                // The websockify side is the technician's viewer (full view + control),
+                // so it must carry a logged-in dashboard session cookie.
+                if (!this.sessionParser) {
+                    return accept(); // no session middleware injected (dev/standalone)
+                }
+                this.sessionParser(req, {}, () => {
+                    if (req.session?.user) return accept();
+                    console.warn('[VNC] Rejected unauthenticated /websockify connection');
+                    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+                    socket.destroy();
                 });
             });
 
