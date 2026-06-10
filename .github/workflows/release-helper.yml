@@ -9,7 +9,7 @@ on:
       - 'v*'
 
 env:
-  NODE_VERSION: "20"
+  NODE_VERSION: "22"
 
 jobs:
   build-win:
@@ -19,6 +19,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+      - name: Install Python setuptools (provides distutils for Python 3.12+)
+        run: python -m pip install setuptools
       - name: Set helper version from tag
         run: node scripts/set-helper-version.js ${{ github.ref_name }}
       - run: npm install
@@ -37,6 +39,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+      - name: Install Python setuptools (provides distutils for Python 3.12+)
+        run: python3 -m pip install --break-system-packages setuptools
       - name: Set helper version from tag
         run: node scripts/set-helper-version.js ${{ github.ref_name }}
       - run: npm install
