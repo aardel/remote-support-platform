@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.1.2] – 2026-06-10
+
+### Added
+
+- **macOS unblock script in the DMG** — the helper DMG now includes a double-clickable `Fix and Open Helper.command`. Because the app is self-distributed (not notarized), macOS quarantines it on download and shows *"can't be opened because Apple cannot check it"* or, on Apple Silicon, *"is damaged and can't be opened."* The script copies the app to Applications if needed, removes the `com.apple.quarantine` flag (`xattr -dr`), re-applies an ad-hoc signature (`codesign --force --deep --sign -`, which clears the "damaged" case on Apple Silicon), and launches it. Source: `helper/dmg-resources/Fix and Open Helper.command`; wired via `build.dmg.contents`.
+
 ## [1.1.1] – 2026-06-10
 
 ### Fixed
