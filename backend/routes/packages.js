@@ -211,6 +211,11 @@ router.get('/download/:sessionId', async (req, res) => {
             process.env.SERVER_URL || process.env.SUPPORT_URL || ''
         );
 
+        // Refresh the session's standalone installers from the current template
+        // (no-op unless the template is newer), so direct exe/dmg downloads from
+        // old session links always serve the latest helper build.
+        try { packageBuilder.ensureSessionBinaries(sessionId); } catch (_) {}
+
         let packagePath = await packageBuilder.getPackagePath(sessionId, type, os);
 
         // ZIP packages are always regenerated so users get the latest script

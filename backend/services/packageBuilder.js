@@ -1294,13 +1294,23 @@ For support, contact your technician.
         }
 
         const targetPath = this.getSessionBinaryPath(sessionId, normalized);
-        if (fs.existsSync(targetPath)) {
-            return true;
-        }
-
         const templatePath = this.getTemplatePath(normalized);
         if (!templatePath || !fs.existsSync(templatePath)) {
-            return false;
+            // No template to copy from — keep any existing session binary as-is.
+            return fs.existsSync(targetPath);
+        }
+
+        // Refresh the session binary when the template is newer (e.g. a new helper
+        // release), so old session links always serve the current installer
+        // instead of being frozen at whatever version existed at session creation.
+        if (fs.existsSync(targetPath)) {
+            try {
+                const tpl = fs.statSync(templatePath).mtimeMs;
+                const cur = fs.statSync(targetPath).mtimeMs;
+                if (cur >= tpl) return true;
+            } catch (_) {
+                return true;
+            }
         }
 
         fs.copyFileSync(templatePath, targetPath);

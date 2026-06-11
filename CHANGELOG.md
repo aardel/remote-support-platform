@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.1.3] – 2026-06-11
+
+### Fixed
+
+- **Helpers always showed Offline / no device ID** — the Electron installer ships without a bundled `config.json`, so `readConfig()` fell back to an empty server URL on customer machines. With no server URL the helper never registered its device and never opened the presence socket (so it stayed Offline on the dashboard), and the launch-time `assignSession` call failed, leaving the UI on "Offline — enter session ID" with a blank ID. Bake a production default (`https://servicelc.com/remote`) into the helper, still overridable by a bundled `config.json` or `SERVER_URL` env.
+- **Old session links served stale installers** — `ensureSessionBinary` skipped copying when a session binary already existed, freezing a session's `.exe`/`.dmg` at whatever helper version existed when the session was created (e.g. a Mac DMG without the unblock script). Now it re-copies when the template is newer, and `GET /api/packages/download/:sessionId` refreshes the session's installers from the current template before serving.
+
 ## [1.1.2] – 2026-06-10
 
 ### Added

@@ -30,6 +30,10 @@ if (allowSelfSigned) {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 }
 
+// Production server, baked in so the generic installer works without a bundled
+// config.json. Overridable by a config.json in the app resources or SERVER_URL env.
+const DEFAULT_SERVER = 'https://servicelc.com/remote';
+
 let mainWindow;
 let chatWindow = null;
 let socket = null;
@@ -199,18 +203,21 @@ function getSessionIdFromExecutablePath() {
 }
 
 function readConfig() {
+  let cfg;
   const configPath = path.join(process.resourcesPath, 'config.json');
   if (fs.existsSync(configPath)) {
-    const data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    if (data.sessionId) return data;
-    data.sessionId = getSessionIdFromExecutablePath() || data.sessionId || '';
-    return data;
+    cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    if (!cfg.sessionId) cfg.sessionId = getSessionIdFromExecutablePath() || '';
+  } else {
+    const embeddedId = '___SESSID___';
+    let sessionId = '';
+    if (!embeddedId.startsWith('___')) sessionId = embeddedId.replace(/_+$/, '');
+    if (!sessionId) sessionId = getSessionIdFromExecutablePath();
+    cfg = { sessionId, port: 5500 };
   }
-  const embeddedId = '___SESSID___';
-  let sessionId = '';
-  if (!embeddedId.startsWith('___')) sessionId = embeddedId.replace(/_+$/, '');
-  if (!sessionId) sessionId = getSessionIdFromExecutablePath();
-  return { sessionId, server: process.env.SERVER_URL || '', port: 5500 };
+  // Always guarantee a server URL: bundled config → SERVER_URL env → baked default.
+  if (!cfg.server) cfg.server = process.env.SERVER_URL || DEFAULT_SERVER;
+  return cfg;
 }
 
 function getIconImage() {
