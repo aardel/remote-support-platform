@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.1.4] – 2026-06-11
+
+### Fixed
+
+- **Remote cursor offset** — the technician's clicks/moves were mapped against the full `<video>` element box, but the remote frame renders with `object-fit: contain`, so it is letterboxed (empty bars) whenever the remote screen's aspect ratio differs from the on-screen panel. The mapping now uses the video's intrinsic `videoWidth`/`videoHeight` to compute the actual rendered frame rect and subtract the letterbox padding, so the injected cursor lands under the technician's pointer. (If any residual offset remains specifically on Windows at display scaling ≠ 100%, that is a separate helper-side DPI mapping to address next.)
+
 ## [1.1.3] – 2026-06-11
 
 ### Fixed

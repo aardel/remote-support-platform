@@ -407,14 +407,36 @@ export default function SessionView({ user }) {
     }, []);
 
     const getVideoCoords = useCallback((e) => {
-        const vid = videoRef.current;
-        if (!vid) return null;
-        const rect = vid.getBoundingClientRect();
+        const el = videoRef.current || canvasRef.current;
+        if (!el) return null;
+        const rect = el.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return null;
 
+        // Intrinsic size of the remote frame (video stream or VNC canvas buffer).
+        const mediaW = el.videoWidth || el.width || 0;
+        const mediaH = el.videoHeight || el.height || 0;
+
+        let x, y;
+        if (mediaW > 0 && mediaH > 0) {
+            // The frame renders with object-fit: contain — centered and scaled to
+            // fit, leaving empty bars on one axis. Map against the actual rendered
+            // frame rect, not the full element box, or the cursor is offset.
+            const scale = Math.min(rect.width / mediaW, rect.height / mediaH);
+            const dispW = mediaW * scale;
+            const dispH = mediaH * scale;
+            const padX = (rect.width - dispW) / 2;
+            const padY = (rect.height - dispH) / 2;
+            x = (e.clientX - rect.left - padX) / dispW;
+            y = (e.clientY - rect.top - padY) / dispH;
+        } else {
+            // Intrinsic size not known yet — fall back to the element box.
+            x = (e.clientX - rect.left) / rect.width;
+            y = (e.clientY - rect.top) / rect.height;
+        }
+
         return {
-            x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
-            y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))
+            x: Math.max(0, Math.min(1, x)),
+            y: Math.max(0, Math.min(1, y))
         };
     }, []);
 
