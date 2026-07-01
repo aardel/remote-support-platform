@@ -19,7 +19,10 @@ env:
 
 jobs:
   build-win:
-    runs-on: windows-latest
+    # Pinned to windows-2022: robotjs@0.7.1 (2019, NAN-based) fails to build
+    # natively on the newer windows-latest image. This matches the environment
+    # that last built successfully (2026-06-11). Revisit if robotjs is upgraded.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
