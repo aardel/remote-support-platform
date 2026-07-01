@@ -580,6 +580,54 @@ ipcMain.handle('helper:set-auto-start', (_event, enabled) => {
   return isAutoStartEnabled();
 });
 
+ipcMain.handle('helper:get-allow-unattended', () => {
+  const allow = readPrefs().allowUnattended !== false; // default true
+  currentAllowUnattended = allow;
+  return allow;
+});
+ipcMain.handle('helper:set-allow-unattended', (_event, enabled) => {
+  const allow = enabled !== false;
+  writePrefs({ ...readPrefs(), allowUnattended: allow });
+  currentAllowUnattended = allow;
+  return allow;
+});
+
+// Attended approval: show a native Approve/Deny dialog and return the decision.
+// Used when a technician requests a session while unattended mode is off.
+ipcMain.handle('helper:prompt-approval', async (_event, info) => {
+  const techName = info?.technicianName || 'A technician';
+  try {
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      buttons: ['Approve', 'Deny'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Remote Support Request',
+      message: `${techName} wants to connect.`,
+      detail: 'Allow this remote support connection?'
+    });
+    return response === 0;
+  } catch (_) {
+    return false;
+  }
+});
+
+// Tell the server the user declined a pending/requested session.
+ipcMain.handle('helper:decline-pending', async (_event, sessionId) => {
+  const config = readConfig();
+  const base = config.server.replace(/\/$/, '');
+  try {
+    await fetch(`${base}/api/sessions/${encodeURIComponent(sessionId)}/decline`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId: getDeviceId() })
+    });
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
 ipcMain.handle('helper:get-sources', async () => {
   const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 150, height: 150 } });
   return sources.map(s => ({ id: s.id, name: s.name, thumbnail: s.thumbnail.toDataURL() }));

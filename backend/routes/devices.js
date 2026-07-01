@@ -174,10 +174,15 @@ router.post('/:deviceId/request', requireAuth, async (req, res) => {
         const ws = req.app.get('wsHandler');
         const pushed = ws ? ws.notifyDevice(deviceId, 'pending-session', { sessionId }) : false;
 
+        // Report the device's unattended setting so the dashboard knows whether
+        // to auto-open the viewer (unattended) or wait for the user to accept.
+        const allowUnattended = device.allow_unattended !== false;
+
         res.json({
             success: true,
             sessionId,
             pushed,
+            allowUnattended,
             message: pushed
                 ? 'Session request sent to the online device.'
                 : 'Session requested. Ask the user to open the helper.'

@@ -383,6 +383,50 @@ router.post('/:sessionId/approval', rateLimit({ windowMs: 60 * 1000, max: 30 }),
     }
 });
 
+// User declined a requested (pending) connection before the helper registered.
+// No helper token exists yet at this point, so this is unauthenticated but only
+// ends/marks the requested session and notifies any technician watching it.
+router.post('/:sessionId/decline', rateLimit({ windowMs: 60 * 1000, max: 30 }), async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const session = await SessionService.getSession(sessionId);
+        if (!session) {
+            return res.status(404).json({ error: 'Session not found' });
+        }
+
+        await SessionService.updateSession(sessionId, {
+            status: 'declined',
+            ended_at: new Date()
+        });
+
+        // Clear any pending marker on the requesting device.
+        const deviceId = req.body?.deviceId || session.device_id;
+        if (deviceId) {
+            try {
+                const device = await Device.findByDeviceId(deviceId);
+                if (device?.pending_session_id === sessionId) {
+                    await Device.clearPendingSession(deviceId);
+                }
+            } catch (_) {}
+        }
+
+        // Notify technician(s) watching this session.
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`session-${sessionId}`).emit('connection-response', {
+                sessionId,
+                approved: false,
+                reason: 'declined'
+            });
+        }
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error handling decline:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Compatibility case endpoints used by SessionView
 router.get('/:sessionId/case', requireAuth, async (req, res) => {
     try {

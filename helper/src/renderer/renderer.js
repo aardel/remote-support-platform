@@ -225,6 +225,19 @@ async function init() {
     log(`Could not get capabilities: ${e.message}`);
   }
 
+  // Restore the persisted "Allow unattended connections" preference before we
+  // use it. The checkbox defaults to checked in HTML, but a reload (e.g. when a
+  // technician requests a session) must not silently flip the user's choice
+  // back on — persist and reload it, the same way autoStart is handled below.
+  if (window.helperApi.getAllowUnattended) {
+    try { allowUnattended.checked = await window.helperApi.getAllowUnattended(); } catch (_) {}
+  }
+  allowUnattended.addEventListener('change', () => {
+    if (window.helperApi.setAllowUnattended) {
+      window.helperApi.setAllowUnattended(allowUnattended.checked).catch(() => {});
+    }
+  });
+
   setStatusUI('Getting session...', 'dot-amber');
   const info = await window.helperApi.getInfo();
   config = info.config;
@@ -232,8 +245,10 @@ async function init() {
   log(`Server: ${config.server}`);
 
   let sessionReady = false;
+  let fromPending = false;
   try {
     const assign = await window.helperApi.assignSession(allowUnattended.checked);
+    fromPending = !!assign.fromPending;
     currentSessionId = assign.sessionId;
     showSessionId(assign.sessionId, false);
     sessionReady = true;
@@ -280,6 +295,25 @@ async function init() {
   if (sessionReady && allowUnattended.checked) {
     log('Auto-starting (unattended mode)...');
     startBtn.click();
+  } else if (sessionReady && fromPending) {
+    // Attended: a technician requested this session but unattended is off.
+    // Ask the user to accept or decline via a native dialog before connecting.
+    log('Technician requested a session — asking for your approval...');
+    setStatusUI('Support requested — awaiting your approval', 'dot-amber');
+    let approved = false;
+    try {
+      approved = window.helperApi.promptApproval ? await window.helperApi.promptApproval() : false;
+    } catch (_) {}
+    if (approved) {
+      log('You approved the request. Connecting...');
+      startBtn.click();
+    } else {
+      log('You declined the request.');
+      setStatusUI('Request declined', 'dot-red');
+      if (window.helperApi.declinePending && currentSessionId) {
+        try { await window.helperApi.declinePending(currentSessionId); } catch (_) {}
+      }
+    }
   }
 }
 

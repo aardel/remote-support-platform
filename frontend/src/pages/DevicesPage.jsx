@@ -84,7 +84,17 @@ function DevicesPage() {
         setReq(deviceId);
         try {
             const res = await axios.post(`/api/devices/${deviceId}/request`);
-            if (res.data.success) alert('Session requested. Ask the user to open the helper.');
+            if (res.data.success) {
+                if (!res.data.pushed) {
+                    alert('Session requested. Ask the user to open the helper.');
+                } else if (res.data.allowUnattended) {
+                    // Unattended: the helper auto-connects — jump straight to the viewer.
+                    navigate(`/session/${res.data.sessionId}`);
+                } else {
+                    // Attended: the user must accept the request on their screen first.
+                    alert('Session requested, but unattended connections are off for this device. Waiting for the user to accept the request on their screen.');
+                }
+            }
         } catch (e) {
             alert('Error: ' + (e.response?.data?.error || e.message));
         } finally {

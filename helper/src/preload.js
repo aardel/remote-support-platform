@@ -66,6 +66,14 @@ contextBridge.exposeInMainWorld('helperApi', {
   // Auto-start on login
   getAutoStart: () => ipcRenderer.invoke('helper:get-auto-start'),
   setAutoStart: (enabled) => ipcRenderer.invoke('helper:set-auto-start', enabled),
+
+  // Unattended-connections preference (persisted across reloads)
+  getAllowUnattended: () => ipcRenderer.invoke('helper:get-allow-unattended'),
+  setAllowUnattended: (enabled) => ipcRenderer.invoke('helper:set-allow-unattended', enabled),
+
+  // Attended approval flow (technician requested while unattended is off)
+  promptApproval: (info) => ipcRenderer.invoke('helper:prompt-approval', info),
+  declinePending: (sessionId) => ipcRenderer.invoke('helper:decline-pending', sessionId),
   onConnectionResponse: (callback) => {
     const h = (_event, data) => callback(data);
     ipcRenderer.on('signaling:connection-response', h);
