@@ -272,8 +272,15 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 520, height: 680, minWidth: 400, minHeight: 500, resizable: true,
     icon: iconImg || undefined,
+    autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js') }
   });
+  // Remove the default File/Edit/View menu bar on Windows/Linux — customers
+  // don't need it and it exposes dev/reload items. macOS keeps its standard
+  // menu bar so Cmd+C/V/Q accelerators keep working.
+  if (process.platform !== 'darwin' && typeof mainWindow.removeMenu === 'function') {
+    mainWindow.removeMenu();
+  }
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
   mainWindow.webContents.on('did-finish-load', () => {
