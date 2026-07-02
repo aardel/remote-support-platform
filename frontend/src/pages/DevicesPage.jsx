@@ -87,12 +87,11 @@ function DevicesPage() {
             if (res.data.success) {
                 if (!res.data.pushed) {
                     alert('Session requested. Ask the user to open the helper.');
-                } else if (res.data.allowUnattended) {
-                    // Unattended: the helper auto-connects — jump straight to the viewer.
-                    navigate(`/session/${res.data.sessionId}`);
                 } else {
-                    // Attended: the user must accept the request on their screen first.
-                    alert('Session requested, but unattended connections are off for this device. Waiting for the user to accept the request on their screen.');
+                    // Open the viewer. If unattended it connects automatically;
+                    // if attended the viewer waits while the user approves the
+                    // request on their screen (nothing is shown until they do).
+                    navigate(`/session/${res.data.sessionId}`);
                 }
             }
         } catch (e) {

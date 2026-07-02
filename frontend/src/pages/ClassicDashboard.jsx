@@ -103,8 +103,7 @@ function ClassicDashboard({ user, onLogout }) {
                 // returns the same id — don't add a second card for it.
                 setSessions(prev => prev.some(x => (x.session_id || x.sessionId) === sid) ? prev : [s, ...prev]);
                 if (!r.data.pushed) alert('Session requested. Ask the user to open the helper.');
-                else if (r.data.allowUnattended) navigate(`/session/${sid}`);
-                else alert('Session requested, but unattended connections are off for this device. Waiting for the user to accept on their screen.');
+                else navigate(`/session/${sid}`);
             }
         } catch (e) { alert('Error requesting session: ' + (e.response?.data?.error || e.message)); }
         finally { setReqDev(null); }

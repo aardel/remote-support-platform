@@ -304,14 +304,24 @@ async function init() {
     });
   }
 
-  // Technician requested a session while we were idle (pushed over the
-  // presence socket): reload so init() picks up the pending session.
+  // Technician requested a session while we were idle (pushed over the presence
+  // socket): start support in place — do NOT reload, because a reload re-runs
+  // init() which resets the unattended toggle to off and drops the "requested"
+  // context. We adopt the pushed session id so the helper and the technician
+  // use the same session.
   if (window.helperApi.onPendingSession) {
-    window.helperApi.onPendingSession(() => {
-      if (connectedTechnicians.length === 0) {
-        log('Technician requested a session — connecting...');
-        window.location.reload();
+    window.helperApi.onPendingSession((data) => {
+      if (connectedTechnicians.length > 0) return;
+      const busy = isConnected
+        || startBtn.classList.contains('btn-waiting')
+        || startBtn.classList.contains('btn-stop');
+      if (busy) return;
+      if (data && data.sessionId) {
+        currentSessionId = data.sessionId;
+        showSessionId(data.sessionId, false);
       }
+      log('Technician requested a session — starting (approval required to view).');
+      startBtn.click();
     });
   }
 
