@@ -480,7 +480,42 @@ ipcMain.handle('helper:install-update-and-quit', async (_event, installerPath) =
 });
 
 // Shortcut creation (omitted for brevity vs copied from original, simplified)
-ipcMain.handle('helper:create-desktop-shortcut', async () => ({ success: false, error: 'Not implemented in this patch' }));
+ipcMain.handle('helper:create-desktop-shortcut', async () => {
+  try {
+    const desktop = app.getPath('desktop');
+    const exePath = app.getPath('exe');
+    const appName = app.getName() || 'Remote Support';
+
+    if (process.platform === 'win32') {
+      const linkPath = path.join(desktop, `${appName}.lnk`);
+      const ok = shell.writeShortcutLink(linkPath, 'create', {
+        target: exePath,
+        cwd: path.dirname(exePath),
+        description: 'Remote Support Helper',
+        icon: exePath,
+        iconIndex: 0
+      });
+      return ok ? { success: true, path: linkPath } : { success: false, error: 'Could not write shortcut' };
+    }
+
+    if (process.platform === 'darwin') {
+      // exePath looks like .../Remote Support.app/Contents/MacOS/Remote Support
+      const appBundle = exePath.split('/Contents/')[0];
+      const linkPath = path.join(desktop, `${appName}.app`);
+      try { fs.unlinkSync(linkPath); } catch (_) {}
+      fs.symlinkSync(appBundle, linkPath);
+      return { success: true, path: linkPath };
+    }
+
+    // Linux: write a .desktop launcher
+    const linkPath = path.join(desktop, `${appName}.desktop`);
+    const content = `[Desktop Entry]\nType=Application\nName=${appName}\nExec="${exePath}"\nIcon=${exePath}\nTerminal=false\n`;
+    fs.writeFileSync(linkPath, content, { mode: 0o755 });
+    return { success: true, path: linkPath };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
 
 ipcMain.handle('helper:get-capabilities', () => ({
   robotjs: !!robot,

@@ -6,6 +6,14 @@
   background: #0f172a;
   color: #e2e8f0;
   outline: none;
+  overflow: hidden;
+}
+
+/* When the platform bar is present it adds top padding to <body>; subtract its
+   height so the viewer fits the remaining viewport instead of overflowing it
+   (which produced a page scrollbar). Mirrors the dashboard Layout. */
+body.platform-bar-padded .session-view {
+  height: calc(100vh - var(--platform-bar-height, 48px));
 }
 
 /* ── Toolbar ── */

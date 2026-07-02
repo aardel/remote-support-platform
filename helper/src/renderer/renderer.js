@@ -47,6 +47,10 @@ let splitEnabled = false;       // is the technician viewing two monitors at onc
 // renegotiation needed).
 const mainMs = new MediaStream();
 const secondMs = new MediaStream();
+
+// Periodic update check
+let updateCheckTimer = null;
+const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // re-check every 4 hours
 let capabilities = { robotjs: false, platform: 'unknown' };
 let logVisible = false;
 let connectedTechnicians = [];
@@ -301,8 +305,13 @@ async function init() {
     });
   }
 
-  // Check for helper update (after we have config)
+  // Check for helper update (after we have config), then re-check periodically
+  // so a long-running helper picks up new versions without a restart.
   checkForUpdateAndShowBanner();
+  if (updateCheckTimer) clearInterval(updateCheckTimer);
+  updateCheckTimer = setInterval(() => {
+    checkForUpdateAndShowBanner().catch(() => {});
+  }, UPDATE_CHECK_INTERVAL_MS);
 
   // Auto-start support if unattended mode is enabled and session is ready
   if (sessionReady && allowUnattended.checked) {
