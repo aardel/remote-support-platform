@@ -263,11 +263,15 @@ router.post('/register', rateLimit({ windowMs: 60 * 1000, max: 30 }), async (req
                 capabilities: capabilities || {},
                 status: 'connected'
             });
-            // Also broadcast globally for dashboard updates
+            // Also broadcast globally for dashboard updates. Include the
+            // attended flag + device id so dashboards can flag a helper that has
+            // actively requested support (attended) vs. one that is just online.
             io.to('technicians').emit('session-updated', {
                 sessionId,
                 clientInfo: enrichedClientInfo,
-                status: 'connected'
+                status: 'connected',
+                deviceId: deviceId || null,
+                allowUnattended: allowUnattended !== false
             });
         }
         

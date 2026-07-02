@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import './Layout.css';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import axios from '../api/axios';
 
@@ -25,7 +25,9 @@ export default function Layout({ user, onLogout, onGenerateClick }) {
     const [version, setVersion] = useState(null);
     const [newTemplates, setNew] = useState(false);
     const [latestTs, setLatestTs] = useState(0);
+    const [supportRequests, setSupportRequests] = useState([]); // [{ sessionId, hostname, ts }]
     const location = useLocation();
+    const navigate = useNavigate();
 
     const LS_KEY = useMemo(() => 'rs_templates_seen_ts', []);
 
@@ -55,7 +57,7 @@ export default function Layout({ user, onLogout, onGenerateClick }) {
         refreshNotify();
     }, []);
 
-    // Real-time template updates
+    // Real-time template updates + incoming support requests
     useEffect(() => {
         const socket = io(window.location.origin, { path: SOCKET_PATH });
         socket.on('templates-updated', (data) => {
@@ -68,8 +70,50 @@ export default function Layout({ user, onLogout, onGenerateClick }) {
                 refreshNotify();
             }
         });
+
+        // A helper that actively requested support (attended: they pressed
+        // "Request Support") registers a connected session with allowUnattended
+        // false. Surface that as a dismissible notification so it's clear a
+        // helper is waiting — not just "online".
+        socket.on('session-updated', (d) => {
+            if (d?.status === 'connected' && d?.allowUnattended === false) {
+                const hostname = d?.clientInfo?.hostname || d?.client_info?.hostname || 'A user';
+                setSupportRequests(prev =>
+                    prev.some(r => r.sessionId === d.sessionId)
+                        ? prev
+                        : [{ sessionId: d.sessionId, hostname, ts: Date.now() }, ...prev]
+                );
+            }
+            // Clear it once a technician is actually viewing the session.
+            if (d?.viewing_technicians > 0) {
+                setSupportRequests(prev => prev.filter(r => r.sessionId !== d.sessionId));
+            }
+        });
+        socket.on('session-ended', (d) => {
+            setSupportRequests(prev => prev.filter(r => r.sessionId !== d.sessionId));
+        });
         return () => socket.disconnect();
     }, []);
+
+    // Auto-dismiss a support-request card after 60s.
+    useEffect(() => {
+        if (!supportRequests.length) return;
+        const now = Date.now();
+        const timers = supportRequests.map(r =>
+            setTimeout(() => {
+                setSupportRequests(prev => prev.filter(x => x.sessionId !== r.sessionId));
+            }, Math.max(2000, 60000 - (now - r.ts)))
+        );
+        return () => timers.forEach(clearTimeout);
+    }, [supportRequests]);
+
+    const openSupportRequest = (sessionId) => {
+        setSupportRequests(prev => prev.filter(r => r.sessionId !== sessionId));
+        navigate(`/session/${sessionId}`);
+    };
+    const dismissSupportRequest = (sessionId) => {
+        setSupportRequests(prev => prev.filter(r => r.sessionId !== sessionId));
+    };
 
     // Mark templates as seen when visiting helper-templates page
     useEffect(() => {
@@ -122,6 +166,23 @@ export default function Layout({ user, onLogout, onGenerateClick }) {
 
     return (
         <div className={`layout ${!isMobile && desktopCollapsed ? 'collapsed' : ''}`}>
+            {/* Incoming support-request notifications */}
+            {supportRequests.length > 0 && (
+                <div className="support-request-toasts">
+                    {supportRequests.map(r => (
+                        <div key={r.sessionId} className="support-request-toast">
+                            <div className="srt-body">
+                                <span className="srt-title">🔔 Support requested</span>
+                                <span className="srt-host">{r.hostname}</span>
+                            </div>
+                            <div className="srt-actions">
+                                <button className="srt-open" onClick={() => openSupportRequest(r.sessionId)}>Open</button>
+                                <button className="srt-dismiss" onClick={() => dismissSupportRequest(r.sessionId)} title="Dismiss">✕</button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
             {isMobile && mobileOpen && (
                 <div className="sidebar-overlay" onClick={() => setMobileOpen(false)} />
             )}
