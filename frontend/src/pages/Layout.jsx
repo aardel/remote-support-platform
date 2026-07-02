@@ -74,15 +74,20 @@ export default function Layout({ user, onLogout, onGenerateClick }) {
         // A helper that actively requested support (attended: they pressed
         // "Request Support") registers a connected session with allowUnattended
         // false. Surface that as a dismissible notification so it's clear a
-        // helper is waiting — not just "online".
+        // helper is waiting — not just "online". Each request gets its own card
+        // (unique id); a short per-session throttle absorbs the duplicate
+        // session-updated events that a single request can emit.
+        const lastAt = {}; // sessionId -> ts
         socket.on('session-updated', (d) => {
             if (d?.status === 'connected' && d?.allowUnattended === false) {
-                const hostname = d?.clientInfo?.hostname || d?.client_info?.hostname || 'A user';
-                setSupportRequests(prev =>
-                    prev.some(r => r.sessionId === d.sessionId)
-                        ? prev
-                        : [{ sessionId: d.sessionId, hostname, ts: Date.now() }, ...prev]
-                );
+                const now = Date.now();
+                if (now - (lastAt[d.sessionId] || 0) > 8000) {
+                    lastAt[d.sessionId] = now;
+                    const hostname = d?.clientInfo?.hostname || d?.client_info?.hostname || 'A user';
+                    setSupportRequests(prev =>
+                        [{ id: `${d.sessionId}-${now}`, sessionId: d.sessionId, hostname, ts: now }, ...prev].slice(0, 5)
+                    );
+                }
             }
             // Clear it once a technician is actually viewing the session.
             if (d?.viewing_technicians > 0) {
@@ -90,6 +95,7 @@ export default function Layout({ user, onLogout, onGenerateClick }) {
             }
         });
         socket.on('session-ended', (d) => {
+            delete lastAt[d.sessionId]; // next request re-alerts immediately
             setSupportRequests(prev => prev.filter(r => r.sessionId !== d.sessionId));
         });
         return () => socket.disconnect();
@@ -101,18 +107,18 @@ export default function Layout({ user, onLogout, onGenerateClick }) {
         const now = Date.now();
         const timers = supportRequests.map(r =>
             setTimeout(() => {
-                setSupportRequests(prev => prev.filter(x => x.sessionId !== r.sessionId));
+                setSupportRequests(prev => prev.filter(x => x.id !== r.id));
             }, Math.max(2000, 60000 - (now - r.ts)))
         );
         return () => timers.forEach(clearTimeout);
     }, [supportRequests]);
 
-    const openSupportRequest = (sessionId) => {
-        setSupportRequests(prev => prev.filter(r => r.sessionId !== sessionId));
-        navigate(`/session/${sessionId}`);
+    const openSupportRequest = (r) => {
+        setSupportRequests(prev => prev.filter(x => x.id !== r.id));
+        navigate(`/session/${r.sessionId}`);
     };
-    const dismissSupportRequest = (sessionId) => {
-        setSupportRequests(prev => prev.filter(r => r.sessionId !== sessionId));
+    const dismissSupportRequest = (id) => {
+        setSupportRequests(prev => prev.filter(x => x.id !== id));
     };
 
     // Mark templates as seen when visiting helper-templates page
@@ -170,14 +176,14 @@ export default function Layout({ user, onLogout, onGenerateClick }) {
             {supportRequests.length > 0 && (
                 <div className="support-request-toasts">
                     {supportRequests.map(r => (
-                        <div key={r.sessionId} className="support-request-toast">
+                        <div key={r.id} className="support-request-toast">
                             <div className="srt-body">
                                 <span className="srt-title">🔔 Support requested</span>
                                 <span className="srt-host">{r.hostname}</span>
                             </div>
                             <div className="srt-actions">
-                                <button className="srt-open" onClick={() => openSupportRequest(r.sessionId)}>Open</button>
-                                <button className="srt-dismiss" onClick={() => dismissSupportRequest(r.sessionId)} title="Dismiss">✕</button>
+                                <button className="srt-open" onClick={() => openSupportRequest(r)}>Open</button>
+                                <button className="srt-dismiss" onClick={() => dismissSupportRequest(r.id)} title="Dismiss">✕</button>
                             </div>
                         </div>
                     ))}
