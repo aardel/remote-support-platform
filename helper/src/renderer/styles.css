@@ -490,3 +490,26 @@ body {
   color: #f59e0b;
   white-space: nowrap;
 }
+
+/* Download folder setting */
+.download-setting { margin-top: 6px; }
+.download-dir-row { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 4px; }
+.download-label { color: #64748b; white-space: nowrap; }
+.download-path {
+  color: #cbd5e1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+  white-space: nowrap;
+}
+.link-btn:hover { text-decoration: underline; }

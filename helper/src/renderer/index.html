@@ -40,6 +40,17 @@
           <input type="checkbox" id="autoStart" checked />
           <span class="toggle-text">Start automatically with this computer</span>
         </label>
+        <div class="download-setting">
+          <div class="download-dir-row">
+            <span class="download-label">Save downloads to:</span>
+            <span id="downloadDirPath" class="download-path" title=""></span>
+            <button id="changeDownloadDir" type="button" class="link-btn">Change</button>
+          </div>
+          <label class="toggle-label">
+            <input type="checkbox" id="alwaysAskDownload" />
+            <span class="toggle-text">Always ask where to save</span>
+          </label>
+        </div>
       </div>
 
       <button id="startBtn" class="btn-primary btn-request">Request Support</button>

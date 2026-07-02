@@ -985,13 +985,63 @@ ipcMain.handle('helper:fs-write-chunk', async (_event, filePath, data, offset) =
   } catch (e) { throw new Error(e.message); } finally { if (fh) await fh.close(); }
 });
 
+// Where received files are saved. Defaults to the OS Downloads folder; the
+// customer can pick another folder or opt into a save prompt per file.
+function getDownloadDir() {
+  const dir = readPrefs().downloadDir;
+  try { if (dir && fs.existsSync(dir)) return dir; } catch (_) {}
+  return app.getPath('downloads');
+}
+
+// Collision-safe target path: "name.ext", then "name (1).ext", etc.
+function uniqueFilePath(dir, name) {
+  const safe = (name || 'download').replace(/[/\\?%*:|"<>]/g, '_');
+  let target = path.join(dir, safe);
+  if (!fs.existsSync(target)) return target;
+  const ext = path.extname(safe);
+  const base = path.basename(safe, ext);
+  for (let i = 1; i < 1000; i++) {
+    target = path.join(dir, `${base} (${i})${ext}`);
+    if (!fs.existsSync(target)) return target;
+  }
+  return path.join(dir, `${base}-${Date.now()}${ext}`);
+}
+
+ipcMain.handle('helper:get-download-settings', () => ({
+  dir: getDownloadDir(),
+  alwaysAsk: readPrefs().alwaysAskDownload === true
+}));
+
+ipcMain.handle('helper:choose-download-dir', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+    defaultPath: getDownloadDir()
+  });
+  if (canceled || !filePaths || !filePaths[0]) return { canceled: true, dir: getDownloadDir() };
+  writePrefs({ ...readPrefs(), downloadDir: filePaths[0] });
+  return { canceled: false, dir: filePaths[0] };
+});
+
+ipcMain.handle('helper:set-always-ask-download', (_e, val) => {
+  writePrefs({ ...readPrefs(), alwaysAskDownload: val === true });
+  return val === true;
+});
+
 ipcMain.handle('helper:file-download', async (_event, url, defaultName) => {
   try {
     const res = await fetch(url, { rejectUnauthorized: !allowSelfSigned });
     if (!res.ok) throw new Error(`Download failed: ${res.status}`);
     const buf = await res.arrayBuffer();
-    const { filePath, canceled } = await dialog.showSaveDialog(mainWindow, { defaultPath: defaultName || 'download' });
-    if (canceled || !filePath) return { canceled: true };
+    const dir = getDownloadDir();
+    let filePath;
+    if (readPrefs().alwaysAskDownload === true) {
+      const r = await dialog.showSaveDialog(mainWindow, { defaultPath: path.join(dir, defaultName || 'download') });
+      if (r.canceled || !r.filePath) return { canceled: true };
+      filePath = r.filePath;
+    } else {
+      try { fs.mkdirSync(dir, { recursive: true }); } catch (_) {}
+      filePath = uniqueFilePath(dir, defaultName);
+    }
     fs.writeFileSync(filePath, Buffer.from(buf));
     return { canceled: false, filePath };
   } catch (e) { return { error: e.message }; }

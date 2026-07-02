@@ -227,8 +227,29 @@ function setupFileDownloadBtn() {
     const f = receivedFiles[receivedFiles.length - 1];
     const result = await window.helperApi.fileDownload(f.downloadUrl, f.name);
     if (result?.error) log(`Download failed: ${result.error}`);
-    else if (!result?.canceled) log(`Saved`);
+    else if (!result?.canceled) log(`Saved to ${result.filePath || 'downloads'}`);
   };
+}
+
+async function setupDownloadSettings() {
+  const pathEl = document.getElementById('downloadDirPath');
+  const changeBtn = document.getElementById('changeDownloadDir');
+  const askEl = document.getElementById('alwaysAskDownload');
+  if (!window.helperApi.getDownloadSettings) return;
+  try {
+    const s = await window.helperApi.getDownloadSettings();
+    if (pathEl) { pathEl.textContent = s.dir; pathEl.title = s.dir; }
+    if (askEl) askEl.checked = !!s.alwaysAsk;
+  } catch (_) {}
+  if (changeBtn) changeBtn.onclick = async () => {
+    try {
+      const r = await window.helperApi.chooseDownloadDir();
+      if (r && !r.canceled && pathEl) { pathEl.textContent = r.dir; pathEl.title = r.dir; }
+    } catch (_) {}
+  };
+  if (askEl) askEl.addEventListener('change', () => {
+    window.helperApi.setAlwaysAskDownload(askEl.checked).catch(() => {});
+  });
 }
 
 async function init() {
@@ -294,6 +315,7 @@ async function init() {
   }
 
   setupFileDownloadBtn();
+  setupDownloadSettings();
 
   // Auto-start preference toggle
   const autoStartEl = document.getElementById('autoStart');
