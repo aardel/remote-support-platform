@@ -401,6 +401,17 @@ function allPeerConnections() {
     : (peerConnection ? [peerConnection] : []);
 }
 
+// Send the monitor list + control capabilities to the session room. Emitted on
+// connect AND whenever a technician joins — a late-joining viewer would
+// otherwise miss the one-time broadcast and see no monitors (Split disabled).
+function emitCapabilities(sessionId) {
+  window.helperApi.socketEmit('helper-capabilities', {
+    sessionId: sessionId || currentSessionId,
+    capabilities,
+    displays: monitors
+  });
+}
+
 // Tell the viewer which media-stream id is the main pane vs. the second pane,
 // plus which monitor each currently shows and whether split is active.
 function broadcastTrackMap() {
@@ -533,7 +544,7 @@ async function connectSignaling(sessionId) {
 
     // Emit capabilities + monitor info so technician sees them immediately
     await ensureMonitors();
-    window.helperApi.socketEmit('helper-capabilities', { sessionId, capabilities, displays: monitors });
+    emitCapabilities(sessionId);
     broadcastTrackMap();
 
     signalingUnsubscribers.push(window.helperApi.onFileAvailable((data) => {
@@ -1009,6 +1020,8 @@ async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
     targetSocketId
   });
   log(`Offer sent to technician ${targetSocketId}`);
+  await ensureMonitors();
+  emitCapabilities(sessionId);
   broadcastTrackMap();
   return pc;
 }
@@ -1068,6 +1081,8 @@ async function createPeerConnection(sessionId) {
     offer: { type: peerConnection.localDescription.type, sdp: peerConnection.localDescription.sdp },
     role: 'helper'
   });
+  await ensureMonitors();
+  emitCapabilities(sessionId);
   broadcastTrackMap();
   return peerConnection;
 }
