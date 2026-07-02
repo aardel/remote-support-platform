@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const FileTransfer = require('../models/FileTransfer');
+const { rateLimit } = require('../middleware/rateLimit');
 
 // Configure multer for file uploads
 const uploadDir = path.join(__dirname, '../../uploads');
@@ -17,8 +18,10 @@ const storage = multer.diskStorage({
         cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
-        const uniqueName = `${uuidv4()}-${file.originalname}`;
-        cb(null, uniqueName);
+        // Strip any directory component and unusual characters from the client-
+        // supplied name (defense-in-depth against path traversal).
+        const safe = path.basename(file.originalname || 'file').replace(/[^\w.\-() ]/g, '_').slice(0, 200);
+        cb(null, `${uuidv4()}-${safe}`);
     }
 });
 
@@ -33,7 +36,7 @@ const upload = multer({
 const fileRecords = new Map();
 
 // Upload file
-router.post('/upload', upload.single('file'), async (req, res) => {
+router.post('/upload', rateLimit({ windowMs: 60 * 1000, max: 60 }), upload.single('file'), async (req, res) => {
     try {
         const { sessionId, direction } = req.body;
         const file = req.file;
@@ -90,7 +93,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 });
 
 // Download file
-router.get('/download/:fileId', async (req, res) => {
+router.get('/download/:fileId', rateLimit({ windowMs: 60 * 1000, max: 120 }), async (req, res) => {
     try {
         const { fileId } = req.params;
         
