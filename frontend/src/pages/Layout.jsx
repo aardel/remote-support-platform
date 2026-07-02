@@ -79,13 +79,14 @@ export default function Layout({ user, onLogout, onGenerateClick }) {
         // session-updated events that a single request can emit.
         const lastAt = {}; // sessionId -> ts
         socket.on('session-updated', (d) => {
-            if (d?.status === 'connected' && d?.allowUnattended === false) {
+            if (d?.status === 'connected') {
                 const now = Date.now();
                 if (now - (lastAt[d.sessionId] || 0) > 8000) {
                     lastAt[d.sessionId] = now;
                     const hostname = d?.clientInfo?.hostname || d?.client_info?.hostname || 'A user';
+                    const attended = d?.allowUnattended === false;
                     setSupportRequests(prev =>
-                        [{ id: `${d.sessionId}-${now}`, sessionId: d.sessionId, hostname, ts: now }, ...prev].slice(0, 5)
+                        [{ id: `${d.sessionId}-${now}`, sessionId: d.sessionId, hostname, attended, ts: now }, ...prev].slice(0, 5)
                     );
                 }
             }
@@ -178,7 +179,7 @@ export default function Layout({ user, onLogout, onGenerateClick }) {
                     {supportRequests.map(r => (
                         <div key={r.id} className="support-request-toast">
                             <div className="srt-body">
-                                <span className="srt-title">🔔 Support requested</span>
+                                <span className="srt-title">🔔 {r.attended ? 'Support requested' : 'Helper connected'}</span>
                                 <span className="srt-host">{r.hostname}</span>
                             </div>
                             <div className="srt-actions">
