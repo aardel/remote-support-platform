@@ -48,6 +48,8 @@
 }
 
 .page-input {
+  box-sizing: border-box;
+  max-width: 100%;
   padding: 6px 10px;
   border: 1px solid #e2e8f0;
   border-radius: 6px;

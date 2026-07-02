@@ -96,7 +96,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 120px;
+  max-width: 220px;
 }
 
 /* Status dot */

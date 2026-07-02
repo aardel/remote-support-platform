@@ -698,7 +698,7 @@ export default function SessionView({ user }) {
                         ← Back
                     </button>
                     <span className="session-id-label" title={sessionId}>
-                        {sessionId?.slice(0, 8)}…
+                        {sessionId}
                     </span>
                     <span className={`status-dot ${peerConnected ? 'online' : connected ? 'partial' : 'offline'}`} />
                     <span className="status-text">
@@ -960,9 +960,8 @@ export default function SessionView({ user }) {
                         />
                     </div>
                 )}
-            </div>
 
-            {/* Chat panel */}
+            {/* Chat panel — anchored below the toolbar (inside the main area) */}
             {chatOpen && (
                 <div className="chat-panel">
                     <div className="chat-header">
@@ -1042,6 +1041,7 @@ export default function SessionView({ user }) {
                     </div>
                 </div>
             )}
+            </div>
 
             {/* File transfer progress */}
             {sendProgress && (
