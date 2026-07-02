@@ -136,6 +136,11 @@ contextBridge.exposeInMainWorld('helperApi', {
   chooseDownloadDir: () => ipcRenderer.invoke('helper:choose-download-dir'),
   setAlwaysAskDownload: (v) => ipcRenderer.invoke('helper:set-always-ask-download', v),
 
+  // Connection history
+  appendConnectionLog: (entry) => ipcRenderer.invoke('helper:append-connection-log', entry),
+  getConnectionLog: () => ipcRenderer.invoke('helper:get-connection-log'),
+  clearConnectionLog: () => ipcRenderer.invoke('helper:clear-connection-log'),
+
   // Update
   checkForUpdate: () => ipcRenderer.invoke('helper:check-for-update'),
   downloadUpdate: (downloadUrl) => ipcRenderer.invoke('helper:download-update', downloadUrl),

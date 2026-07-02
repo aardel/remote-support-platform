@@ -119,6 +119,7 @@ function formatDuration(ms) {
 function startConnectedTimer() {
   stopConnectedTimer();
   connectedSince = Date.now();
+  beginConnectionLog();
   setStatusUI('Connected 0:00', 'dot-green');
   connectedTimer = setInterval(() => {
     if (connectedSince && isConnected) {
@@ -130,6 +131,66 @@ function startConnectedTimer() {
 function stopConnectedTimer() {
   if (connectedTimer) { clearInterval(connectedTimer); connectedTimer = null; }
   connectedSince = null;
+}
+
+/* ---------- Connection history log ---------- */
+let currentLogEntry = null;
+function connectedTechNames() {
+  return connectedTechnicians.map(t => t.technicianName).filter(Boolean);
+}
+function beginConnectionLog() {
+  if (currentLogEntry) return;
+  currentLogEntry = { start: Date.now(), technicians: connectedTechNames(), sessionId: currentSessionId };
+}
+function endConnectionLog() {
+  if (!currentLogEntry) return;
+  const names = Array.from(new Set([...(currentLogEntry.technicians || []), ...connectedTechNames()]));
+  const entry = {
+    start: currentLogEntry.start,
+    end: Date.now(),
+    durationMs: Date.now() - currentLogEntry.start,
+    technician: names.join(', ') || 'Technician',
+    sessionId: currentLogEntry.sessionId || currentSessionId
+  };
+  currentLogEntry = null;
+  if (window.helperApi.appendConnectionLog) {
+    window.helperApi.appendConnectionLog(entry).then(() => renderConnectionLog()).catch(() => {});
+  }
+}
+
+function setupConnLog() {
+  const toggle = document.getElementById('connLogToggle');
+  const listEl = document.getElementById('connLogList');
+  const clearBtn = document.getElementById('connLogClear');
+  if (!toggle || !listEl) return;
+  toggle.onclick = () => {
+    const show = listEl.style.display === 'none';
+    listEl.style.display = show ? 'block' : 'none';
+    if (clearBtn) clearBtn.style.display = show ? '' : 'none';
+    toggle.textContent = show ? 'Hide history' : 'Connection history';
+    if (show) renderConnectionLog();
+  };
+  if (clearBtn) clearBtn.onclick = async () => {
+    try { await window.helperApi.clearConnectionLog(); } catch (_) {}
+    renderConnectionLog();
+  };
+}
+
+async function renderConnectionLog() {
+  const listEl = document.getElementById('connLogList');
+  if (!listEl || !window.helperApi.getConnectionLog) return;
+  let entries = [];
+  try { entries = await window.helperApi.getConnectionLog(); } catch (_) {}
+  if (!entries.length) {
+    listEl.innerHTML = '<div class="conn-log-empty">No connections yet.</div>';
+    return;
+  }
+  listEl.innerHTML = entries.slice(0, 50).map(e => {
+    const when = new Date(e.start).toLocaleString();
+    const dur = formatDuration(e.durationMs || 0);
+    const tech = (e.technician || 'Technician').replace(/</g, '&lt;');
+    return `<div class="conn-log-item"><span class="cl-tech">${tech}</span><span class="cl-when">${when}</span><span class="cl-dur">${dur}</span></div>`;
+  }).join('');
 }
 
 function showSessionId(id, editable) {
@@ -316,6 +377,7 @@ async function init() {
 
   setupFileDownloadBtn();
   setupDownloadSettings();
+  setupConnLog();
 
   // Auto-start preference toggle
   const autoStartEl = document.getElementById('autoStart');
@@ -1208,6 +1270,7 @@ function setDisconnected() {
 // When all technicians leave but unattended mode is on: stay ready for the next connection
 function handleAllTechniciansGone() {
   stopConnectedTimer();
+  endConnectionLog();
   isConnected = false;
   connectedTechnicians = [];
   updateConnectedTechniciansUI();
@@ -1231,6 +1294,7 @@ async function disconnect() {
   if (disconnecting) return;
   disconnecting = true;
   log('Disconnecting...');
+  endConnectionLog(); // finalize any open history entry (manual Stop path)
   try {
     clearSignalingListeners();
     stopConnectedTimer();

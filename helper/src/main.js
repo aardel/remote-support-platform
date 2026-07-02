@@ -1027,6 +1027,32 @@ ipcMain.handle('helper:set-always-ask-download', (_e, val) => {
   return val === true;
 });
 
+// Connection history: persist a capped list of past sessions in prefs.
+const CONNECTION_LOG_MAX = 100;
+ipcMain.handle('helper:append-connection-log', (_e, entry) => {
+  try {
+    const prefs = readPrefs();
+    const log = Array.isArray(prefs.connectionLog) ? prefs.connectionLog : [];
+    log.unshift({
+      start: Number(entry?.start) || Date.now(),
+      end: Number(entry?.end) || Date.now(),
+      durationMs: Number(entry?.durationMs) || 0,
+      technician: String(entry?.technician || 'Technician').slice(0, 200),
+      sessionId: String(entry?.sessionId || '').slice(0, 100)
+    });
+    writePrefs({ ...prefs, connectionLog: log.slice(0, CONNECTION_LOG_MAX) });
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('helper:get-connection-log', () => {
+  const log = readPrefs().connectionLog;
+  return Array.isArray(log) ? log : [];
+});
+ipcMain.handle('helper:clear-connection-log', () => {
+  writePrefs({ ...readPrefs(), connectionLog: [] });
+  return { ok: true };
+});
+
 ipcMain.handle('helper:file-download', async (_event, url, defaultName) => {
   try {
     const res = await fetch(url, { rejectUnauthorized: !allowSelfSigned });

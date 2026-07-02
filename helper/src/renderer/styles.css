@@ -513,3 +513,28 @@ body {
   white-space: nowrap;
 }
 .link-btn:hover { text-decoration: underline; }
+
+/* Connection history */
+.conn-log-section { margin-top: 6px; }
+.conn-log-head { display: flex; align-items: center; gap: 10px; }
+.conn-log-list {
+  margin-top: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  background: #0b1220;
+}
+.conn-log-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  font-size: 11px;
+  border-bottom: 1px solid #131c2e;
+}
+.conn-log-item:last-child { border-bottom: none; }
+.cl-tech { flex: 1; min-width: 0; color: #e2e8f0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cl-when { color: #64748b; white-space: nowrap; }
+.cl-dur { color: #10b981; font-weight: 600; white-space: nowrap; min-width: 44px; text-align: right; }
+.conn-log-empty { padding: 8px; font-size: 11px; color: #64748b; }
