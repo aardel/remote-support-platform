@@ -28,12 +28,25 @@ const shortcutMessage = document.getElementById('shortcutMessage');
 let peerConnection = null;
 let updateInfo = null; // { updateAvailable, latestVersion, downloadUrl } // kept for switch-monitor/set-stream-quality (first PC or any)
 const peerConnectionsBySocketId = new Map(); // technicianSocketId -> RTCPeerConnection (multi-viewer)
-let mediaStream = null;
+let mediaStream = null;         // main-pane capture (getUserMedia stream)
+let secondaryStream = null;     // second-pane capture (only while split is on)
 let config = null;
 let currentSessionId = null;
 let isConnected = false;
 let screenSources = [];
 let receivedFiles = [];
+
+// Multi-monitor / split-view state
+let monitors = [];              // unified monitor list from the main process
+let mainMonitorIndex = 0;       // which monitor the main pane shows
+let secondMonitorIndex = 1;     // which monitor the second (split) pane shows
+let splitEnabled = false;       // is the technician viewing two monitors at once
+// Stable stream containers: their .id is the msid we advertise to the viewer so
+// it can tell the main feed from the second feed. Track content is swapped via
+// replaceTrack, so these ids stay constant across monitor switches (no
+// renegotiation needed).
+const mainMs = new MediaStream();
+const secondMs = new MediaStream();
 let capabilities = { robotjs: false, platform: 'unknown' };
 let logVisible = false;
 let connectedTechnicians = [];
@@ -362,32 +375,54 @@ async function handleUpgradeNow() {
   }
 }
 
-async function startScreenCapture(overrideIndex) {
-  if (screenSources.length === 0) {
-    const sources = await window.helperApi.getSources();
-    screenSources = sources;
+async function ensureMonitors() {
+  if (!monitors.length) {
+    try {
+      monitors = await window.helperApi.getMonitors();
+    } catch (e) {
+      log(`Could not enumerate monitors: ${e.message}`);
+    }
   }
-  const selectedIndex = overrideIndex != null ? overrideIndex : 0;
-  const screenSource = screenSources[selectedIndex] || screenSources[0];
-  if (!screenSource) {
+  return monitors;
+}
+
+function allPeerConnections() {
+  return peerConnectionsBySocketId.size
+    ? Array.from(peerConnectionsBySocketId.values())
+    : (peerConnection ? [peerConnection] : []);
+}
+
+// Tell the viewer which media-stream id is the main pane vs. the second pane,
+// plus which monitor each currently shows and whether split is active.
+function broadcastTrackMap() {
+  if (!currentSessionId) return;
+  window.helperApi.socketEmit('track-map', {
+    sessionId: currentSessionId,
+    main: mainMs.id,
+    second: secondMs.id,
+    mainMonitor: mainMonitorIndex,
+    secondMonitor: secondMonitorIndex,
+    splitEnabled
+  });
+}
+
+// Capture one monitor at its physical resolution. Returns a fresh stream.
+async function captureMonitor(monitorIndex) {
+  await ensureMonitors();
+  const mon = monitors[monitorIndex] || monitors[0];
+  if (!mon || !mon.sourceId) {
     throw new Error('No screen source available');
   }
+  const captureWidth = mon.width || 1920;
+  const captureHeight = mon.height || 1080;
+  log(`Capturing monitor ${monitorIndex + 1} (${mon.label}): ${captureWidth}x${captureHeight}`);
   try {
-    log(`Using display ${selectedIndex + 1}`);
-    const displayIndex = selectedIndex >= 0 ? selectedIndex : undefined;
-    const displayInfo = await window.helperApi.getDisplayInfo(displayIndex);
-    // Use physical (native) resolution on HiDPI/Retina displays
-    const sf = displayInfo.scaleFactor || 1;
-    const captureWidth = Math.round(displayInfo.width * sf);
-    const captureHeight = Math.round(displayInfo.height * sf);
-    log(`Display: ${displayInfo.width}x${displayInfo.height} @${sf}x → capture ${captureWidth}x${captureHeight}`);
-
-    const newStream = await navigator.mediaDevices.getUserMedia({
+    const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
         mandatory: {
           chromeMediaSource: 'desktop',
-          chromeMediaSourceId: screenSource.id,
+          chromeMediaSourceId: mon.sourceId,
           minWidth: captureWidth,
           minHeight: captureHeight,
           maxWidth: captureWidth,
@@ -396,18 +431,11 @@ async function startScreenCapture(overrideIndex) {
         }
       }
     });
-    if (mediaStream) {
-      mediaStream.getTracks().forEach(t => t.stop());
-    }
-    mediaStream = newStream;
-    // Tell WebRTC encoder this is screen content — prioritize sharpness over smooth motion
-    mediaStream.getVideoTracks().forEach(track => {
-      if ('contentHint' in track) {
-        track.contentHint = 'detail';
-      }
+    // Screen content: prioritize sharpness over smooth motion.
+    stream.getVideoTracks().forEach(track => {
+      if ('contentHint' in track) track.contentHint = 'detail';
     });
-    log('Screen capture started');
-    return mediaStream;
+    return stream;
   } catch (error) {
     log(`Screen capture error: ${error.message}`);
     if (capabilities.platform === 'darwin') {
@@ -415,6 +443,73 @@ async function startScreenCapture(overrideIndex) {
     }
     throw error;
   }
+}
+
+// Main-pane capture (used at session start and when switching the main monitor).
+async function startScreenCapture(overrideIndex) {
+  const idx = overrideIndex != null ? overrideIndex : mainMonitorIndex;
+  const newStream = await captureMonitor(idx);
+  if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+  mediaStream = newStream;
+  mainMonitorIndex = idx;
+  log('Screen capture started');
+  return mediaStream;
+}
+
+// Switch which monitor the main pane shows — swap the sent track on every peer.
+async function applyMainMonitor(idx) {
+  if (idx < 0 || idx >= monitors.length) return;
+  const stream = await captureMonitor(idx);
+  const track = stream.getVideoTracks()[0];
+  for (const pc of allPeerConnections()) {
+    if (pc._mainSender) { try { await pc._mainSender.replaceTrack(track); } catch (_) {} }
+  }
+  if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+  mediaStream = stream;
+  mainMonitorIndex = idx;
+  log(`Main pane → monitor ${idx + 1}`);
+  broadcastTrackMap();
+}
+
+// Switch which monitor the second (split) pane shows.
+async function applySecondMonitor(idx) {
+  if (idx < 0 || idx >= monitors.length) return;
+  secondMonitorIndex = idx;
+  if (!splitEnabled) { broadcastTrackMap(); return; }
+  const stream = await captureMonitor(idx);
+  const track = stream.getVideoTracks()[0];
+  for (const pc of allPeerConnections()) {
+    if (pc._secondSender) { try { await pc._secondSender.replaceTrack(track); } catch (_) {} }
+  }
+  if (secondaryStream) secondaryStream.getTracks().forEach(t => t.stop());
+  secondaryStream = stream;
+  log(`Second pane → monitor ${idx + 1}`);
+  broadcastTrackMap();
+}
+
+// Enable/disable the second feed. No renegotiation: the second video
+// transceiver is created up front, so we just attach/detach a track.
+async function setSplit(enabled, idx) {
+  if (typeof idx === 'number') secondMonitorIndex = idx;
+  if (enabled) {
+    splitEnabled = true;
+    const stream = await captureMonitor(secondMonitorIndex);
+    const track = stream.getVideoTracks()[0];
+    for (const pc of allPeerConnections()) {
+      if (pc._secondSender) { try { await pc._secondSender.replaceTrack(track); } catch (_) {} }
+    }
+    if (secondaryStream) secondaryStream.getTracks().forEach(t => t.stop());
+    secondaryStream = stream;
+    log(`Split view ON — monitor ${secondMonitorIndex + 1}`);
+  } else {
+    splitEnabled = false;
+    for (const pc of allPeerConnections()) {
+      if (pc._secondSender) { try { await pc._secondSender.replaceTrack(null); } catch (_) {} }
+    }
+    if (secondaryStream) { secondaryStream.getTracks().forEach(t => t.stop()); secondaryStream = null; }
+    log('Split view OFF');
+  }
+  broadcastTrackMap();
 }
 
 async function connectSignaling(sessionId) {
@@ -428,17 +523,9 @@ async function connectSignaling(sessionId) {
     clearSignalingListeners();
 
     // Emit capabilities + monitor info so technician sees them immediately
-    let displays = [];
-    try {
-      displays = await window.helperApi.getAllDisplays();
-    } catch (e) {
-      log(`Could not get displays: ${e.message}`);
-    }
-    // If getAllDisplays returned nothing, fall back to screenSources count
-    if (!displays.length && screenSources.length) {
-      displays = screenSources.map((s, i) => ({ index: i, label: s.name || `Display ${i + 1}`, width: 0, height: 0, primary: i === 0 }));
-    }
-    window.helperApi.socketEmit('helper-capabilities', { sessionId, capabilities, displays });
+    await ensureMonitors();
+    window.helperApi.socketEmit('helper-capabilities', { sessionId, capabilities, displays: monitors });
+    broadcastTrackMap();
 
     signalingUnsubscribers.push(window.helperApi.onFileAvailable((data) => {
       if (data.direction === 'technician-to-user' || !data.direction) {
@@ -454,24 +541,25 @@ async function connectSignaling(sessionId) {
 
     signalingUnsubscribers.push(window.helperApi.onSwitchMonitor(async (data) => {
       const idx = data.monitorIndex;
-      if (typeof idx !== 'number' || idx < 0 || !screenSources.length) return;
-      if (idx >= screenSources.length) {
+      await ensureMonitors();
+      if (typeof idx !== 'number' || idx < 0 || idx >= monitors.length) {
         log(`Monitor ${idx + 1} not available`);
         return;
       }
-      log(`Switching to monitor ${idx + 1}...`);
       try {
-        await startScreenCapture(idx);
-        const videoTrack = mediaStream.getVideoTracks()[0];
-        if (!videoTrack) return;
-        const pcs = peerConnectionsBySocketId.size ? Array.from(peerConnectionsBySocketId.values()) : (peerConnection ? [peerConnection] : []);
-        for (const pc of pcs) {
-          const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-          if (sender) await sender.replaceTrack(videoTrack);
-        }
-        log(`Switched to monitor ${idx + 1}`);
+        if (data.pane === 'second') await applySecondMonitor(idx);
+        else await applyMainMonitor(idx);
       } catch (e) {
         log(`Switch monitor failed: ${e.message}`);
+      }
+    }));
+
+    // Split view: technician toggles the second feed on/off (and picks its monitor).
+    signalingUnsubscribers.push(window.helperApi.onSetSplit(async (data) => {
+      try {
+        await setSplit(!!data.enabled, typeof data.monitorIndex === 'number' ? data.monitorIndex : undefined);
+      } catch (e) {
+        log(`Set split failed: ${e.message}`);
       }
     }));
 
@@ -654,6 +742,24 @@ function boostSdpBitrate(sdp) {
   return out.join('\r\n');
 }
 
+// Every peer gets two video senders: the main pane (advertised under mainMs's
+// id) and a prenegotiated second sender for the split pane (under secondMs's
+// id). The second starts empty and is filled via replaceTrack when split is
+// enabled, so toggling split needs no renegotiation.
+function addVideoTransceivers(pc) {
+  const mainTrack = mediaStream ? mediaStream.getVideoTracks()[0] : null;
+  if (mainTrack) {
+    pc._mainSender = pc.addTrack(mainTrack, mainMs);
+  } else {
+    pc._mainSender = pc.addTransceiver('video', { direction: 'sendonly', streams: [mainMs] }).sender;
+  }
+  pc._secondSender = pc.addTransceiver('video', { direction: 'sendonly', streams: [secondMs] }).sender;
+  if (splitEnabled && secondaryStream) {
+    const st = secondaryStream.getVideoTracks()[0];
+    if (st) { try { pc._secondSender.replaceTrack(st); } catch (_) {} }
+  }
+}
+
 // Prefer VP9 (sharper for screen) over VP8; fall back to H264 if available
 function preferScreenCodecs(pc) {
   try {
@@ -716,9 +822,7 @@ async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
   peerConnectionsBySocketId.set(targetSocketId, pc);
   if (!peerConnection) peerConnection = pc;
 
-  mediaStream.getTracks().forEach(track => {
-    pc.addTrack(track, mediaStream);
-  });
+  addVideoTransceivers(pc);
 
   preferScreenCodecs(pc);
   applyInitialQuality(pc);
@@ -896,6 +1000,7 @@ async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
     targetSocketId
   });
   log(`Offer sent to technician ${targetSocketId}`);
+  broadcastTrackMap();
   return pc;
 }
 
@@ -910,10 +1015,7 @@ async function createPeerConnection(sessionId) {
 
   peerConnection = new RTCPeerConnection(rtcConfig);
 
-  mediaStream.getTracks().forEach(track => {
-    peerConnection.addTrack(track, mediaStream);
-    log(`Added track: ${track.kind}`);
-  });
+  addVideoTransceivers(peerConnection);
 
   preferScreenCodecs(peerConnection);
   applyInitialQuality(peerConnection);
@@ -957,6 +1059,7 @@ async function createPeerConnection(sessionId) {
     offer: { type: peerConnection.localDescription.type, sdp: peerConnection.localDescription.sdp },
     role: 'helper'
   });
+  broadcastTrackMap();
   return peerConnection;
 }
 
@@ -1003,6 +1106,11 @@ async function disconnect() {
       mediaStream.getTracks().forEach(t => t.stop());
       mediaStream = null;
     }
+    if (secondaryStream) {
+      secondaryStream.getTracks().forEach(t => t.stop());
+      secondaryStream = null;
+    }
+    splitEnabled = false;
     peerConnectionsBySocketId.forEach(pc => pc.close());
     peerConnectionsBySocketId.clear();
     if (peerConnection) {

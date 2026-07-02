@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Device = require('../models/Device');
+const Session = require('../models/Session');
 const SessionService = require('../services/sessionService');
 const { requireAuth } = require('../middleware/sessionAuth');
 const { geolocate, normalizeIp } = require('../services/geolocate');
@@ -161,13 +162,26 @@ router.post('/:deviceId/request', requireAuth, async (req, res) => {
             return res.status(404).json({ error: 'Device not found' });
         }
 
-        const session = await SessionService.createSession({
-            technicianId,
-            expiresIn: 3600
-        });
+        // Reuse the device's existing active session if it already has one.
+        // The helper's assignSession prefers an existing active (waiting/
+        // connected) session over a freshly-created pending one, so minting a
+        // new session here would leave the dashboard and the helper on
+        // different session IDs (dashboard waits on a session the helper never
+        // adopts). Only create — and mark pending — when none is active.
+        let sessionId;
+        try {
+            const active = await Session.findActiveByDeviceId(deviceId);
+            if (active) sessionId = active.session_id;
+        } catch (_) {}
 
-        const sessionId = session.session_id || session.sessionId;
-        await Device.setPendingSession(deviceId, sessionId);
+        if (!sessionId) {
+            const session = await SessionService.createSession({
+                technicianId,
+                expiresIn: 3600
+            });
+            sessionId = session.session_id || session.sessionId;
+            await Device.setPendingSession(deviceId, sessionId);
+        }
 
         // If the device agent is online, push the request immediately —
         // no need to ask the user to open the helper.

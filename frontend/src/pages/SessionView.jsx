@@ -47,6 +47,8 @@ export default function SessionView({ user }) {
     const socketRef = useRef(null);
     const chatEndRef = useRef(null);
     const splitVideoRef = useRef(null);
+    const trackMapRef = useRef(null);              // { main, second, mainMonitor, secondMonitor, splitEnabled }
+    const remoteStreamsRef = useRef(new Map());    // streamId -> MediaStream
 
     // Connection state
     const [connected, setConnected] = useState(false);
@@ -60,6 +62,8 @@ export default function SessionView({ user }) {
     const [helperCanControl, setHelperCanControl] = useState(true);
     const [isSplitView, setSplitView] = useState(false);
     const [selectedMonitor, setMonitor] = useState(0);
+    const [secondMonitor, setSecondMonitor] = useState(1);
+    const [splitRatio, setSplitRatio] = useState(0.5); // main pane width fraction
     const [monitors, setMonitors] = useState(DEFAULT_MONITORS);
     const [viewing, setViewing] = useState(true);
     const [vncFallback, setVncFallback] = useState(false);
@@ -145,13 +149,22 @@ export default function SessionView({ user }) {
             }
             if (data?.displays && data.displays.length > 0) {
                 setMonitors(data.displays.map((d, i) => ({
-                    index: i,
+                    index: typeof d.index === 'number' ? d.index : i,
                     label: d.label || `Display ${i + 1}`,
                     width: d.width || 0,
                     height: d.height || 0,
                     primary: !!d.primary,
                 })));
             }
+        });
+
+        // Which remote stream is the main pane vs. the second (split) pane,
+        // and which monitor each currently shows.
+        socket.on('track-map', (data) => {
+            trackMapRef.current = data;
+            if (typeof data.mainMonitor === 'number') setMonitor(data.mainMonitor);
+            if (typeof data.secondMonitor === 'number') setSecondMonitor(data.secondMonitor);
+            applyTrackRouting();
         });
 
         // Chat from helper
@@ -259,12 +272,14 @@ export default function SessionView({ user }) {
             }
         };
 
-        // Receive video track
+        // Receive video tracks. The helper sends two: main pane + second (split)
+        // pane. We remember every stream by id and route them per the track-map.
         pc.ontrack = (e) => {
-            if (videoRef.current && e.streams[0]) {
-                videoRef.current.srcObject = e.streams[0];
-                setVncFallback(false);
-            }
+            const stream = e.streams[0];
+            if (!stream) return;
+            remoteStreamsRef.current.set(stream.id, stream);
+            applyTrackRouting();
+            setVncFallback(false);
         };
 
         // Receive DataChannels from helper
@@ -503,12 +518,61 @@ export default function SessionView({ user }) {
     /* ---------- Context menu block ---------- */
     const blockCtx = useCallback((e) => { if (isControlEnabled) e.preventDefault(); }, [isControlEnabled]);
 
-    /* ---------- Monitor switch ---------- */
-    const switchMonitor = useCallback((monIdx) => {
-        setMonitor(monIdx);
-        // Helper expects monitorIndex (0-based)
-        socketRef.current?.emit('switch-monitor', { sessionId, monitorIndex: monIdx });
+    /* ---------- Track routing (main vs. second pane) ---------- */
+    const applyTrackRouting = useCallback(() => {
+        const map = trackMapRef.current;
+        const streams = remoteStreamsRef.current;
+        const arr = [...streams.values()];
+        const setSrc = (el, s) => { if (el && s && el.srcObject !== s) el.srcObject = s; };
+        // Prefer the msid mapping; fall back to arrival order so a single
+        // unmapped stream still lands in the main pane and the "other" stream
+        // in the second pane.
+        const mainS = (map && streams.get(map.main)) || arr[0];
+        let secondS = map && streams.get(map.second);
+        if (!secondS) secondS = arr.find(s => s !== mainS);
+        setSrc(videoRef.current, mainS);
+        setSrc(splitVideoRef.current, secondS);
+    }, []);
+
+    /* ---------- Monitor switch (per pane) ---------- */
+    const switchMonitor = useCallback((monIdx, pane = 'main') => {
+        if (pane === 'second') setSecondMonitor(monIdx);
+        else setMonitor(monIdx);
+        // Helper expects monitorIndex (0-based) and which pane to change.
+        socketRef.current?.emit('switch-monitor', { sessionId, monitorIndex: monIdx, pane });
     }, [sessionId]);
+
+    /* ---------- Split view toggle ---------- */
+    const toggleSplit = useCallback(() => {
+        setSplitView(prev => {
+            const next = !prev;
+            socketRef.current?.emit('set-split', { sessionId, enabled: next, monitorIndex: secondMonitor });
+            return next;
+        });
+    }, [sessionId, secondMonitor]);
+
+    // When the split pane mounts/unmounts, (re)attach the correct streams.
+    useEffect(() => { applyTrackRouting(); }, [isSplitView, monitors.length, applyTrackRouting]);
+
+    /* ---------- Resizable split divider ---------- */
+    const startSplitDrag = useCallback((e) => {
+        e.preventDefault();
+        const container = e.currentTarget.parentElement;
+        if (!container) return;
+        const onMove = (ev) => {
+            const rect = container.getBoundingClientRect();
+            if (!rect.width) return;
+            let r = (ev.clientX - rect.left) / rect.width;
+            r = Math.max(0.15, Math.min(0.85, r));
+            setSplitRatio(r);
+        };
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    }, []);
 
     /* ---------- Quality switch ---------- */
     const switchQuality = useCallback((preset) => {
@@ -650,20 +714,41 @@ export default function SessionView({ user }) {
                 </div>
 
                 <div className="toolbar-center">
-                    {/* Monitor selector */}
+                    {/* Monitor selector — main pane */}
                     {monitors.length > 0 && (
                         <div className="monitor-selector">
+                            {isSplitView && <span className="monitor-pane-label">Main</span>}
                             {monitors.map((m) => (
                                 <button
                                     key={m.index}
                                     className={`monitor-btn ${selectedMonitor === m.index ? 'active' : ''}`}
-                                    onClick={() => switchMonitor(m.index)}
+                                    onClick={() => switchMonitor(m.index, 'main')}
                                     title={`${m.label}${m.width ? ` (${m.width}x${m.height})` : ''}`}
                                 >
                                     <span className="monitor-num">{m.index + 1}</span>
                                     <span className="monitor-desc">
                                         {m.primary ? 'Primary' : m.label.replace(/^Display\s*/i, '').replace(/^Screen\s*/i, 'Scr ') || `#${m.index + 1}`}
                                         {m.width ? ` ${m.width}x${m.height}` : ''}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Monitor selector — second (split) pane */}
+                    {isSplitView && monitors.length > 1 && (
+                        <div className="monitor-selector monitor-selector-second">
+                            <span className="monitor-pane-label">2nd</span>
+                            {monitors.map((m) => (
+                                <button
+                                    key={m.index}
+                                    className={`monitor-btn ${secondMonitor === m.index ? 'active' : ''}`}
+                                    onClick={() => switchMonitor(m.index, 'second')}
+                                    title={`${m.label}${m.width ? ` (${m.width}x${m.height})` : ''}`}
+                                >
+                                    <span className="monitor-num">{m.index + 1}</span>
+                                    <span className="monitor-desc">
+                                        {m.primary ? 'Primary' : m.label.replace(/^Display\s*/i, '').replace(/^Screen\s*/i, 'Scr ') || `#${m.index + 1}`}
                                     </span>
                                 </button>
                             ))}
@@ -719,7 +804,8 @@ export default function SessionView({ user }) {
 
                     <button
                         className={`toolbar-btn ${isSplitView ? 'active' : ''}`}
-                        onClick={() => setSplitView(s => !s)}
+                        onClick={toggleSplit}
+                        disabled={monitors.length < 2}
                         title="Split view"
                     >
                         <span className="tb-icon">{'\u2B1B'}</span>
@@ -806,6 +892,9 @@ export default function SessionView({ user }) {
                     className="video-container"
                     style={{
                         transform: `scale(${zoom}) translate(${panOffset.x}px, ${panOffset.y}px)`,
+                        ...(isSplitView && monitors.length > 1
+                            ? { flex: `0 0 ${splitRatio * 100}%`, maxWidth: `${splitRatio * 100}%` }
+                            : {}),
                     }}
                 >
                     {vncFallback ? (
@@ -848,22 +937,26 @@ export default function SessionView({ user }) {
                     )}
                 </div>
 
-                {/* Split view: second monitor */}
+                {/* Resizable divider */}
                 {isSplitView && monitors.length > 1 && (
-                    <div className="video-container split-secondary">
-                        <div className="split-label">
-                            Monitor {monitors.find(m => m.index !== selectedMonitor)?.index + 1 || 2}
-                            {' \u2013 '}click to switch
+                    <div className="split-divider" onMouseDown={startSplitDrag} title="Drag to resize" />
+                )}
+
+                {/* Split view: second monitor (live feed) */}
+                {isSplitView && monitors.length > 1 && (
+                    <div
+                        className="video-container split-secondary"
+                        style={{ flex: `0 0 ${(1 - splitRatio) * 100}%`, maxWidth: `${(1 - splitRatio) * 100}%` }}
+                    >
+                        <div className="split-badge">
+                            Monitor {(monitors.find(m => m.index === secondMonitor)?.index ?? secondMonitor) + 1}
                         </div>
                         <video
                             ref={splitVideoRef}
                             className="remote-video"
                             autoPlay
                             playsInline
-                            onClick={() => {
-                                const other = monitors.find(m => m.index !== selectedMonitor);
-                                if (other) switchMonitor(other.index);
-                            }}
+                            muted
                         />
                     </div>
                 )}

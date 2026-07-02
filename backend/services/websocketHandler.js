@@ -623,6 +623,18 @@ class WebSocketHandler {
                 socket.to(`session-${data.sessionId}`).emit('set-stream-quality', data);
             }));
 
+            // Split view: technician enables/disables the second monitor feed
+            socket.on('set-split', requireTech((data) => {
+                if (!inJoinedSession(data)) return;
+                socket.to(`session-${data.sessionId}`).emit('set-split', data);
+            }));
+
+            // Track map: helper tells technician which media stream is main vs. second pane
+            socket.on('track-map', requireHelper((data) => {
+                if (!inJoinedSession(data)) return;
+                socket.to(`session-${data.sessionId}`).emit('track-map', data);
+            }));
+
             // Remote file browser: technician -> helper (forward to session room)
             socket.on('list-remote-dir', requireTech((data) => {
                 if (!inJoinedSession(data)) return;

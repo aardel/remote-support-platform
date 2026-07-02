@@ -630,7 +630,7 @@ ipcMain.handle('helper:decline-pending', async (_event, sessionId) => {
 
 ipcMain.handle('helper:get-sources', async () => {
   const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 150, height: 150 } });
-  return sources.map(s => ({ id: s.id, name: s.name, thumbnail: s.thumbnail.toDataURL() }));
+  return sources.map(s => ({ id: s.id, name: s.name, display_id: s.display_id, thumbnail: s.thumbnail.toDataURL() }));
 });
 
 ipcMain.handle('helper:get-display-info', (_event, displayIndex) => {
@@ -639,11 +639,54 @@ ipcMain.handle('helper:get-display-info', (_event, displayIndex) => {
   return { width: d.size.width, height: d.size.height, scaleFactor: d.scaleFactor };
 });
 
-ipcMain.handle('helper:get-all-displays', () => {
+// Unified monitor list: each screen display matched to its desktopCapturer
+// source by display_id (NOT array index — those two lists can be ordered
+// differently). Reports physical resolution (size * scaleFactor) so labels
+// match what is actually captured. Ordered primary-first, then left-to-right,
+// so "Monitor 1" is the primary display.
+async function buildMonitors() {
   const primary = screen.getPrimaryDisplay();
-  return screen.getAllDisplays().map((d, i) => ({
-    index: i, width: d.size.width, height: d.size.height, primary: d.id === primary.id, label: d.label || `Display ${i + 1}`
-  }));
+  const displays = screen.getAllDisplays();
+  const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } });
+
+  const usedSourceIds = new Set();
+  const matchSource = (d, i) => {
+    // Prefer exact display_id match (Electron guarantees this correspondence).
+    let src = sources.find(s => s.display_id && String(s.display_id) === String(d.id) && !usedSourceIds.has(s.id));
+    // Fall back to positional match only if display_id is unavailable.
+    if (!src) src = sources.find(s => !usedSourceIds.has(s.id)) || sources[i];
+    if (src) usedSourceIds.add(src.id);
+    return src;
+  };
+
+  const list = displays.map((d, i) => {
+    const src = matchSource(d, i);
+    const sf = d.scaleFactor || 1;
+    return {
+      id: d.id,
+      sourceId: src ? src.id : null,
+      width: Math.round(d.size.width * sf),
+      height: Math.round(d.size.height * sf),
+      scaleFactor: sf,
+      primary: d.id === primary.id,
+      x: d.bounds.x,
+      y: d.bounds.y,
+      label: (src && src.name) || d.label || `Display ${i + 1}`
+    };
+  });
+
+  // Primary first, then left-to-right / top-to-bottom.
+  list.sort((a, b) => (b.primary - a.primary) || (a.x - b.x) || (a.y - b.y));
+  return list.map((m, i) => ({ ...m, index: i }));
+}
+
+ipcMain.handle('helper:get-monitors', async () => {
+  try { return await buildMonitors(); } catch (_) { return []; }
+});
+
+ipcMain.handle('helper:get-all-displays', async () => {
+  // Back-compat alias — same unified list.
+  try { return await buildMonitors(); } catch (_) { return []; }
 });
 
 // Socket connection
@@ -732,6 +775,7 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
     });
     socket.on('switch-monitor', (data) => { if (mainWindow) mainWindow.webContents.send('signaling:switch-monitor', data); });
     socket.on('set-stream-quality', (data) => { if (mainWindow) mainWindow.webContents.send('signaling:set-stream-quality', data); });
+    socket.on('set-split', (data) => { if (mainWindow) mainWindow.webContents.send('signaling:set-split', data); });
 
     socket.on('chat-message', (data) => {
       chatHistory.push(data);

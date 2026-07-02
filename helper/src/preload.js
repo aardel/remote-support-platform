@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('helperApi', {
   getSources: () => ipcRenderer.invoke('helper:get-sources'),
   getDisplayInfo: (displayIndex) => ipcRenderer.invoke('helper:get-display-info', displayIndex),
   getAllDisplays: () => ipcRenderer.invoke('helper:get-all-displays'),
+  getMonitors: () => ipcRenderer.invoke('helper:get-monitors'),
 
   // Socket.io signaling APIs
   socketConnect: (sessionId) => ipcRenderer.invoke('helper:socket-connect', sessionId),
@@ -104,6 +105,13 @@ contextBridge.exposeInMainWorld('helperApi', {
     const h = (_event, data) => callback(data);
     ipcRenderer.on('signaling:set-stream-quality', h);
     return () => ipcRenderer.removeListener('signaling:set-stream-quality', h);
+  },
+
+  // Split view: technician enables/disables/points the second monitor feed
+  onSetSplit: (callback) => {
+    const h = (_event, data) => callback(data);
+    ipcRenderer.on('signaling:set-split', h);
+    return () => ipcRenderer.removeListener('signaling:set-split', h);
   },
 
   // Chat

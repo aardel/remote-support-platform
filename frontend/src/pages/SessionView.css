@@ -336,8 +336,21 @@
 }
 
 .session-main.split > .video-container {
-  flex: 1;
-  max-width: 50%;
+  min-width: 0; /* width is driven by inline flex-basis from the split ratio */
+}
+
+/* Draggable divider between the two split panes */
+.split-divider {
+  flex: 0 0 6px;
+  align-self: stretch;
+  background: #334155;
+  cursor: col-resize;
+  transition: background 0.15s;
+  z-index: 5;
+}
+.split-divider:hover,
+.split-divider:active {
+  background: #3b82f6;
 }
 
 /* ── Video container ── */
@@ -371,20 +384,35 @@
   cursor: crosshair;
 }
 
-/* Split secondary */
+/* Split secondary — a live feed of the second monitor */
 .split-secondary {
-  border-left: 2px solid #334155;
-  cursor: pointer;
   position: relative;
 }
 
-.split-secondary .remote-video {
-  opacity: 0.7;
-  transition: opacity 0.2s;
+/* Small badge naming which monitor the second pane shows */
+.split-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 12px;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.75);
+  padding: 4px 10px;
+  border-radius: 6px;
+  z-index: 3;
+  pointer-events: none;
 }
 
-.split-secondary:hover .remote-video {
-  opacity: 1;
+/* "Main" / "2nd" labels in front of each monitor selector row */
+.monitor-pane-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  margin-right: 4px;
+  align-self: center;
+}
+.monitor-selector-second {
+  opacity: 0.95;
 }
 
 .split-label {
