@@ -8,6 +8,7 @@ const { requireAuth, attachUser } = require('../middleware/sessionAuth');
 const { geolocate, normalizeIp } = require('../services/geolocate');
 const { signHelperToken, verifyAgentToken } = require('../utils/agentTokens');
 const { rateLimit } = require('../middleware/rateLimit');
+const AuditLog = require('../models/AuditLog');
 
 // Extract and verify a helper/device bearer token scoped to req.params.sessionId.
 // Returns the token payload or null.
@@ -274,6 +275,13 @@ router.post('/register', rateLimit({ windowMs: 60 * 1000, max: 30 }), async (req
                 allowUnattended: allowUnattended !== false
             });
         }
+
+        AuditLog.log('session_connected', {
+            sessionId,
+            deviceId: deviceId || null,
+            actor: enrichedClientInfo?.hostname || 'customer',
+            detail: { attended: allowUnattended === false, os: clientInfo?.os }
+        });
         
         res.json({
             success: true,
@@ -501,6 +509,8 @@ router.delete('/:sessionId', requireAuth, async (req, res) => {
         if (io) {
             io.to('technicians').emit('session-ended', { sessionId });
         }
+
+        AuditLog.log('session_ended', { sessionId, actor: req.user?.username || 'technician' });
 
         res.json({ success: true, message: 'Session deleted' });
     } catch (error) {

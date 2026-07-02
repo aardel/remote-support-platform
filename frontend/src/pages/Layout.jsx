@@ -11,6 +11,7 @@ const NAV_ITEMS = [
     { to: '/sessions', icon: '🔗', label: 'Active Sessions' },
     { to: '/devices', icon: '💻', label: 'Registered Devices' },
     { to: '/cases', icon: '🧾', label: 'Online Cases' },
+    { to: '/audit', icon: '🛡️', label: 'Audit Log' },
     { to: '/statistics', icon: '📊', label: 'Statistics' },
     { to: '/helper-templates', icon: '📦', label: 'Helper Templates' },
     { to: '/dashboard/classic', icon: '📋', label: 'Classic Dashboard' },

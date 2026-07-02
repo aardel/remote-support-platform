@@ -79,7 +79,13 @@ router.post('/upload', rateLimit({ windowMs: 60 * 1000, max: 60 }), upload.singl
         if (io) {
             io.to(`session-${sessionId}`).emit('file-available', fileRecord);
         }
-        
+
+        require('../models/AuditLog').log('file_transfer', {
+            sessionId,
+            actor: (direction || 'technician-to-user') === 'user-to-technician' ? 'customer' : 'technician',
+            detail: { name: file.originalname, size: file.size, direction: direction || 'technician-to-user' }
+        });
+
         res.json({
             success: true,
             fileId: fileRecord.id,

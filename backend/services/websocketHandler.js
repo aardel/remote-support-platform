@@ -2,6 +2,7 @@ const { Server } = require('socket.io');
 const SessionService = require('./sessionService');
 const sessionStore = require('./sessionStore');
 const Device = require('../models/Device');
+const AuditLog = require('../models/AuditLog');
 const { verifyAgentToken } = require('../utils/agentTokens');
 
 async function safeUpdateSession(sessionId, updates) {
@@ -365,6 +366,7 @@ class WebSocketHandler {
                     });
                     // Notify helper (and others) so they can show who is connected
                     socket.to(`session-${sessionId}`).emit('technician-joined', { sessionId, technicianId: techId, technicianName: techName, technicianSocketId: socket.id });
+                    AuditLog.log('technician_joined', { sessionId, actor: techName });
                 }
 
                 // If technician joining, tell them whether helper is already online
@@ -640,6 +642,7 @@ class WebSocketHandler {
             socket.on('connection-declined', requireHelper((data) => {
                 if (!inJoinedSession(data)) return;
                 socket.to(`session-${data.sessionId}`).emit('connection-declined', data);
+                AuditLog.log('connection_declined', { sessionId: data.sessionId, actor: 'customer' });
             }));
 
             // Remote file browser: technician -> helper (forward to session room)
