@@ -64,6 +64,7 @@ export default function SessionView({ user }) {
     const [selectedMonitor, setMonitor] = useState(0);
     const [secondMonitor, setSecondMonitor] = useState(1);
     const [splitRatio, setSplitRatio] = useState(0.5); // main pane width fraction
+    const [declined, setDeclined] = useState(false);
     const [monitors, setMonitors] = useState(DEFAULT_MONITORS);
     const [viewing, setViewing] = useState(true);
     const [vncFallback, setVncFallback] = useState(false);
@@ -166,6 +167,14 @@ export default function SessionView({ user }) {
             if (typeof data.secondMonitor === 'number') setSecondMonitor(data.secondMonitor);
             applyTrackRouting();
         });
+
+        // Attended mode: the customer declined this connection — no media is sent.
+        socket.on('connection-declined', () => {
+            setDeclined(true);
+            setPeerConnected(false);
+        });
+        // If a peer connection is (re)established, clear any prior decline state.
+        socket.on('session-connected', () => setDeclined(false));
 
         // Chat from helper
         socket.on('chat-message', (msg) => {
@@ -923,13 +932,18 @@ export default function SessionView({ user }) {
                         />
                     )}
 
-                    {!peerConnected && !vncFallback && (
+                    {declined ? (
+                        <div className="video-overlay">
+                            <p className="declined-msg">🚫 The user declined the remote session.</p>
+                            <p className="declined-sub">No screen is shared until they accept a request.</p>
+                        </div>
+                    ) : !peerConnected && !vncFallback && (
                         <div className="video-overlay">
                             <div className="spinner" />
                             <p>
                                 {connected
                                     ? helperOnline
-                                        ? 'Establishing peer connection...'
+                                        ? 'Waiting for the user to approve the connection...'
                                         : 'Waiting for helper to connect...'
                                     : 'Connecting to server...'}
                             </p>

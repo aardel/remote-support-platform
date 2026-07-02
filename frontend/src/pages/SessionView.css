@@ -829,3 +829,15 @@ body.platform-bar-padded .session-view {
     display: none;
   }
 }
+
+/* Attended-mode: customer declined the connection */
+.declined-msg {
+  font-size: 16px;
+  font-weight: 600;
+  color: #f87171;
+  margin-bottom: 6px;
+}
+.declined-sub {
+  font-size: 13px;
+  color: #94a3b8;
+}

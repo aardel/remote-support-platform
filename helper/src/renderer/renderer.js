@@ -51,6 +51,18 @@ const secondMs = new MediaStream();
 // Periodic update check
 let updateCheckTimer = null;
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // re-check every 4 hours
+
+// Attended-mode consent gating: technicians the customer approved this session.
+const approvedTechnicians = new Set();   // technician socketIds
+const approvalPending = new Set();        // dialogs currently open, by socketId
+let approvalChain = Promise.resolve();    // serialize native dialogs
+
+// Unattended auto-off: turning it on grants access for at most 1 hour of idle
+// time, then it flips back off automatically (for safety).
+let unattendedOnSince = 0;
+let unattendedTimerInterval = null;
+const UNATTENDED_MAX_MS = 60 * 60 * 1000; // 1 hour
+const unattendedTimerEl = document.getElementById('unattendedTimer');
 let capabilities = { robotjs: false, platform: 'unknown' };
 let logVisible = false;
 let connectedTechnicians = [];
@@ -242,18 +254,16 @@ async function init() {
     log(`Could not get capabilities: ${e.message}`);
   }
 
-  // Restore the persisted "Allow unattended connections" preference before we
-  // use it. The checkbox defaults to checked in HTML, but a reload (e.g. when a
-  // technician requests a session) must not silently flip the user's choice
-  // back on — persist and reload it, the same way autoStart is handled below.
-  if (window.helperApi.getAllowUnattended) {
-    try { allowUnattended.checked = await window.helperApi.getAllowUnattended(); } catch (_) {}
+  // Safety: "Allow unattended connections" always starts OFF on launch. When
+  // the user turns it on it auto-disables after 1 hour of idle time (see the
+  // countdown next to the checkbox). It is never restored as "on" across
+  // restarts.
+  allowUnattended.checked = false;
+  if (window.helperApi.setAllowUnattended) {
+    window.helperApi.setAllowUnattended(false).catch(() => {});
   }
-  allowUnattended.addEventListener('change', () => {
-    if (window.helperApi.setAllowUnattended) {
-      window.helperApi.setAllowUnattended(allowUnattended.checked).catch(() => {});
-    }
-  });
+  stopUnattendedTimer();
+  allowUnattended.addEventListener('change', onUnattendedToggle);
 
   setStatusUI('Getting session...', 'dot-amber');
   const info = await window.helperApi.getInfo();
@@ -313,30 +323,72 @@ async function init() {
     checkForUpdateAndShowBanner().catch(() => {});
   }, UPDATE_CHECK_INTERVAL_MS);
 
-  // Auto-start support if unattended mode is enabled and session is ready
-  if (sessionReady && allowUnattended.checked) {
-    log('Auto-starting (unattended mode)...');
+  // Start support when unattended is on (always ready), or when a technician
+  // requested this session. Streaming to each technician is still gated on the
+  // customer's approval per connection (attended mode), so nothing is shown
+  // until they accept.
+  if (sessionReady && (allowUnattended.checked || fromPending)) {
+    if (allowUnattended.checked) log('Auto-starting (unattended mode)...');
+    else log('Technician requested a session — starting (approval required to view).');
     startBtn.click();
-  } else if (sessionReady && fromPending) {
-    // Attended: a technician requested this session but unattended is off.
-    // Ask the user to accept or decline via a native dialog before connecting.
-    log('Technician requested a session — asking for your approval...');
-    setStatusUI('Support requested — awaiting your approval', 'dot-amber');
-    let approved = false;
-    try {
-      approved = window.helperApi.promptApproval ? await window.helperApi.promptApproval() : false;
-    } catch (_) {}
-    if (approved) {
-      log('You approved the request. Connecting...');
-      startBtn.click();
-    } else {
-      log('You declined the request.');
-      setStatusUI('Request declined', 'dot-red');
-      if (window.helperApi.declinePending && currentSessionId) {
-        try { await window.helperApi.declinePending(currentSessionId); } catch (_) {}
-      }
-    }
   }
+}
+
+/* ---------- Unattended toggle + auto-off timer ---------- */
+function onUnattendedToggle() {
+  const on = allowUnattended.checked;
+  if (window.helperApi.setAllowUnattended) {
+    window.helperApi.setAllowUnattended(on).catch(() => {});
+  }
+  if (on) startUnattendedTimer();
+  else stopUnattendedTimer();
+}
+
+function startUnattendedTimer() {
+  unattendedOnSince = Date.now();
+  updateUnattendedTimerLabel();
+  if (unattendedTimerInterval) clearInterval(unattendedTimerInterval);
+  unattendedTimerInterval = setInterval(tickUnattendedTimer, 15000);
+}
+
+function stopUnattendedTimer() {
+  if (unattendedTimerInterval) { clearInterval(unattendedTimerInterval); unattendedTimerInterval = null; }
+  unattendedOnSince = 0;
+  if (unattendedTimerEl) unattendedTimerEl.textContent = '';
+}
+
+function tickUnattendedTimer() {
+  if (!allowUnattended.checked) { stopUnattendedTimer(); return; }
+  const elapsed = Date.now() - unattendedOnSince;
+  // Auto-off only when idle — never cut off an active session mid-connection.
+  if (elapsed >= UNATTENDED_MAX_MS && !isConnected) {
+    allowUnattended.checked = false;
+    if (window.helperApi.setAllowUnattended) window.helperApi.setAllowUnattended(false).catch(() => {});
+    stopUnattendedTimer();
+    log('Unattended access auto-disabled after 1 hour.');
+    return;
+  }
+  updateUnattendedTimerLabel();
+}
+
+function updateUnattendedTimerLabel() {
+  if (!unattendedTimerEl) return;
+  if (!allowUnattended.checked || !unattendedOnSince) { unattendedTimerEl.textContent = ''; return; }
+  const remaining = UNATTENDED_MAX_MS - (Date.now() - unattendedOnSince);
+  if (remaining <= 0) {
+    unattendedTimerEl.textContent = isConnected ? '· turns off after this session' : '';
+  } else {
+    unattendedTimerEl.textContent = `· auto-off in ${Math.ceil(remaining / 60000)} min`;
+  }
+}
+
+/* ---------- Attended consent: prompt the customer before streaming ---------- */
+function requestCustomerApproval(techName) {
+  const run = approvalChain.then(() =>
+    window.helperApi.promptApproval ? window.helperApi.promptApproval({ technicianName: techName }) : Promise.resolve(false)
+  );
+  approvalChain = run.catch(() => {});
+  return run;
 }
 
 async function checkForUpdateAndShowBanner() {
@@ -679,6 +731,9 @@ async function connectSignaling(sessionId) {
       }
       const socketId = data.technicianSocketId;
       if (socketId) {
+        // Revoke this technician's approval so a rejoin must be approved again.
+        approvedTechnicians.delete(socketId);
+        approvalPending.delete(socketId);
         const pc = peerConnectionsBySocketId.get(socketId);
         if (pc) {
           pc.close();
@@ -827,6 +882,27 @@ async function applyInitialQuality(pc) {
 
 async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
   if (!mediaStream) return;
+
+  // Attended mode: do NOT stream to this technician until the customer approves.
+  // A decline means no peer connection is created at all — nothing is shown.
+  if (!allowUnattended.checked && !approvedTechnicians.has(targetSocketId)) {
+    if (approvalPending.has(targetSocketId) || peerConnectionsBySocketId.has(targetSocketId)) return;
+    approvalPending.add(targetSocketId);
+    setStatusUI('A technician is requesting access — awaiting your approval', 'dot-amber');
+    const techName = (connectedTechnicians.find(t => t.technicianSocketId === targetSocketId) || {}).technicianName || 'A technician';
+    let approved = false;
+    try { approved = await requestCustomerApproval(techName); }
+    finally { approvalPending.delete(targetSocketId); }
+    if (!approved) {
+      log('You declined the connection — the technician was not given access.');
+      setStatusUI(isConnected ? 'Connected' : 'Ready', isConnected ? 'dot-green' : '');
+      window.helperApi.socketEmit('connection-declined', { sessionId, targetSocketId });
+      return;
+    }
+    approvedTechnicians.add(targetSocketId);
+    log('You approved the connection.');
+  }
+
   log(`Creating WebRTC peer connection for technician ${targetSocketId}...`);
 
   const rtcConfig = {
@@ -1135,6 +1211,8 @@ async function disconnect() {
       secondaryStream = null;
     }
     splitEnabled = false;
+    approvedTechnicians.clear();
+    approvalPending.clear();
     peerConnectionsBySocketId.forEach(pc => pc.close());
     peerConnectionsBySocketId.clear();
     if (peerConnection) {

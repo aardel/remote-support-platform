@@ -341,20 +341,13 @@ router.post('/:sessionId/connect', requireAuth, async (req, res) => {
         if (!session) {
             return res.status(404).json({ error: 'Session not found' });
         }
-        
-        // Use approval handler
-        const approvalHandler = req.app.get('approvalHandler');
-        const approval = await approvalHandler.requestConnectionApproval(sessionId, {
-            id: technicianId,
-            name: resolvedName
-        });
-        
-        res.json({
-            success: true,
-            approved: approval.approved,
-            autoApproved: approval.autoApproved || false,
-            reason: approval.reason
-        });
+
+        // Consent is enforced at the media layer: the helper does not stream to
+        // the technician until the customer approves (attended mode), and a
+        // decline prevents any media. So allow the dashboard to open the viewer
+        // here — the approval prompt happens on the customer's screen when the
+        // technician actually joins.
+        res.json({ success: true, approved: true, autoApproved: session.allow_unattended !== false });
     } catch (error) {
         console.error('Error requesting connection:', error);
         res.status(500).json({ error: error.message });

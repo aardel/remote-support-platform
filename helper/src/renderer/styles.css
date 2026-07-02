@@ -482,3 +482,11 @@ body {
   margin-left: auto;
   margin-right: auto;
 }
+
+/* Auto-off countdown next to "Allow unattended connections" */
+.unattended-timer {
+  margin-left: 8px;
+  font-size: 11px;
+  color: #f59e0b;
+  white-space: nowrap;
+}

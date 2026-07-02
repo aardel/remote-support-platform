@@ -635,6 +635,13 @@ class WebSocketHandler {
                 socket.to(`session-${data.sessionId}`).emit('track-map', data);
             }));
 
+            // Helper declined a technician's connection (attended mode) — the
+            // customer denied consent, so no media is/was sent. Tell the viewer.
+            socket.on('connection-declined', requireHelper((data) => {
+                if (!inJoinedSession(data)) return;
+                socket.to(`session-${data.sessionId}`).emit('connection-declined', data);
+            }));
+
             // Remote file browser: technician -> helper (forward to session room)
             socket.on('list-remote-dir', requireTech((data) => {
                 if (!inJoinedSession(data)) return;
