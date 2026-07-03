@@ -48,6 +48,7 @@ export default function SessionView({ user }) {
     const chatEndRef = useRef(null);
     const splitVideoRef = useRef(null);
     const trackMapRef = useRef(null);              // { main, second, mainMonitor, secondMonitor, splitEnabled }
+    const hadConnectedRef = useRef(false);         // distinguishes "reconnecting" from the initial connect
     const remoteStreamsRef = useRef(new Map());    // streamId -> MediaStream
 
     // Connection state
@@ -123,6 +124,7 @@ export default function SessionView({ user }) {
         socket.on('session-ended', () => {
             setError('The support session has ended.');
             setPeerConnected(false);
+            hadConnectedRef.current = false;
         });
         socket.on('vnc-ready', () => {
             setVncFallback(true);
@@ -265,9 +267,14 @@ export default function SessionView({ user }) {
             setIceState(pc.iceConnectionState);
             if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
                 setPeerConnected(true);
+                hadConnectedRef.current = true;
             }
             if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
                 setPeerConnected(false);
+                // The helper attempts its own reconnect (ICE restart + fresh offer)
+                // on a transient drop — a new offer will arrive here shortly and
+                // handleIncomingOffer rebuilds the connection. No action needed
+                // beyond showing a distinct "reconnecting" message (below).
             }
         };
 
@@ -941,11 +948,13 @@ export default function SessionView({ user }) {
                         <div className="video-overlay">
                             <div className="spinner" />
                             <p>
-                                {connected
-                                    ? helperOnline
-                                        ? 'Waiting for the user to approve the connection...'
-                                        : 'Waiting for helper to connect...'
-                                    : 'Connecting to server...'}
+                                {hadConnectedRef.current
+                                    ? 'Connection interrupted — reconnecting...'
+                                    : connected
+                                        ? helperOnline
+                                            ? 'Waiting for the user to approve the connection...'
+                                            : 'Waiting for helper to connect...'
+                                        : 'Connecting to server...'}
                             </p>
                         </div>
                     )}

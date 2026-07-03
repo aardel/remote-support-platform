@@ -869,6 +869,7 @@ async function connectSignaling(sessionId) {
         approvalPending.delete(socketId);
         const pc = peerConnectionsBySocketId.get(socketId);
         if (pc) {
+          clearReconnectState(pc); // explicit leave — no reconnect attempt should follow
           pc.close();
           peerConnectionsBySocketId.delete(socketId);
           if (peerConnection === pc) peerConnection = peerConnectionsBySocketId.values().next().value || null;
@@ -948,6 +949,63 @@ function boostSdpBitrate(sdp) {
     }
   }
   return out.join('\r\n');
+}
+
+// Network-drop resilience: a transient blip should not tear down the session
+// or require re-approval. On 'disconnected' we wait a grace period (ICE often
+// recovers on its own); if it doesn't, we try ICE restarts (fresh candidates
+// on the SAME peer connection — tracks/datachannels are preserved) before
+// giving up and falling back to the previous teardown behavior.
+const RECONNECT_GRACE_MS = 8000;
+const RECONNECT_MAX_ATTEMPTS = 3;
+const RECONNECT_RETRY_MS = 6000;
+
+async function sendOfferOnPc(pc, sessionId, targetSocketId) {
+  const offer = await pc.createOffer();
+  const boostedOffer = new RTCSessionDescription({ type: offer.type, sdp: boostSdpBitrate(offer.sdp) });
+  await pc.setLocalDescription(boostedOffer);
+  await window.helperApi.socketSendOffer({
+    sessionId,
+    offer: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
+    role: 'helper',
+    targetSocketId
+  });
+}
+
+function clearReconnectState(pc) {
+  if (pc._reconnectTimer) { clearTimeout(pc._reconnectTimer); pc._reconnectTimer = null; }
+  pc._reconnectAttempts = 0;
+}
+
+// Called when a technician's pc goes disconnected/failed. Schedules a grace
+// period, then attempts ICE restarts; onGiveUp runs only if all attempts fail.
+function handlePcInterrupted(pc, sessionId, targetSocketId, onGiveUp) {
+  if (pc._reconnectTimer) return; // already handling this interruption
+  pc._reconnectAttempts = pc._reconnectAttempts || 0;
+
+  const attempt = async () => {
+    pc._reconnectTimer = null;
+    if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') return; // recovered
+    if (pc.signalingState === 'closed') return; // pc was closed elsewhere (e.g. technician-left)
+
+    if (pc._reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
+      log(`Reconnect failed after ${RECONNECT_MAX_ATTEMPTS} attempts for ${targetSocketId}.`);
+      onGiveUp();
+      return;
+    }
+    pc._reconnectAttempts++;
+    log(`Network drop detected — attempting to reconnect (${pc._reconnectAttempts}/${RECONNECT_MAX_ATTEMPTS})...`);
+    try {
+      if (typeof pc.restartIce === 'function') pc.restartIce();
+      await sendOfferOnPc(pc, sessionId, targetSocketId);
+    } catch (e) {
+      log(`Reconnect attempt failed: ${e.message}`);
+    }
+    // Schedule the next check/attempt in case this one doesn't land either.
+    pc._reconnectTimer = setTimeout(attempt, RECONNECT_RETRY_MS);
+  };
+
+  pc._reconnectTimer = setTimeout(attempt, RECONNECT_GRACE_MS);
 }
 
 // Every peer gets two video senders: the main pane (advertised under mainMs's
@@ -1194,31 +1252,25 @@ async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
   pc.oniceconnectionstatechange = () => {
     const anyConnected = Array.from(peerConnectionsBySocketId.values()).some(p => p.iceConnectionState === 'connected');
     if (anyConnected) {
+      clearReconnectState(pc);
       if (!isConnected) startConnectedTimer();
       isConnected = true;
       startBtn.textContent = 'Stop Support';
       startBtn.className = 'btn-primary btn-stop';
       startBtn.disabled = false;
     } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
-      const stillAny = Array.from(peerConnectionsBySocketId.values()).some(p => p.iceConnectionState === 'connected');
-      if (!stillAny) handleAllTechniciansGone();
+      // Don't tear down immediately — try to recover from a transient network
+      // drop first (no re-approval needed; this is the same peer connection).
+      handlePcInterrupted(pc, sessionId, targetSocketId, () => {
+        peerConnectionsBySocketId.delete(targetSocketId);
+        if (peerConnection === pc) peerConnection = peerConnectionsBySocketId.values().next().value || null;
+        const stillAny = Array.from(peerConnectionsBySocketId.values()).some(p => p.iceConnectionState === 'connected');
+        if (!stillAny) handleAllTechniciansGone();
+      });
     }
   };
 
-  const offer = await pc.createOffer();
-  // Boost SDP bitrate before setting local description
-  const boostedOffer = new RTCSessionDescription({
-    type: offer.type,
-    sdp: boostSdpBitrate(offer.sdp)
-  });
-  await pc.setLocalDescription(boostedOffer);
-
-  await window.helperApi.socketSendOffer({
-    sessionId,
-    offer: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
-    role: 'helper',
-    targetSocketId
-  });
+  await sendOfferOnPc(pc, sessionId, targetSocketId);
   log(`Offer sent to technician ${targetSocketId}`);
   await ensureMonitors();
   emitCapabilities(sessionId);
@@ -1298,7 +1350,7 @@ function handleAllTechniciansGone() {
   connectedTechnicians = [];
   updateConnectedTechniciansUI();
   // Clean up dead peer connections but keep signaling + screen capture alive
-  peerConnectionsBySocketId.forEach(pc => pc.close());
+  peerConnectionsBySocketId.forEach(pc => { clearReconnectState(pc); pc.close(); });
   peerConnectionsBySocketId.clear();
   peerConnection = null;
   if (allowUnattended.checked && mediaStream) {
@@ -1332,7 +1384,7 @@ async function disconnect() {
     splitEnabled = false;
     approvedTechnicians.clear();
     approvalPending.clear();
-    peerConnectionsBySocketId.forEach(pc => pc.close());
+    peerConnectionsBySocketId.forEach(pc => { clearReconnectState(pc); pc.close(); });
     peerConnectionsBySocketId.clear();
     if (peerConnection) {
       peerConnection.close();
