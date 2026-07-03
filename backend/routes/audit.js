@@ -21,7 +21,7 @@ router.get('/stats', requireAuth, async (req, res) => {
         const days = parseInt(req.query.days, 10) || 7;
         const [week, today] = await Promise.all([AuditLog.stats(days), AuditLog.stats(1)]);
 
-        let activeSessions = 0, devices = 0, online = 0;
+        let activeSessions = 0, devices = 0, online = 0, versions = [];
         try {
             const a = await pool.query("SELECT COUNT(*)::int AS c FROM sessions WHERE status IN ('connected','waiting') AND expires_at > NOW()");
             activeSessions = a.rows[0].c;
@@ -30,8 +30,12 @@ router.get('/stats', requireAuth, async (req, res) => {
             const d = await pool.query("SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE last_seen > NOW() - interval '5 minutes')::int AS online FROM devices");
             devices = d.rows[0].total; online = d.rows[0].online;
         } catch (_) {}
+        try {
+            const v = await pool.query("SELECT COALESCE(helper_version, 'unknown') AS version, COUNT(*)::int AS count FROM devices GROUP BY helper_version ORDER BY count DESC");
+            versions = v.rows;
+        } catch (_) {}
 
-        res.json({ days, week, today, activeSessions, devices, online });
+        res.json({ days, week, today, activeSessions, devices, online, versions });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

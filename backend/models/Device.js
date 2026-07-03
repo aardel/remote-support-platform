@@ -5,6 +5,7 @@ let schemaReady = null;
 function ensureSchema() {
     if (schemaReady) return schemaReady;
     schemaReady = pool.query('ALTER TABLE devices ADD COLUMN IF NOT EXISTS tag VARCHAR(100)')
+        .then(() => pool.query('ALTER TABLE devices ADD COLUMN IF NOT EXISTS helper_version VARCHAR(32)'))
         .catch((e) => { schemaReady = null; throw e; });
     return schemaReady;
 }
@@ -52,14 +53,17 @@ class Device {
             arch,
             lastIp,
             allowUnattended,
-            macAddress
+            macAddress,
+            helperVersion
         } = device;
+
+        try { await ensureSchema(); } catch (_) {}
 
         const query = `
             INSERT INTO devices (
                 device_id, technician_id, display_name, os, hostname, arch, last_ip,
-                allow_unattended, mac_address, last_seen, created_at, updated_at
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),NOW(),NOW())
+                allow_unattended, mac_address, helper_version, last_seen, created_at, updated_at
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),NOW(),NOW())
             ON CONFLICT (device_id) DO UPDATE SET
                 technician_id = COALESCE(EXCLUDED.technician_id, devices.technician_id),
                 display_name = COALESCE(EXCLUDED.display_name, devices.display_name),
@@ -69,6 +73,7 @@ class Device {
                 last_ip = COALESCE(EXCLUDED.last_ip, devices.last_ip),
                 allow_unattended = COALESCE(EXCLUDED.allow_unattended, devices.allow_unattended),
                 mac_address = COALESCE(EXCLUDED.mac_address, devices.mac_address),
+                helper_version = COALESCE(EXCLUDED.helper_version, devices.helper_version),
                 last_seen = NOW(),
                 updated_at = NOW()
             RETURNING *
@@ -83,7 +88,8 @@ class Device {
             arch || null,
             lastIp || null,
             typeof allowUnattended === 'boolean' ? allowUnattended : null,
-            macAddress || null
+            macAddress || null,
+            helperVersion ? String(helperVersion).slice(0, 32) : null
         ];
 
         const result = await pool.query(query, values);

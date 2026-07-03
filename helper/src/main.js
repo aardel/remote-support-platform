@@ -329,7 +329,8 @@ async function registerDeviceAndGetToken() {
       os: `${os.platform()} ${os.release()}`,
       hostname: os.hostname(),
       arch: os.arch(),
-      macAddress: getMacAddress()
+      macAddress: getMacAddress(),
+      version: app.getVersion()
     })
   });
   if (!res.ok) throw new Error(`Device register failed: ${res.status}`);

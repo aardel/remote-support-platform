@@ -59,10 +59,21 @@ export default function OpsPage() {
                             <span>Declines: <strong>{data?.today?.connection_declined || 0}</strong></span>
                             <span>Files: <strong>{data?.today?.file_transfer || 0}</strong></span>
                         </div>
-                        <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-                            Helper version distribution will appear here once the helper reports its
-                            version (next helper release).
-                        </p>
+                    </div>
+
+                    <div className="page-card" style={{ maxWidth: 520, marginTop: 14 }}>
+                        <div className="card-top"><span style={{ fontWeight: 600 }}>Helper versions</span></div>
+                        {(!data?.versions || data.versions.length === 0) ? (
+                            <p className="muted" style={{ fontSize: 12 }}>No devices yet.</p>
+                        ) : (
+                            <div className="card-meta" style={{ flexDirection: 'column', gap: 4 }}>
+                                {data.versions.map(v => (
+                                    <span key={v.version}>
+                                        <strong>{v.version === 'unknown' ? 'Unknown (pre-1.1.12)' : `v${v.version}`}</strong>: {v.count} device{v.count !== 1 ? 's' : ''}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </>
             )}

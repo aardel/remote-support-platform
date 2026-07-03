@@ -31,7 +31,8 @@ router.post('/register', rateLimit({ windowMs: 60 * 1000, max: 30 }), async (req
             hostname,
             arch,
             allowUnattended,
-            macAddress
+            macAddress,
+            version
         } = req.body;
 
         if (!deviceId) {
@@ -48,7 +49,8 @@ router.post('/register', rateLimit({ windowMs: 60 * 1000, max: 30 }), async (req
             arch,
             allowUnattended,
             lastIp: clientIp,
-            macAddress
+            macAddress,
+            helperVersion: version
         });
 
         // Async geolocation — don't block the response
