@@ -1,0 +1,44 @@
+# coturn config for the remote-support platform (managed by Claude).
+# Time-limited (REST API) credentials; the app signs usernames with the shared secret.
+
+realm=servicelc.com
+server-name=servicelc.com
+
+# STUN/TURN plain listener
+listening-port=3478
+# TURN over TLS (TURNS) — uses the existing Let's Encrypt cert for servicelc.com
+tls-listening-port=5349
+cert=/etc/letsencrypt/live/servicelc.com/fullchain.pem
+pkey=/etc/letsencrypt/live/servicelc.com/privkey.pem
+
+# Public address of this server (host networking)
+external-ip=173.249.10.40
+
+# Relay UDP port range (must be opened in the firewall for the UDP fast path)
+min-port=49160
+max-port=49200
+
+# Auth: only clients with a valid, time-limited credential may relay
+use-auth-secret
+static-auth-secret=__TURN_SECRET__
+
+# --- Security hardening: prevent this relay from reaching internal/private hosts ---
+no-loopback-peers
+no-multicast-peers
+denied-peer-ip=0.0.0.0-0.255.255.255
+denied-peer-ip=10.0.0.0-10.255.255.255
+denied-peer-ip=100.64.0.0-100.127.255.255
+denied-peer-ip=127.0.0.0-127.255.255.255
+denied-peer-ip=169.254.0.0-169.254.255.255
+denied-peer-ip=172.16.0.0-172.31.255.255
+denied-peer-ip=192.168.0.0-192.168.255.255
+denied-peer-ip=::1
+denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+denied-peer-ip=fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+
+# Abuse limits
+user-quota=12
+total-quota=1200
+no-cli
+fingerprint
+stale-nonce=600

@@ -167,6 +167,7 @@ app.get('/api/health', (req, res) => {
 });
 
 app.get('/api/turn-servers', (req, res) => {
+    const crypto = require('crypto');
     const servers = [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' }
@@ -175,8 +176,20 @@ app.get('/api/turn-servers', (req, res) => {
         .split(',')
         .map(s => s.trim())
         .filter(Boolean);
-    const username = process.env.TURN_USERNAME || '';
-    const credential = process.env.TURN_PASSWORD || process.env.TURN_CREDENTIAL || '';
+
+    const secret = process.env.TURN_SECRET || '';
+    let username = process.env.TURN_USERNAME || '';
+    let credential = process.env.TURN_PASSWORD || process.env.TURN_CREDENTIAL || '';
+
+    // Preferred: time-limited (coturn REST API) credentials derived from the
+    // shared secret — username is an expiry timestamp, credential is its HMAC.
+    if (secret) {
+        const ttl = 12 * 3600; // 12h validity
+        const expiry = Math.floor(Date.now() / 1000) + ttl;
+        username = String(expiry);
+        credential = crypto.createHmac('sha1', secret).update(username).digest('base64');
+    }
+
     for (const u of urls) {
         if (username && credential) {
             servers.push({ urls: u, username, credential });

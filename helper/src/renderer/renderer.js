@@ -52,6 +52,27 @@ const secondMs = new MediaStream();
 let updateCheckTimer = null;
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // re-check every 4 hours
 
+// ICE servers (STUN + TURN). Fetched from the server so TURN relay credentials
+// stay current; falls back to public STUN if the fetch fails (graceful — a
+// missing/unreachable TURN just means direct/STUN-only, as before).
+let iceServers = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' }
+];
+async function loadIceServers() {
+  try {
+    if (!config || !config.server) return;
+    const res = await fetch(`${config.server}/api/turn-servers`);
+    if (!res.ok) return;
+    const j = await res.json();
+    if (Array.isArray(j.servers) && j.servers.length) {
+      iceServers = j.servers;
+      const hasTurn = iceServers.some(s => String(s.urls || '').startsWith('turn'));
+      log(`ICE servers loaded (${iceServers.length}${hasTurn ? ', TURN available' : ', STUN only'})`);
+    }
+  } catch (e) { log(`ICE servers fetch failed: ${e.message}`); }
+}
+
 // Attended-mode consent gating: technicians the customer approved this session.
 const approvedTechnicians = new Set();   // technician socketIds
 const approvalPending = new Set();        // dialogs currently open, by socketId
@@ -360,6 +381,7 @@ async function init() {
   config = info.config;
   log(`Device ID: ${info.deviceId}`);
   log(`Server: ${config.server}`);
+  loadIceServers(); // fetch STUN/TURN (async; falls back to STUN until it returns)
 
   let sessionReady = false;
   let fromPending = false;
@@ -1016,16 +1038,7 @@ async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
 
   log(`Creating WebRTC peer connection for technician ${targetSocketId}...`);
 
-  const rtcConfig = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      // Plain TURN server placeholder - replace with actual credentials
-      // { urls: 'turn:turn.example.com:3478', username: 'user', credential: 'password' }
-    ]
-  };
-
-  const pc = new RTCPeerConnection(rtcConfig);
+  const pc = new RTCPeerConnection({ iceServers });
   peerConnectionsBySocketId.set(targetSocketId, pc);
   if (!peerConnection) peerConnection = pc;
 
@@ -1215,14 +1228,7 @@ async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
 
 async function createPeerConnection(sessionId) {
   log('Creating WebRTC peer connection...');
-  const rtcConfig = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
-    ]
-  };
-
-  peerConnection = new RTCPeerConnection(rtcConfig);
+  peerConnection = new RTCPeerConnection({ iceServers });
 
   addVideoTransceivers(peerConnection);
 
