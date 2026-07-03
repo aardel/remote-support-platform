@@ -61,6 +61,12 @@ export default function SessionView({ user }) {
     // Video / control
     const [isControlEnabled, setControlEnabled] = useState(true);
     const [helperCanControl, setHelperCanControl] = useState(true);
+    // Multi-technician: who else is viewing this session, and who currently
+    // drives the mouse/keyboard (enforced server-side; this is just the UI view).
+    const [otherTechnicians, setOtherTechnicians] = useState([]); // [{technicianId, technicianName, technicianSocketId}]
+    const [controllerSocketId, setControllerSocketId] = useState(null);
+    const [controllerName, setControllerName] = useState(null);
+    const [controlRequest, setControlRequest] = useState(null); // { requesterSocketId, requesterName }
     const [isSplitView, setSplitView] = useState(false);
     const [selectedMonitor, setMonitor] = useState(0);
     const [secondMonitor, setSecondMonitor] = useState(1);
@@ -177,6 +183,26 @@ export default function SessionView({ user }) {
         });
         // If a peer connection is (re)established, clear any prior decline state.
         socket.on('session-connected', () => setDeclined(false));
+
+        // Multi-technician presence + control handoff.
+        socket.on('technician-joined', (data) => {
+            if (data.technicianSocketId === socket.id) return; // that's me
+            setOtherTechnicians(prev =>
+                prev.some(t => t.technicianSocketId === data.technicianSocketId) ? prev
+                    : [...prev, { technicianId: data.technicianId, technicianName: data.technicianName, technicianSocketId: data.technicianSocketId }]
+            );
+        });
+        socket.on('technician-left', (data) => {
+            setOtherTechnicians(prev => prev.filter(t => t.technicianSocketId !== data.technicianSocketId));
+            setControlRequest(prev => (prev && prev.requesterSocketId === data.technicianSocketId) ? null : prev);
+        });
+        socket.on('control-changed', (data) => {
+            setControllerSocketId(data.controllerSocketId || null);
+            setControllerName(data.controllerName || null);
+        });
+        socket.on('control-requested', (data) => {
+            setControlRequest({ requesterSocketId: data.requesterSocketId, requesterName: data.requesterName });
+        });
 
         // Chat from helper
         socket.on('chat-message', (msg) => {
@@ -603,6 +629,19 @@ export default function SessionView({ user }) {
         socketRef.current?.emit('quick-action', { sessionId, action });
     }, [sessionId]);
 
+    /* ---------- Multi-technician control handoff ---------- */
+    const isController = !controllerSocketId || controllerSocketId === socketRef.current?.id;
+    const requestControl = useCallback(() => {
+        socketRef.current?.emit('request-control', { sessionId });
+    }, [sessionId]);
+    const grantControl = useCallback((targetSocketId) => {
+        socketRef.current?.emit('grant-control', { sessionId, targetSocketId });
+    }, [sessionId]);
+    const respondToControlRequest = useCallback((grant) => {
+        if (grant && controlRequest) grantControl(controlRequest.requesterSocketId);
+        setControlRequest(null);
+    }, [controlRequest, grantControl]);
+
     /* ---------- Chat ---------- */
     const sendChat = useCallback(() => {
         const text = chatInput.trim();
@@ -918,6 +957,41 @@ export default function SessionView({ user }) {
                             Helper reported control capability is unavailable, so this session is view-only.
                         </span>
                     )}
+                </div>
+            )}
+
+            {/* Multi-technician: only shown once a second technician actually joins —
+                invisible for the common single-technician session. */}
+            {otherTechnicians.length > 0 && (
+                <div className="multi-tech-bar">
+                    <span className="multi-tech-status">
+                        {isController
+                            ? '🖱️ You have control'
+                            : `👁️ Viewing only — ${controllerName || 'another technician'} has control`}
+                    </span>
+                    {!isController && (
+                        <button className="btn-sm btn-primary" onClick={requestControl}>Request control</button>
+                    )}
+                    {isController && otherTechnicians.map(t => (
+                        <button
+                            key={t.technicianSocketId}
+                            className="btn-sm btn-secondary"
+                            onClick={() => grantControl(t.technicianSocketId)}
+                        >
+                            Give control to {t.technicianName}
+                        </button>
+                    ))}
+                    <span className="multi-tech-others">
+                        Also viewing: {otherTechnicians.map(t => t.technicianName).join(', ')}
+                    </span>
+                </div>
+            )}
+
+            {controlRequest && (
+                <div className="control-request-banner">
+                    <span>{controlRequest.requesterName} is requesting control.</span>
+                    <button className="btn-sm btn-primary" onClick={() => respondToControlRequest(true)}>Grant</button>
+                    <button className="btn-sm btn-secondary" onClick={() => respondToControlRequest(false)}>Deny</button>
                 </div>
             )}
 

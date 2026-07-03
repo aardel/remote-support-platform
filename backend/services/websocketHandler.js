@@ -209,12 +209,26 @@ class WebSocketHandler {
 
             const ensureConn = (sessionId) => {
                 if (!this.sessionConnections.has(sessionId)) {
-                    this.sessionConnections.set(sessionId, { helper: null, technicians: [], viewingCounts: new Map() });
+                    this.sessionConnections.set(sessionId, { helper: null, technicians: [], viewingCounts: new Map(), controllerSocketId: null });
                 } else {
                     const c = this.sessionConnections.get(sessionId);
                     if (c && !c.viewingCounts) c.viewingCounts = new Map();
+                    if (c && c.controllerSocketId === undefined) c.controllerSocketId = null;
                 }
                 return this.sessionConnections.get(sessionId);
+            };
+
+            // Multi-technician control arbitration: exactly one technician may drive
+            // mouse/keyboard/clipboard at a time (others are view-only) so simultaneous
+            // viewers can't fight over the cursor. Broadcasts the current controller's
+            // identity to everyone in the room whenever it changes.
+            const broadcastControlChanged = (sessionId, conn) => {
+                const controller = conn.technicians.find(t => t.socketId === conn.controllerSocketId);
+                this.io.to(`session-${sessionId}`).emit('control-changed', {
+                    sessionId,
+                    controllerSocketId: conn.controllerSocketId || null,
+                    controllerName: controller ? controller.technicianName : null
+                });
             };
 
             const countUniqueTechnicians = (conn) => {
@@ -355,6 +369,15 @@ class WebSocketHandler {
                     const techName = socket.technicianName;
                     conn.technicians.push({ socketId: socket.id, technicianId: techId, technicianName: techName });
                     console.log(`Socket ${socket.id} joined session ${sessionId} as ${role} "${techName}"`);
+                    // First technician in the room drives by default; later joiners are
+                    // view-only until given control (keeps today's single-tech UX unchanged).
+                    if (!conn.controllerSocketId) conn.controllerSocketId = socket.id;
+                    socket.emit('control-changed', {
+                        sessionId,
+                        controllerSocketId: conn.controllerSocketId,
+                        controllerName: conn.controllerSocketId === socket.id ? techName
+                            : (conn.technicians.find(t => t.socketId === conn.controllerSocketId) || {}).technicianName || null
+                    });
                     safeUpdateSession(sessionId, {
                         active_technicians: countUniqueTechnicians(conn),
                         viewing_technicians: countViewingTechnicians(conn)
@@ -366,6 +389,12 @@ class WebSocketHandler {
                     });
                     // Notify helper (and others) so they can show who is connected
                     socket.to(`session-${sessionId}`).emit('technician-joined', { sessionId, technicianId: techId, technicianName: techName, technicianSocketId: socket.id });
+                    // Tell the newly-joined technician who else is already here (mirrors what
+                    // the helper gets via 'technicians-present').
+                    const others = conn.technicians.filter(t => t.socketId !== socket.id);
+                    for (const other of others) {
+                        socket.emit('technician-joined', { sessionId, technicianId: other.technicianId, technicianName: other.technicianName, technicianSocketId: other.socketId });
+                    }
                     AuditLog.log('technician_joined', { sessionId, actor: techName });
                 }
 
@@ -493,6 +522,12 @@ class WebSocketHandler {
                             if (conn.technicians.length === 0) {
                                 this.pendingOffers.delete(sessionId);
                             }
+                            // If the departing technician was in control, hand off to whoever's
+                            // left (or clear it — no one left to fight over the cursor anyway).
+                            if (conn.controllerSocketId === socket.id) {
+                                conn.controllerSocketId = conn.technicians[0] ? conn.technicians[0].socketId : null;
+                                broadcastControlChanged(sessionId, conn);
+                            }
                             safeUpdateSession(sessionId, { active_technicians: countUniqueTechnicians(conn) }).catch(() => {});
                             this.io.to('technicians').emit('session-updated', { sessionId, active_technicians: countUniqueTechnicians(conn), viewing_technicians: countViewingTechnicians(conn) });
                             this.io.to(`session-${sessionId}`).emit('technician-left', {
@@ -587,8 +622,16 @@ class WebSocketHandler {
             }));
 
             // Remote control: Mouse events from technician
+            // Multi-technician: only the current controller's input is relayed —
+            // other viewers are present but can't fight over the cursor.
+            const isController = (sessionId) => {
+                const conn = this.sessionConnections.get(sessionId);
+                return !conn || !conn.controllerSocketId || conn.controllerSocketId === socket.id;
+            };
+
             socket.on('remote-mouse', requireTech((data) => {
                 if (!inJoinedSession(data)) return;
+                if (!isController(data.sessionId)) return;
                 const { sessionId } = data;
                 if (data.type === 'mousedown') console.log(`[mouse] forwarding ${data.type} to session-${sessionId} x=${data.x?.toFixed(3)} y=${data.y?.toFixed(3)}`);
                 socket.to(`session-${sessionId}`).emit('remote-mouse', data);
@@ -597,12 +640,14 @@ class WebSocketHandler {
             // Remote clipboard: technician sends clipboard text to paste on user PC
             socket.on('remote-clipboard', requireTech((data) => {
                 if (!inJoinedSession(data)) return;
+                if (!isController(data.sessionId)) return;
                 socket.to(`session-${data.sessionId}`).emit('remote-clipboard', data);
             }));
 
             // Remote control: Keyboard events from technician
             socket.on('remote-keyboard', requireTech((data) => {
                 if (!inJoinedSession(data)) return;
+                if (!isController(data.sessionId)) return;
                 const { sessionId } = data;
                 if (data.type === 'keydown') {
                     const room = this.io.sockets.adapter.rooms.get(`session-${sessionId}`);
@@ -611,6 +656,46 @@ class WebSocketHandler {
                     console.log(`[keyboard] forwarding "${data.key}" to session-${sessionId} | sender=${socket.id} | room members=${roomMembers.length} | targets=${others.length} (${others.join(', ')})`);
                 }
                 socket.to(`session-${sessionId}`).emit('remote-keyboard', data);
+            }));
+
+            // Control handoff: request/grant/release. Anyone in the session may
+            // request; only the current controller (or an empty controller slot)
+            // may grant. Broadcast the new state to everyone (technicians + helper).
+            socket.on('request-control', requireTech((data) => {
+                if (!inJoinedSession(data)) return;
+                const { sessionId } = data;
+                const conn = ensureConn(sessionId);
+                if (!conn.controllerSocketId) {
+                    conn.controllerSocketId = socket.id;
+                    broadcastControlChanged(sessionId, conn);
+                    return;
+                }
+                if (conn.controllerSocketId === socket.id) return; // already in control
+                const requester = conn.technicians.find(t => t.socketId === socket.id);
+                this.io.to(conn.controllerSocketId).emit('control-requested', {
+                    sessionId,
+                    requesterSocketId: socket.id,
+                    requesterName: requester ? requester.technicianName : 'A technician'
+                });
+            }));
+
+            socket.on('grant-control', requireTech((data) => {
+                if (!inJoinedSession(data)) return;
+                const { sessionId, targetSocketId } = data;
+                const conn = this.sessionConnections.get(sessionId);
+                if (!conn || conn.controllerSocketId !== socket.id) return; // only the controller may grant
+                if (!conn.technicians.some(t => t.socketId === targetSocketId)) return;
+                conn.controllerSocketId = targetSocketId;
+                broadcastControlChanged(sessionId, conn);
+            }));
+
+            socket.on('release-control', requireTech((data) => {
+                if (!inJoinedSession(data)) return;
+                const { sessionId } = data;
+                const conn = this.sessionConnections.get(sessionId);
+                if (!conn || conn.controllerSocketId !== socket.id) return;
+                conn.controllerSocketId = null;
+                broadcastControlChanged(sessionId, conn);
             }));
 
             // Monitor switch: technician requests different monitor
@@ -785,6 +870,10 @@ class WebSocketHandler {
                                 // Clear cached offer so reconnecting technician gets a fresh one
                                 if (conn.technicians.length === 0) {
                                     this.pendingOffers.delete(socket.sessionId);
+                                }
+                                if (conn.controllerSocketId === socket.id) {
+                                    conn.controllerSocketId = conn.technicians[0] ? conn.technicians[0].socketId : null;
+                                    broadcastControlChanged(socket.sessionId, conn);
                                 }
                                 safeUpdateSession(socket.sessionId, {
                                     active_technicians: countUniqueTechnicians(conn),
