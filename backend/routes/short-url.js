@@ -1,6 +1,29 @@
 const express = require('express');
 const router = express.Router();
 const urlShortener = require('../services/urlShortener');
+const { requireAuth } = require('../middleware/sessionAuth');
+
+/**
+ * Get short URL statistics (for debugging)
+ * GET /s/stats
+ * Declared BEFORE /:code — otherwise the wildcard route below matches the
+ * literal path segment "stats" first and this handler is never reached.
+ */
+router.get('/stats', requireAuth, (req, res) => {
+  try {
+    const stats = urlShortener.getStats();
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    console.error('Error getting short URL stats:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 
 /**
  * Redirect short URL to full URL
@@ -62,26 +85,6 @@ router.get('/:code', (req, res) => {
   } catch (error) {
     console.error('Error in short URL redirect:', error);
     res.status(500).send('Internal server error');
-  }
-});
-
-/**
- * Get short URL statistics (for debugging)
- * GET /s-stats
- */
-router.get('/stats', (req, res) => {
-  try {
-    const stats = urlShortener.getStats();
-    res.json({
-      success: true,
-      data: stats
-    });
-  } catch (error) {
-    console.error('Error getting short URL stats:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
   }
 });
 

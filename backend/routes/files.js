@@ -6,6 +6,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const FileTransfer = require('../models/FileTransfer');
 const { rateLimit } = require('../middleware/rateLimit');
+const SessionService = require('../services/sessionService');
 
 // Configure multer for file uploads
 const uploadDir = path.join(__dirname, '../../uploads');
@@ -40,11 +41,21 @@ router.post('/upload', rateLimit({ windowMs: 60 * 1000, max: 60 }), upload.singl
     try {
         const { sessionId, direction } = req.body;
         const file = req.file;
-        
+
         if (!file) {
             return res.status(400).json({ error: 'No file uploaded' });
         }
-        
+
+        // sessionId is a multipart form field, so multer has already written the
+        // file to disk by the time we get here — reject + delete it immediately
+        // for any session id that isn't real/still active, rather than persisting
+        // an upload with no legitimate destination.
+        const session = await SessionService.getSession(sessionId);
+        if (!session || (session.expires_at && new Date(session.expires_at) < new Date())) {
+            try { fs.unlinkSync(file.path); } catch (_) {}
+            return res.status(404).json({ error: 'Session not found or expired' });
+        }
+
         let fileRecord;
         
         try {

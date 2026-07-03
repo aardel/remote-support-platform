@@ -9,6 +9,21 @@ const WebSocketHandler = require('./services/websocketHandler');
 // Ensure .env values override stale process env (e.g. PM2 cached vars)
 require('dotenv').config({ override: process.env.NODE_ENV !== 'production' });
 
+// Fail fast on missing secrets in production, instead of silently falling back
+// to the well-known dev defaults hardcoded elsewhere (session cookie signing,
+// JWT signing) — a silent fallback there would let anyone forge a login
+// session or an agent token. Dev/test keeps the fallback (with a loud warning)
+// so local runs without a full .env still work.
+(function checkRequiredSecrets() {
+    const missing = ['SESSION_SECRET', 'JWT_SECRET'].filter(k => !process.env[k]);
+    if (missing.length === 0) return;
+    if (process.env.NODE_ENV === 'production') {
+        console.error(`FATAL: missing required secret(s) in production: ${missing.join(', ')}`);
+        process.exit(1);
+    }
+    console.warn(`WARNING: ${missing.join(', ')} not set — using insecure dev defaults. Do not run like this in production.`);
+})();
+
 const app = express();
 const server = http.createServer(app);
 

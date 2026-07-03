@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../config/database');
 const SessionService = require('../services/sessionService');
 const urlShortener = require('../services/urlShortener');
+const { rateLimit } = require('../middleware/rateLimit');
 
 function getClientIp(req) {
     const forwarded = req.headers['x-forwarded-for'];
@@ -12,7 +13,7 @@ function getClientIp(req) {
     return ip;
 }
 
-router.get('/suggest', async (req, res) => {
+router.get('/suggest', rateLimit({ windowMs: 60 * 1000, max: 20 }), async (req, res) => {
     try {
         const ip = getClientIp(req);
         if (!ip) {
@@ -70,7 +71,7 @@ router.get('/suggest', async (req, res) => {
     }
 });
 
-router.post('/create', async (req, res) => {
+router.post('/create', rateLimit({ windowMs: 60 * 1000, max: 10 }), async (req, res) => {
     try {
         const clientIp = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
         console.log(`[SESSION-CREATE] Public web request from IP: ${clientIp}, User-Agent: ${req.headers['user-agent'] || 'unknown'}`);

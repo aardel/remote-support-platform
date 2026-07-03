@@ -5,6 +5,23 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const sessionStore = require('../services/sessionStore');
+const SessionService = require('../services/sessionService');
+const { rateLimit } = require('../middleware/rateLimit');
+
+// Reject anything not tied to a real, still-active session. sessionStore itself
+// will happily create an entry for any string, so this is the actual boundary
+// that stops someone posting messages/files against a made-up id.
+async function requireLiveSession(req, res, next) {
+    try {
+        const session = await SessionService.getSession(req.params.sessionId);
+        if (!session || (session.expires_at && new Date(session.expires_at) < new Date())) {
+            return res.status(404).json({ error: 'Session not found or expired' });
+        }
+        next();
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+}
 
 // Multer config (same pattern as routes/files.js)
 const uploadDir = path.join(__dirname, '../../uploads');
@@ -22,7 +39,8 @@ const upload = multer({ storage, limits: { fileSize: 100 * 1024 * 1024 } });
 // ── Chat Messages ──────────────────────────────────────────
 
 // GET /api/bridge/:sessionId/messages?since=<timestamp>
-router.get('/:sessionId/messages', (req, res) => {
+// xp-chat.html polls this every 3s (~20/min) — rate limit is generous headroom, not a throttle on normal use.
+router.get('/:sessionId/messages', rateLimit({ windowMs: 60 * 1000, max: 60 }), requireLiveSession, (req, res) => {
     const { sessionId } = req.params;
     const since = req.query.since || 0;
     const messages = sessionStore.getMessages(sessionId, since);
@@ -30,7 +48,7 @@ router.get('/:sessionId/messages', (req, res) => {
 });
 
 // POST /api/bridge/:sessionId/messages
-router.post('/:sessionId/messages', (req, res) => {
+router.post('/:sessionId/messages', rateLimit({ windowMs: 60 * 1000, max: 30 }), requireLiveSession, (req, res) => {
     const { sessionId } = req.params;
     const { message, sender } = req.body;
 
@@ -62,7 +80,8 @@ router.post('/:sessionId/messages', (req, res) => {
 // ── Files ──────────────────────────────────────────────────
 
 // GET /api/bridge/:sessionId/files
-router.get('/:sessionId/files', (req, res) => {
+// xp-chat.html polls this every 10s (~6/min).
+router.get('/:sessionId/files', rateLimit({ windowMs: 60 * 1000, max: 30 }), requireLiveSession, (req, res) => {
     const { sessionId } = req.params;
     const direction = req.query.direction; // optional filter
     const files = sessionStore.getFiles(sessionId, direction).map(f => ({
@@ -76,7 +95,7 @@ router.get('/:sessionId/files', (req, res) => {
 });
 
 // GET /api/bridge/:sessionId/files/:fileId/download
-router.get('/:sessionId/files/:fileId/download', (req, res) => {
+router.get('/:sessionId/files/:fileId/download', rateLimit({ windowMs: 60 * 1000, max: 30 }), requireLiveSession, (req, res) => {
     const { sessionId, fileId } = req.params;
     const file = sessionStore.getFile(sessionId, fileId);
     if (!file || !file.storedPath) {
@@ -90,7 +109,9 @@ router.get('/:sessionId/files/:fileId/download', (req, res) => {
 
 // POST /api/bridge/:sessionId/files/upload
 // Supports both XHR (JSON response) and iframe form submission (text response)
-router.post('/:sessionId/files/upload', upload.single('file'), (req, res) => {
+// sessionId is a route param here (unlike files.js), so the live-session check
+// runs BEFORE multer touches disk — an invalid session never gets a file written.
+router.post('/:sessionId/files/upload', rateLimit({ windowMs: 60 * 1000, max: 20 }), requireLiveSession, upload.single('file'), (req, res) => {
     const { sessionId } = req.params;
     const file = req.file;
 
