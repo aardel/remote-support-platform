@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, desktopCapturer, screen, shell, clipboard, dialog, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer, screen, shell, clipboard, dialog, Tray, Menu, nativeImage, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -655,6 +655,27 @@ ipcMain.handle('helper:prompt-approval', async (_event, info) => {
   }
 });
 
+// One-time-per-session consent gate before the technician's file browser can
+// list/read/write anything on this machine (screen viewing/control is already
+// gated separately by the connection-approval flow above).
+ipcMain.handle('helper:prompt-file-access', async (_event, info) => {
+  const techName = info?.technicianName || 'The technician';
+  try {
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      buttons: ['Allow', 'Deny'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'File Access Request',
+      message: `${techName} wants to access files on this computer.`,
+      detail: 'This allows browsing, downloading, and uploading files for the rest of this session. Allow?'
+    });
+    return response === 0;
+  } catch (_) {
+    return false;
+  }
+});
+
 // Tell the server the user declined a pending/requested session.
 ipcMain.handle('helper:decline-pending', async (_event, sessionId) => {
   const config = readConfig();
@@ -814,6 +835,18 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
       if (data.text) {
         clipboard.writeText(data.text);
         if (robot) robot.keyTap('v', process.platform === 'darwin' ? ['command'] : ['control']);
+        // Sensitive-action visibility: pasting overwrites the clipboard and types
+        // into whatever has focus — let the user know it happened, without
+        // blocking (keyboard input is already covered by the connection consent).
+        try {
+          if (Notification.isSupported()) {
+            new Notification({
+              title: 'Remote Support',
+              body: 'The technician pasted text into this computer.',
+              silent: true
+            }).show();
+          }
+        } catch (_) {}
       }
     });
     socket.on('switch-monitor', (data) => { if (mainWindow) mainWindow.webContents.send('signaling:switch-monitor', data); });

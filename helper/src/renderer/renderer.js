@@ -514,6 +514,25 @@ function updateUnattendedTimerLabel() {
   }
 }
 
+/* ---------- File access consent: one gate per session, not per-file ---------- */
+// null = not asked yet this session, true/false = the customer's decision (sticky
+// for the rest of the session so we don't re-prompt on every file operation).
+let fileAccessDecision = null;
+let fileAccessChain = Promise.resolve();
+function ensureFileAccessApproved(techName) {
+  if (fileAccessDecision !== null) return Promise.resolve(fileAccessDecision);
+  const run = fileAccessChain.then(async () => {
+    const approved = window.helperApi.promptFileAccess
+      ? await window.helperApi.promptFileAccess({ technicianName: techName })
+      : false;
+    fileAccessDecision = approved;
+    log(approved ? 'You allowed file access for this session.' : 'You denied file access.');
+    return approved;
+  });
+  fileAccessChain = run.catch(() => {});
+  return run;
+}
+
 /* ---------- Attended consent: prompt the customer before streaming ---------- */
 function requestCustomerApproval(techName) {
   const run = approvalChain.then(() =>
@@ -1158,6 +1177,19 @@ async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
         const data = typeof evt.data === 'string' ? JSON.parse(evt.data) : null;
         if (!data || !data.action) return;
 
+        // File browser (drives/list/read/write) needs the customer's explicit,
+        // one-time-per-session consent before touching the filesystem at all.
+        const gatedActions = ['drives', 'list', 'read', 'write'];
+        if (gatedActions.includes(data.action)) {
+          const techName = (connectedTechnicians.find(t => t.technicianSocketId === targetSocketId) || {}).technicianName || 'The technician';
+          const allowed = await ensureFileAccessApproved(techName);
+          if (!allowed) {
+            const responseAction = `${data.action === 'drives' ? 'drives' : data.action}-response`;
+            filesChannel.send(JSON.stringify({ action: responseAction, reqId: data.reqId, error: 'File access denied by user' }));
+            return;
+          }
+        }
+
         if (data.action === 'drives') {
           const drives = await window.helperApi.fsDrives();
           filesChannel.send(JSON.stringify({ action: 'drives-response', reqId: data.reqId, drives }));
@@ -1384,6 +1416,7 @@ async function disconnect() {
     splitEnabled = false;
     approvedTechnicians.clear();
     approvalPending.clear();
+    fileAccessDecision = null; // next session starts fresh — must ask again
     peerConnectionsBySocketId.forEach(pc => { clearReconnectState(pc); pc.close(); });
     peerConnectionsBySocketId.clear();
     if (peerConnection) {

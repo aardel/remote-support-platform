@@ -74,6 +74,7 @@ contextBridge.exposeInMainWorld('helperApi', {
 
   // Attended approval flow (technician requested while unattended is off)
   promptApproval: (info) => ipcRenderer.invoke('helper:prompt-approval', info),
+  promptFileAccess: (info) => ipcRenderer.invoke('helper:prompt-file-access', info),
   declinePending: (sessionId) => ipcRenderer.invoke('helper:decline-pending', sessionId),
   onConnectionResponse: (callback) => {
     const h = (_event, data) => callback(data);
