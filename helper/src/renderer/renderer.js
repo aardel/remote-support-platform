@@ -133,6 +133,12 @@ function stopConnectedTimer() {
   connectedSince = null;
 }
 
+/* ---------- "Being viewed" overlay ---------- */
+function updateOverlay(visible) {
+  if (!window.helperApi.overlaySet) return;
+  window.helperApi.overlaySet({ visible, technician: connectedTechNames().join(', ') }).catch(() => {});
+}
+
 /* ---------- Connection history log ---------- */
 let currentLogEntry = null;
 function connectedTechNames() {
@@ -141,6 +147,7 @@ function connectedTechNames() {
 function beginConnectionLog() {
   if (currentLogEntry) return;
   currentLogEntry = { start: Date.now(), technicians: connectedTechNames(), sessionId: currentSessionId };
+  updateOverlay(true);
 }
 function endConnectionLog() {
   if (!currentLogEntry) return;
@@ -153,6 +160,7 @@ function endConnectionLog() {
     sessionId: currentLogEntry.sessionId || currentSessionId
   };
   currentLogEntry = null;
+  updateOverlay(false);
   if (window.helperApi.appendConnectionLog) {
     window.helperApi.appendConnectionLog(entry).then(() => renderConnectionLog()).catch(() => {});
   }
@@ -406,6 +414,14 @@ async function init() {
       }
       log('Technician requested a session — starting (approval required to view).');
       startBtn.click();
+    });
+  }
+
+  // Customer pressed "End session" on the being-viewed overlay.
+  if (window.helperApi.onOverlayEndSession) {
+    window.helperApi.onOverlayEndSession(() => {
+      log('Session ended by user (overlay).');
+      disconnect().catch(e => log(`Disconnect failed: ${e.message}`));
     });
   }
 
@@ -811,6 +827,7 @@ async function connectSignaling(sessionId) {
       if (id && !connectedTechnicians.some(t => t.technicianId === id)) {
         connectedTechnicians.push({ technicianId: id, technicianName: data.technicianName || 'Technician' });
         updateConnectedTechniciansUI();
+        if (isConnected) updateOverlay(true); // refresh overlay with the new name
       }
       const socketId = data.technicianSocketId;
       if (socketId && !peerConnectionsBySocketId.has(socketId)) {

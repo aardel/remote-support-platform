@@ -141,6 +141,14 @@ contextBridge.exposeInMainWorld('helperApi', {
   getConnectionLog: () => ipcRenderer.invoke('helper:get-connection-log'),
   clearConnectionLog: () => ipcRenderer.invoke('helper:clear-connection-log'),
 
+  // "Being viewed" overlay
+  overlaySet: (data) => ipcRenderer.invoke('helper:overlay-set', data),
+  onOverlayEndSession: (callback) => {
+    const h = () => callback();
+    ipcRenderer.on('overlay:end-session', h);
+    return () => ipcRenderer.removeListener('overlay:end-session', h);
+  },
+
   // Update
   checkForUpdate: () => ipcRenderer.invoke('helper:check-for-update'),
   downloadUpdate: (downloadUrl) => ipcRenderer.invoke('helper:download-update', downloadUrl),

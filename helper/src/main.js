@@ -940,6 +940,55 @@ ipcMain.handle('chat:request-history', () => {
   return { success: true };
 });
 
+// --- "Being viewed" overlay: a small always-on-top banner shown to the
+// customer whenever a technician is connected, with a one-click End button. ---
+let overlayWindow = null;
+function createOverlayWindow() {
+  if (overlayWindow && !overlayWindow.isDestroyed()) return overlayWindow;
+  const wa = screen.getPrimaryDisplay().workArea;
+  const width = 380, height = 56;
+  overlayWindow = new BrowserWindow({
+    width, height,
+    x: Math.round(wa.x + (wa.width - width) / 2),
+    y: wa.y + 8,
+    frame: false,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    focusable: false,
+    show: false,
+    transparent: true,
+    hasShadow: false,
+    webPreferences: { nodeIntegration: true, contextIsolation: false }
+  });
+  overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+  try { overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); } catch (_) {}
+  overlayWindow.loadFile(path.join(__dirname, 'renderer', 'overlay.html'));
+  overlayWindow.on('closed', () => { overlayWindow = null; });
+  return overlayWindow;
+}
+
+ipcMain.handle('helper:overlay-set', (_e, data) => {
+  const { visible, technician } = data || {};
+  if (visible) {
+    const w = createOverlayWindow();
+    const send = () => { try { w.webContents.send('overlay:data', { technician }); } catch (_) {} };
+    if (w.webContents.isLoading()) w.webContents.once('did-finish-load', send);
+    else send();
+    w.showInactive(); // show without stealing focus from the customer
+  } else if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.hide();
+  }
+  return { ok: true };
+});
+
+// Customer clicked "End session" on the overlay → tell the main renderer to disconnect.
+ipcMain.on('overlay-end', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('overlay:end-session');
+});
+
 // File System IPC for Renderer (P2P Manager)
 ipcMain.handle('helper:fs-drives', async () => {
   if (process.platform === 'win32') {
