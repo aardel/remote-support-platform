@@ -786,6 +786,29 @@ async function connectSignaling(sessionId) {
       }
     }));
 
+    // Quick actions (lock screen / reboot). Attended mode confirms with the
+    // customer first; unattended mode executes directly (see main.js comment).
+    if (window.helperApi.onQuickAction) {
+      signalingUnsubscribers.push(window.helperApi.onQuickAction(async (data) => {
+        const action = data && data.action;
+        if (action !== 'lock' && action !== 'reboot') return;
+        const techName = (connectedTechnicians[0] || {}).technicianName || 'The technician';
+
+        if (!allowUnattended.checked) {
+          const ok = window.helperApi.confirmQuickAction
+            ? await window.helperApi.confirmQuickAction({ action, technicianName: techName })
+            : false;
+          if (!ok) { log(`You denied the ${action} request.`); return; }
+        }
+
+        log(`Executing: ${action}...`);
+        const result = action === 'reboot'
+          ? await window.helperApi.rebootMachine()
+          : await window.helperApi.lockScreen();
+        if (result && result.error) log(`${action} failed: ${result.error}`);
+      }));
+    }
+
     signalingUnsubscribers.push(window.helperApi.onSetStreamQuality(async (data) => {
       const quality = (data && data.quality) || 'balanced';
       const pcs = peerConnectionsBySocketId.size ? Array.from(peerConnectionsBySocketId.values()) : (peerConnection ? [peerConnection] : []);

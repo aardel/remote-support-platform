@@ -596,6 +596,13 @@ export default function SessionView({ user }) {
         socketRef.current?.emit('set-stream-quality', { sessionId, quality: preset });
     }, [sessionId]);
 
+    /* ---------- Quick actions (lock / reboot) ---------- */
+    const sendQuickAction = useCallback((action) => {
+        const label = action === 'reboot' ? 'restart' : 'lock the screen of';
+        if (!window.confirm(`Are you sure you want to ${label} the remote computer?`)) return;
+        socketRef.current?.emit('quick-action', { sessionId, action });
+    }, [sessionId]);
+
     /* ---------- Chat ---------- */
     const sendChat = useCallback(() => {
         const text = chatInput.trim();
@@ -846,6 +853,26 @@ export default function SessionView({ user }) {
                         <span className="tb-label">Report</span>
                     </button>
 
+                    <button
+                        className="toolbar-btn"
+                        onClick={() => sendQuickAction('lock')}
+                        disabled={!peerConnected}
+                        title="Lock the remote screen"
+                    >
+                        <span className="tb-icon">{'\uD83D\uDD12'}</span>
+                        <span className="tb-label">Lock</span>
+                    </button>
+
+                    <button
+                        className="toolbar-btn"
+                        onClick={() => sendQuickAction('reboot')}
+                        disabled={!peerConnected}
+                        title="Restart the remote computer"
+                    >
+                        <span className="tb-icon">{'\u21BB'}</span>
+                        <span className="tb-label">Reboot</span>
+                    </button>
+
                     <label className="toolbar-btn file-upload-label" title="Send file">
                         <span className="tb-icon">{'\uD83D\uDCCE'}</span>
                         <span className="tb-label">Send</span>
@@ -882,6 +909,7 @@ export default function SessionView({ user }) {
                     <span><strong>Split:</strong> Show a second monitor pane and switch monitors quickly.</span>
                     <span><strong>Chat:</strong> Open session chat with the helper user.</span>
                     <span><strong>Report:</strong> Open case report notes and billing fields.</span>
+                    <span><strong>Lock/Reboot:</strong> Lock the remote screen or restart the remote computer (asks the user first in attended sessions).</span>
                     <span><strong>Send:</strong> Upload a file to the helper machine.</span>
                     <span><strong>Files:</strong> Open remote file manager (P2P channel).</span>
                     <span><strong>Fast/Bal/HD:</strong> Stream quality presets (latency vs image quality).</span>

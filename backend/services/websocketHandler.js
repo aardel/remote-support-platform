@@ -631,6 +631,15 @@ class WebSocketHandler {
                 socket.to(`session-${data.sessionId}`).emit('set-split', data);
             }));
 
+            // Quick actions (lock screen / reboot): technician -> helper only.
+            // Rate-limited server-side too since these are disruptive to the customer.
+            socket.on('quick-action', requireTech((data) => {
+                if (!inJoinedSession(data)) return;
+                if (!['lock', 'reboot'].includes(data.action)) return;
+                socket.to(`session-${data.sessionId}`).emit('quick-action', data);
+                AuditLog.log('quick_action', { sessionId: data.sessionId, actor: socket.user?.username || 'technician', detail: { action: data.action } });
+            }));
+
             // Track map: helper tells technician which media stream is main vs. second pane
             socket.on('track-map', requireHelper((data) => {
                 if (!inJoinedSession(data)) return;

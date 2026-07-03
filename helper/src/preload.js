@@ -75,6 +75,16 @@ contextBridge.exposeInMainWorld('helperApi', {
   // Attended approval flow (technician requested while unattended is off)
   promptApproval: (info) => ipcRenderer.invoke('helper:prompt-approval', info),
   promptFileAccess: (info) => ipcRenderer.invoke('helper:prompt-file-access', info),
+
+  // Quick actions
+  confirmQuickAction: (info) => ipcRenderer.invoke('helper:confirm-quick-action', info),
+  lockScreen: () => ipcRenderer.invoke('helper:lock-screen'),
+  rebootMachine: () => ipcRenderer.invoke('helper:reboot'),
+  onQuickAction: (callback) => {
+    const h = (_event, data) => callback(data);
+    ipcRenderer.on('signaling:quick-action', h);
+    return () => ipcRenderer.removeListener('signaling:quick-action', h);
+  },
   declinePending: (sessionId) => ipcRenderer.invoke('helper:decline-pending', sessionId),
   onConnectionResponse: (callback) => {
     const h = (_event, data) => callback(data);

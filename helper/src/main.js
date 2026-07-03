@@ -692,6 +692,61 @@ ipcMain.handle('helper:decline-pending', async (_event, sessionId) => {
   }
 });
 
+// Quick actions: attended mode confirms with the customer first (someone is
+// present and it's disruptive to their live session); unattended mode skips
+// the prompt (nobody may be there to answer it — same asymmetry the app
+// already uses for connection consent).
+ipcMain.handle('helper:confirm-quick-action', async (_event, info) => {
+  const techName = info?.technicianName || 'The technician';
+  const label = info?.action === 'reboot' ? 'restart this computer' : "lock this computer's screen";
+  try {
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      buttons: ['Allow', 'Deny'],
+      defaultId: 1,
+      cancelId: 1,
+      title: 'Remote Action Request',
+      message: `${techName} wants to ${label}.`,
+      detail: info?.action === 'reboot' ? 'Unsaved work may be lost. Allow?' : 'Allow?'
+    });
+    return response === 0;
+  } catch (_) {
+    return false;
+  }
+});
+
+ipcMain.handle('helper:lock-screen', () => {
+  try {
+    if (process.platform === 'win32') {
+      execFileSync('rundll32.exe', ['user32.dll,LockWorkStation']);
+    } else if (process.platform === 'darwin') {
+      // No public API for this; the standard, widely-used CLI trick for macOS.
+      execFileSync('/System/Library/CoreServices/Menu Extras/User.menu/Contents/Resources/CGSession', ['-suspend']);
+    } else {
+      execFileSync('loginctl', ['lock-session']);
+    }
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('helper:reboot', () => {
+  try {
+    if (process.platform === 'win32') {
+      // A short delay gives the helper a moment to notify the technician before it dies.
+      execFileSync('shutdown.exe', ['/r', '/t', '5', '/c', 'Remote support restart']);
+    } else if (process.platform === 'darwin') {
+      execFileSync('osascript', ['-e', 'tell app "System Events" to restart']);
+    } else {
+      execFileSync('shutdown', ['-r', '+0']);
+    }
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
 ipcMain.handle('helper:get-sources', async () => {
   const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 150, height: 150 } });
   return sources.map(s => ({ id: s.id, name: s.name, display_id: s.display_id, thumbnail: s.thumbnail.toDataURL() }));
@@ -852,6 +907,7 @@ ipcMain.handle('helper:socket-connect', async (_event, sessionId) => {
     socket.on('switch-monitor', (data) => { if (mainWindow) mainWindow.webContents.send('signaling:switch-monitor', data); });
     socket.on('set-stream-quality', (data) => { if (mainWindow) mainWindow.webContents.send('signaling:set-stream-quality', data); });
     socket.on('set-split', (data) => { if (mainWindow) mainWindow.webContents.send('signaling:set-split', data); });
+    socket.on('quick-action', (data) => { if (mainWindow) mainWindow.webContents.send('signaling:quick-action', data); });
 
     socket.on('chat-message', (data) => {
       chatHistory.push(data);
