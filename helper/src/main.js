@@ -1123,6 +1123,24 @@ ipcMain.handle('helper:fs-write-chunk', async (_event, filePath, data, offset) =
     return { success: true };
   } catch (e) { throw new Error(e.message); } finally { if (fh) await fh.close(); }
 });
+ipcMain.handle('helper:fs-mkdir', async (_event, dirPath) => {
+  try {
+    await fs.promises.mkdir(dirPath, { recursive: false });
+    return { success: true };
+  } catch (e) { throw new Error(e.message); }
+});
+ipcMain.handle('helper:fs-delete', async (_event, targetPath) => {
+  try {
+    await fs.promises.rm(targetPath, { recursive: true, force: false });
+    return { success: true };
+  } catch (e) { throw new Error(e.message); }
+});
+ipcMain.handle('helper:fs-rename', async (_event, oldPath, newPath) => {
+  try {
+    await fs.promises.rename(oldPath, newPath);
+    return { success: true };
+  } catch (e) { throw new Error(e.message); }
+});
 
 // Where received files are saved. Defaults to the OS Downloads folder; the
 // customer can pick another folder or opt into a save prompt per file.

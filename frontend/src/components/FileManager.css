@@ -264,3 +264,91 @@
     font-size: 12px;
     font-weight: 600;
 }
+/* Breadcrumb path bar */
+.fm-breadcrumbs {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: #0f172a;
+    padding: 6px 10px;
+    border-radius: 4px;
+    border: 1px solid #334155;
+    font-size: 13px;
+    overflow-x: auto;
+    white-space: nowrap;
+}
+.fm-crumb {
+    color: #93c5fd;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+.fm-crumb:hover { background: #334155; text-decoration: underline; }
+.fm-crumb.current { color: #e2e8f0; font-weight: 600; cursor: default; }
+.fm-crumb.current:hover { background: none; text-decoration: none; }
+.fm-crumb-sep { color: #475569; }
+
+/* Sortable column headers */
+.fm-table th.sortable { cursor: pointer; user-select: none; }
+.fm-table th.sortable:hover { color: #e2e8f0; }
+.fm-table td.muted { color: #94a3b8; }
+
+/* Inline rename / new-folder input */
+.fm-inline-input {
+    background: #0f172a;
+    border: 1px solid #2563eb;
+    color: #e2e8f0;
+    font-size: 13px;
+    padding: 3px 6px;
+    border-radius: 3px;
+    outline: none;
+    width: 200px;
+}
+.new-folder-row td { padding: 6px 12px; }
+
+/* Drag-and-drop upload zone */
+.fm-content.drag-over {
+    outline: 2px dashed #2563eb;
+    outline-offset: -4px;
+    background: rgba(37, 99, 235, 0.08);
+}
+
+/* Right-click context menu */
+.fm-context-menu {
+    position: fixed;
+    background: #1e293b;
+    border: 1px solid #475569;
+    border-radius: 6px;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+    padding: 4px;
+    z-index: 2000;
+    min-width: 160px;
+}
+.fm-menu-item {
+    padding: 7px 12px;
+    font-size: 13px;
+    color: #e2e8f0;
+    cursor: pointer;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+.fm-menu-item:hover { background: #334155; }
+.fm-menu-item.danger { color: #fca5a5; }
+.fm-menu-item.danger:hover { background: #7f1d1d; }
+
+/* Progress with label */
+.fm-progress-wrap {
+    flex: 1;
+    margin: 0 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.fm-progress-label {
+    font-size: 11px;
+    color: #94a3b8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

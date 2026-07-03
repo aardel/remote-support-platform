@@ -1200,14 +1200,15 @@ async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
         const data = typeof evt.data === 'string' ? JSON.parse(evt.data) : null;
         if (!data || !data.action) return;
 
-        // File browser (drives/list/read/write) needs the customer's explicit,
-        // one-time-per-session consent before touching the filesystem at all.
-        const gatedActions = ['drives', 'list', 'read', 'write'];
+        // File browser (drives/list/read/write/mkdir/delete/rename) needs the
+        // customer's explicit, one-time-per-session consent before touching
+        // the filesystem at all.
+        const gatedActions = ['drives', 'list', 'read', 'write', 'mkdir', 'delete', 'rename'];
         if (gatedActions.includes(data.action)) {
           const techName = (connectedTechnicians.find(t => t.technicianSocketId === targetSocketId) || {}).technicianName || 'The technician';
           const allowed = await ensureFileAccessApproved(techName);
           if (!allowed) {
-            const responseAction = `${data.action === 'drives' ? 'drives' : data.action}-response`;
+            const responseAction = data.action === 'write' ? 'write-ack' : `${data.action}-response`;
             filesChannel.send(JSON.stringify({ action: responseAction, reqId: data.reqId, error: 'File access denied by user' }));
             return;
           }
@@ -1257,6 +1258,30 @@ async function createPeerConnectionForTechnician(sessionId, targetSocketId) {
             filesChannel.send(JSON.stringify({ action: 'write-ack', reqId: data.reqId }));
           } catch (e) {
             filesChannel.send(JSON.stringify({ action: 'write-ack', reqId: data.reqId, error: e.message }));
+          }
+        }
+        else if (data.action === 'mkdir') {
+          try {
+            await window.helperApi.fsMkdir(data.path);
+            filesChannel.send(JSON.stringify({ action: 'mkdir-response', reqId: data.reqId }));
+          } catch (e) {
+            filesChannel.send(JSON.stringify({ action: 'mkdir-response', reqId: data.reqId, error: e.message }));
+          }
+        }
+        else if (data.action === 'delete') {
+          try {
+            await window.helperApi.fsDelete(data.path);
+            filesChannel.send(JSON.stringify({ action: 'delete-response', reqId: data.reqId }));
+          } catch (e) {
+            filesChannel.send(JSON.stringify({ action: 'delete-response', reqId: data.reqId, error: e.message }));
+          }
+        }
+        else if (data.action === 'rename') {
+          try {
+            await window.helperApi.fsRename(data.path, data.newPath);
+            filesChannel.send(JSON.stringify({ action: 'rename-response', reqId: data.reqId }));
+          } catch (e) {
+            filesChannel.send(JSON.stringify({ action: 'rename-response', reqId: data.reqId, error: e.message }));
           }
         }
       } catch (e) {

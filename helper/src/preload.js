@@ -179,5 +179,8 @@ contextBridge.exposeInMainWorld('helperApi', {
   fsDrives: () => ipcRenderer.invoke('helper:fs-drives'),
   fsList: (path) => ipcRenderer.invoke('helper:fs-list', path),
   fsReadChunk: (path, offset, length) => ipcRenderer.invoke('helper:fs-read-chunk', path, offset, length),
-  fsWriteChunk: (path, data, offset) => ipcRenderer.invoke('helper:fs-write-chunk', path, data, offset)
+  fsWriteChunk: (path, data, offset) => ipcRenderer.invoke('helper:fs-write-chunk', path, data, offset),
+  fsMkdir: (path) => ipcRenderer.invoke('helper:fs-mkdir', path),
+  fsDelete: (path) => ipcRenderer.invoke('helper:fs-delete', path),
+  fsRename: (oldPath, newPath) => ipcRenderer.invoke('helper:fs-rename', oldPath, newPath)
 });
