@@ -139,8 +139,8 @@ router.delete('/:deviceId', requireAuth, async (req, res) => {
 router.patch('/:deviceId', requireAuth, async (req, res) => {
     try {
         const { deviceId } = req.params;
-        const { customerName, machineName } = req.body;
-        const device = await Device.updateNames(deviceId, { customerName, machineName });
+        const { customerName, machineName, tag } = req.body;
+        const device = await Device.updateNames(deviceId, { customerName, machineName, tag });
         if (!device) {
             return res.status(404).json({ error: 'Device not found' });
         }

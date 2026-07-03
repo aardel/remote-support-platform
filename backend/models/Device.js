@@ -1,5 +1,14 @@
 const pool = require('../config/database');
 
+// Lazily ensure optional columns exist (migrations are not auto-run on start).
+let schemaReady = null;
+function ensureSchema() {
+    if (schemaReady) return schemaReady;
+    schemaReady = pool.query('ALTER TABLE devices ADD COLUMN IF NOT EXISTS tag VARCHAR(100)')
+        .catch((e) => { schemaReady = null; throw e; });
+    return schemaReady;
+}
+
 class Device {
     static async findByDeviceId(deviceId) {
         const result = await pool.query(
@@ -18,6 +27,7 @@ class Device {
     }
 
     static async listAll() {
+        try { await ensureSchema(); } catch (_) {}
         const result = await pool.query(
             'SELECT * FROM devices ORDER BY last_seen DESC NULLS LAST, created_at DESC'
         );
@@ -91,12 +101,14 @@ class Device {
         return result.rows[0] || null;
     }
 
-    static async updateNames(deviceId, { customerName, machineName }) {
+    static async updateNames(deviceId, { customerName, machineName, tag }) {
+        try { await ensureSchema(); } catch (_) {}
         const fields = [];
         const values = [];
         let i = 1;
         if (customerName !== undefined) { fields.push(`customer_name = $${i++}`); values.push(customerName || null); }
         if (machineName !== undefined) { fields.push(`machine_name = $${i++}`); values.push(machineName || null); }
+        if (tag !== undefined) { fields.push(`tag = $${i++}`); values.push((tag || '').slice(0, 100) || null); }
         if (fields.length === 0) return this.findByDeviceId(deviceId);
         fields.push(`updated_at = NOW()`);
         values.push(deviceId);

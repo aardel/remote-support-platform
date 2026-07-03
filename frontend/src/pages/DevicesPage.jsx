@@ -14,6 +14,8 @@ function DevicesPage() {
     const [editId, setEditId] = useState(null);
     const [editCustomer, setCust] = useState('');
     const [editMachine, setMach] = useState('');
+    const [editTag, setTag] = useState('');
+    const [groupFilter, setGroupFilter] = useState('');
     const [requesting, setReq] = useState(null);
     const navigate = useNavigate();
 
@@ -58,12 +60,13 @@ function DevicesPage() {
         setEditId(d.device_id);
         setCust(d.customer_name || '');
         setMach(d.machine_name || '');
+        setTag(d.tag || '');
     };
 
     const saveEdit = async (deviceId) => {
         try {
-            await axios.patch(`/api/devices/${deviceId}`, { customerName: editCustomer, machineName: editMachine });
-            setDevices(prev => prev.map(d => d.device_id === deviceId ? { ...d, customer_name: editCustomer, machine_name: editMachine } : d));
+            await axios.patch(`/api/devices/${deviceId}`, { customerName: editCustomer, machineName: editMachine, tag: editTag });
+            setDevices(prev => prev.map(d => d.device_id === deviceId ? { ...d, customer_name: editCustomer, machine_name: editMachine, tag: editTag } : d));
             setEditId(null);
         } catch (e) {
             alert('Error saving: ' + (e.response?.data?.error || e.message));
@@ -115,11 +118,16 @@ function DevicesPage() {
         return parts.length ? flag(d.last_country) + parts.join(', ') : '';
     };
 
+    // Distinct customer groups for the filter dropdown.
+    const groups = Array.from(new Set(devices.map(d => (d.customer_name || '').trim()).filter(Boolean)))
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
     const filtered = devices
+        .filter(d => !groupFilter || (d.customer_name || '') === groupFilter)
         .filter(d => {
             if (!search) return true;
             const q = search.toLowerCase();
-            return [d.customer_name, d.machine_name, d.display_name, d.hostname, d.device_id, d.os, d.last_ip, d.last_city, d.last_country]
+            return [d.customer_name, d.machine_name, d.display_name, d.hostname, d.device_id, d.os, d.last_ip, d.last_city, d.last_country, d.tag]
                 .some(v => (v || '').toLowerCase().includes(q));
         })
         .sort((a, b) => {
@@ -146,6 +154,15 @@ function DevicesPage() {
 
             <div className="page-toolbar">
                 <input type="text" placeholder="Search devices..." value={search} onChange={e => setSearch(e.target.value)} className="page-search" />
+                {groups.length > 0 && (
+                    <>
+                        <label className="page-toolbar-label">Customer</label>
+                        <select value={groupFilter} onChange={e => setGroupFilter(e.target.value)} className="page-select" aria-label="Filter by customer">
+                            <option value="">All</option>
+                            {groups.map(g => <option key={g} value={g}>{g}</option>)}
+                        </select>
+                    </>
+                )}
                 <label className="page-toolbar-label">Sort</label>
                 <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="page-select" aria-label="Sort devices by">
                     <option value="last_seen">Last seen</option>
@@ -163,7 +180,7 @@ function DevicesPage() {
                     <table className="page-table">
                         <thead>
                             <tr>
-                                <th>Customer</th><th>Machine</th><th>Hostname</th><th>OS</th>
+                                <th>Customer</th><th>Machine</th><th>Tag</th><th>Hostname</th><th>OS</th>
                                 <th>IP</th><th>Location</th><th>Last Seen</th><th>Status</th><th>Actions</th>
                             </tr>
                         </thead>
@@ -172,6 +189,7 @@ function DevicesPage() {
                                 <tr key={d.device_id}>
                                     <td>{editId === d.device_id ? <input className="inline-edit" value={editCustomer} onChange={e => setCust(e.target.value)} placeholder="Customer name" /> : d.customer_name || <span className="muted">—</span>}</td>
                                     <td>{editId === d.device_id ? <input className="inline-edit" value={editMachine} onChange={e => setMach(e.target.value)} placeholder="Machine name" /> : d.machine_name || d.display_name || <span className="muted">—</span>}</td>
+                                    <td>{editId === d.device_id ? <input className="inline-edit" value={editTag} onChange={e => setTag(e.target.value)} placeholder="Tag" /> : (d.tag ? <span className="badge badge-neutral">{d.tag}</span> : <span className="muted">—</span>)}</td>
                                     <td>{d.hostname || '—'}</td>
                                     <td>{d.os || '—'}</td>
                                     <td className="mono">{d.last_ip || '—'}</td>
