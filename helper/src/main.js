@@ -226,8 +226,14 @@ function readConfig() {
 }
 
 function getIconImage() {
-  const logoPath = path.join(__dirname, 'renderer', 'logo.png');
-  const img = nativeImage.createFromPath(logoPath);
+  // Window/taskbar icon must be square — logo.png (1536x1024) is not, and
+  // Electron/Windows silently falls back to the stock Electron icon when the
+  // HICON conversion from a non-square source fails, rather than erroring.
+  // Use .ico on Windows (native multi-resolution, best taskbar/Alt-Tab
+  // fidelity) and the square PNG elsewhere.
+  const iconFile = process.platform === 'win32' ? 'appicon.ico' : 'appicon.png';
+  const iconPath = path.join(__dirname, 'renderer', iconFile);
+  const img = nativeImage.createFromPath(iconPath);
   return img && !img.isEmpty() ? img : null;
 }
 
