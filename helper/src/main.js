@@ -7,17 +7,22 @@ const http = require('http');
 const { execSync, execFileSync } = require('child_process');
 const { io } = require('socket.io-client');
 
+// @jitsi/robotjs is a maintained fork of the original robotjs — same native
+// C++ mouse/keyboard injection code (so identical movement feel/latency),
+// just with modern CI-published prebuilt binaries (incl. Apple Silicon) so it
+// doesn't need to compile from source on install, which is what broke the
+// Windows CI runner on the original package.
 let robot = null;
 let robotjsError = null;
 try {
-  robot = require('robotjs');
-  console.log('✅ robotjs loaded successfully');
+  robot = require('@jitsi/robotjs');
+  console.log('✅ @jitsi/robotjs loaded successfully');
   console.log('   robotjs version:', robot ? 'loaded' : 'null');
   console.log('   moveMouse available:', typeof robot?.moveMouse === 'function');
   console.log('   mouseToggle available:', typeof robot?.mouseToggle === 'function');
 } catch (e) {
   robotjsError = e;
-  console.error('❌ robotjs not available (remote control disabled):', e.message);
+  console.error('❌ @jitsi/robotjs not available (remote control disabled):', e.message);
   console.error('   Error code:', e.code);
   console.error('   Error stack:', e.stack);
   console.error('   This will prevent mouse and keyboard control from working.');

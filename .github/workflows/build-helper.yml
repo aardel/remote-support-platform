@@ -19,9 +19,12 @@ env:
 
 jobs:
   build-win:
-    # Pinned to windows-2022: robotjs@0.7.1 (2019, NAN-based) fails to build
-    # natively on the newer windows-latest image. This matches the environment
-    # that last built successfully (2026-06-11). Revisit if robotjs is upgraded.
+    # Pinned to windows-2022 since the original robotjs@0.7.1 (2019, NAN-based)
+    # failed to build on windows-latest. As of 2026-07-03 the helper uses
+    # @jitsi/robotjs (maintained fork, CI-published prebuilt binaries), which
+    # likely doesn't need this pin anymore — but leaving it as-is since it
+    # still works and there's no cost to keeping it. Safe to try reverting to
+    # windows-latest in a follow-up, verified in isolation.
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
