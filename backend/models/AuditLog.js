@@ -58,6 +58,21 @@ class AuditLog {
         );
         return r.rows;
     }
+
+    // Event counts over the last N days: { event: count, ... }
+    static async stats(days = 7) {
+        await ensureTable();
+        const r = await pool.query(
+            `SELECT event, COUNT(*)::int AS count
+               FROM session_audit
+              WHERE created_at > NOW() - ($1 || ' days')::interval
+              GROUP BY event`,
+            [String(Math.max(1, Math.min(Number(days) || 7, 365)))]
+        );
+        const byEvent = {};
+        r.rows.forEach((row) => { byEvent[row.event] = row.count; });
+        return byEvent;
+    }
 }
 
 module.exports = AuditLog;

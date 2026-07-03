@@ -12,6 +12,7 @@ import DevicesPage from './pages/DevicesPage';
 import SessionsPage from './pages/SessionsPage';
 import CasesPage from './pages/CasesPage';
 import AuditPage from './pages/AuditPage';
+import OpsPage from './pages/OpsPage';
 import StatisticsPage from './pages/StatisticsPage';
 import HelperTemplatesPage from './pages/HelperTemplatesPage';
 import PreferencesPage from './pages/PreferencesPage';
@@ -110,6 +111,7 @@ export default function App() {
                     <Route path="/sessions" element={<SessionsPage />} />
                     <Route path="/cases" element={<CasesPage />} />
                     <Route path="/audit" element={<AuditPage />} />
+                    <Route path="/ops" element={<OpsPage />} />
                     <Route path="/statistics" element={<StatisticsPage />} />
                     <Route path="/helper-templates" element={<HelperTemplatesPage />} />
                     <Route path="/preferences" element={<PreferencesPage />} />
