@@ -18,6 +18,8 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
     const [browseItems, setBrowseItems] = useState([]);
     const [candidates, setCandidates] = useState([]); // auto-detected files to choose from
     const [selectedFile, setSelectedFile] = useState(null); // { path, name, editor }
+    const [viewMode, setViewMode] = useState('structured'); // 'structured' (built-in editor) | 'text' (plain text, tab-indent)
+    const [rawText, setRawText] = useState('');
     const [pendingSave, setPendingSave] = useState(null); // { newContent, filename, oldContent }
     const [diff, setDiff] = useState(null);
     const [progressMsg, setProgressMsg] = useState('');
@@ -25,6 +27,7 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
     const reqIdCounter = useRef(0);
     const pending = useRef(new Map());
     const iframeRef = useRef(null);
+    const textareaRef = useRef(null);
     const fileContentRef = useRef(''); // original content of the currently-open file
     const backupIdRef = useRef(null);
 
@@ -164,22 +167,24 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
         } catch (e) { setError(e.message); }
     };
 
-    const pickFile = (item) => {
+    const pickFile = (item, mode = 'structured') => {
         const editor = /\.mk$/i.test(item.name) ? 'mk'
             : item.name.toLowerCase() === PFIELDS_FILENAME ? 'pfields'
             : null;
         if (!editor) { setError(`${item.name} isn't a recognized machine config file (.mk or pfields.dat)`); return; }
-        openFile({ path: item.path, name: item.name, editor });
+        openFile({ path: item.path, name: item.name, editor }, mode);
     };
 
-    /* ---------- Open + safety backup + embed editor ---------- */
-    const openFile = async (file) => {
+    /* ---------- Open + safety backup + embed editor (or plain text) ---------- */
+    const openFile = async (file, mode = 'structured') => {
         setSelectedFile(file);
+        setViewMode(mode);
         setPhase('loading');
         setError(null);
         try {
             const content = await readFileFull(file.path);
             fileContentRef.current = content;
+            if (mode === 'text') setRawText(content);
             const backupResp = await axios.post('/api/machine-config/backup', {
                 sessionId, deviceId, filePath: file.path, content, reason: 'pre-edit'
             });
@@ -252,6 +257,25 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
         setPhase('editing');
     };
 
+    // Plain-text mode: pressing Tab inserts a real tab character (keeping the
+    // file's column alignment intact) instead of shifting focus, which is what
+    // a bare <textarea> does by default.
+    const handleTextareaKeyDown = (e) => {
+        if (e.key !== 'Tab') return;
+        e.preventDefault();
+        const ta = e.target;
+        const { selectionStart, selectionEnd } = ta;
+        const next = rawText.slice(0, selectionStart) + '\t' + rawText.slice(selectionEnd);
+        setRawText(next);
+        requestAnimationFrame(() => {
+            ta.selectionStart = ta.selectionEnd = selectionStart + 1;
+        });
+    };
+
+    const saveTextEdits = () => {
+        setPendingSave({ newContent: rawText, filename: selectedFile.name, oldContent: fileContentRef.current });
+    };
+
     const editorUrl = selectedFile?.editor === 'mk' ? '/remote/editors/mkeditor/index.html'
         : selectedFile?.editor === 'pfields' ? '/remote/editors/pfieldeditor/index.html'
         : null;
@@ -284,11 +308,15 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
                             <>
                                 <p className="mce-hint">Found these machine config files:</p>
                                 {candidates.map(c => (
-                                    <div key={c.path} className="mce-candidate" onClick={() => openFile(c)}>
+                                    <div key={c.path} className="mce-candidate">
                                         <span className="mce-icon">{c.editor === 'mk' ? '⚙️' : '📄'}</span>
                                         <span className="mce-cand-name">{c.name}</span>
                                         {c.backupLike && <span className="mce-badge">looks like a backup — verify before editing</span>}
                                         <span className="mce-cand-path">{c.path}</span>
+                                        <div className="mce-cand-actions">
+                                            <button className="mce-btn primary" onClick={() => openFile(c, 'structured')}>Open in Editor</button>
+                                            <button className="mce-btn" onClick={() => openFile(c, 'text')}>Open as Text</button>
+                                        </div>
                                     </div>
                                 ))}
                                 <p className="mce-hint" style={{ marginTop: 14 }}>Not the right file? Browse manually below.</p>
@@ -307,13 +335,19 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
                                 }}>⬆ Up</div>
                             )}
                             {browseItems.map(item => (
-                                <div
-                                    key={item.path}
-                                    className="mce-browse-item"
-                                    onClick={() => item.isDirectory ? navigateTo(item.path) : pickFile(item)}
-                                >
-                                    {item.isDirectory ? '📁' : '📄'} {item.name}
-                                </div>
+                                item.isDirectory ? (
+                                    <div key={item.path} className="mce-browse-item" onClick={() => navigateTo(item.path)}>
+                                        📁 {item.name}
+                                    </div>
+                                ) : (
+                                    <div key={item.path} className="mce-browse-item mce-browse-file">
+                                        <span>📄 {item.name}</span>
+                                        <div className="mce-cand-actions">
+                                            <button className="mce-btn primary" onClick={() => pickFile(item, 'structured')}>Open in Editor</button>
+                                            <button className="mce-btn" onClick={() => pickFile(item, 'text')}>Open as Text</button>
+                                        </div>
+                                    </div>
+                                )
                             ))}
                         </div>
                     </div>
@@ -321,16 +355,37 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
 
                 {phase === 'loading' && <div className="mce-empty">Reading {selectedFile?.name} and creating a safety backup...</div>}
 
-                {(phase === 'editing' || phase === 'confirming' || phase === 'saving') && editorUrl && (
+                {(phase === 'editing' || phase === 'confirming' || phase === 'saving') && selectedFile && (
                     <div className="mce-editor-wrap">
-                        <iframe
-                            ref={iframeRef}
-                            key={selectedFile.path}
-                            src={editorUrl}
-                            title="Machine parameter editor"
-                            onLoad={onIframeLoad}
-                            className="mce-iframe"
-                        />
+                        {viewMode === 'structured' && editorUrl && (
+                            <iframe
+                                ref={iframeRef}
+                                key={selectedFile.path}
+                                src={editorUrl}
+                                title="Machine parameter editor"
+                                onLoad={onIframeLoad}
+                                className="mce-iframe"
+                            />
+                        )}
+
+                        {viewMode === 'text' && (
+                            <div className="mce-text-editor">
+                                <div className="mce-text-toolbar">
+                                    <span className="mce-hint">Plain text — Tab inserts a real tab character, spaces stay aligned.</span>
+                                    <button className="mce-btn primary" onClick={saveTextEdits} disabled={phase !== 'editing'}>Save</button>
+                                </div>
+                                <textarea
+                                    ref={textareaRef}
+                                    className="mce-textarea"
+                                    value={rawText}
+                                    onChange={(e) => setRawText(e.target.value)}
+                                    onKeyDown={handleTextareaKeyDown}
+                                    spellCheck={false}
+                                    disabled={phase !== 'editing'}
+                                />
+                            </div>
+                        )}
+
                         {progressMsg && <div className="mce-toast">{progressMsg}</div>}
 
                         {phase === 'confirming' && diff && (

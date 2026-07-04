@@ -24,24 +24,39 @@
 .mce-picker { padding: 20px; overflow-y: auto; color: #e2e8f0; }
 .mce-hint { color: #94a3b8; font-size: 13px; margin-bottom: 10px; }
 .mce-candidate {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 10px 14px; margin-bottom: 6px;
   background: #263548; border: 1px solid #334155; border-radius: 6px;
-  cursor: pointer;
 }
-.mce-candidate:hover { background: #334155; }
 .mce-icon { font-size: 16px; }
 .mce-cand-name { font-weight: 600; }
 .mce-cand-path { color: #64748b; font-size: 11px; margin-left: auto; }
 .mce-badge {
   background: #7c2d12; color: #fed7aa; font-size: 11px; padding: 2px 8px; border-radius: 10px;
 }
+.mce-cand-actions { display: flex; gap: 8px; width: 100%; margin-top: 4px; }
 .mce-browser { border: 1px solid #334155; border-radius: 6px; max-height: 300px; overflow-y: auto; }
 .mce-browse-item { padding: 8px 14px; cursor: pointer; font-size: 13px; }
 .mce-browse-item:hover { background: #334155; }
+.mce-browse-file { display: flex; align-items: center; gap: 12px; cursor: default; }
+.mce-browse-file:hover { background: none; }
+.mce-browse-file .mce-cand-actions { width: auto; margin-top: 0; margin-left: auto; }
 
 .mce-editor-wrap { flex: 1; position: relative; display: flex; min-height: 0; }
 .mce-iframe { flex: 1; border: none; background: #fff; }
+
+.mce-text-editor { flex: 1; display: flex; flex-direction: column; min-height: 0; background: #0f172a; }
+.mce-text-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px; border-bottom: 1px solid #334155;
+}
+.mce-textarea {
+  flex: 1; border: none; resize: none; padding: 14px;
+  background: #0b1220; color: #e2e8f0; font-family: "SF Mono", Consolas, monospace;
+  font-size: 13px; line-height: 1.5; tab-size: 4; -moz-tab-size: 4;
+  white-space: pre; overflow: auto;
+}
+.mce-textarea:disabled { opacity: .7; }
 .mce-toast {
   position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
   background: #065f46; color: #d1fae5; padding: 8px 16px; border-radius: 6px;
