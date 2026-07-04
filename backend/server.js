@@ -105,6 +105,7 @@ app.use('/api/devices', devicesRouter);
 app.use('/api/cases', casesRouter);
 app.use('/api/support', supportRouter);
 app.use('/api/audit', require('./routes/audit'));
+app.use('/api/machine-config', require('./routes/machineConfig'));
 app.use('/api/version', require('./routes/version'));
 app.use('/api/helper', require('./routes/helper'));
 app.use('/api/websocket', require('./routes/websocket'));

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lasercomb MK Editor — machine .mk files</title>
+  <style>
+    :root {
+      --primary: #3498db; --secondary: #2c3e50; --success: #2ecc71; --danger: #e74c3c;
+      --warning: #f39c12; --text-color: #333; --bg-color: #f8f9fa; --content-bg: #ffffff;
+      --border-color: #dee2e6; --header-color: #ffffff; --input-bg: #ffffff; --input-border: #ddd;
+      --header-bg: #2c3e50; --table-header-bg: #f5f5f5; --table-header-text: #333;
+      --table-border: #eee; --group-header-bg: #2c3e50; --group-header-color: #ffffff;
+      --backup-bg: #f9f9f9; --comment-color: #666; --file-status-bg: #f8f9fa;
+      --file-status-hover: #e9ecef; --settings-bg: #f8f9f9; --param-key-color: inherit;
+    }
+    html[data-theme="dark"] {
+      --primary: #4fa3e0; --secondary: #375a7f; --success: #00bc8c; --danger: #e74c3c;
+      --text-color: #eee; --bg-color: #303030; --content-bg: #444; --border-color: #555;
+      --header-color: #eee; --input-bg: #333; --input-border: #555; --header-bg: #375a7f;
+      --table-header-bg: #444; --table-header-text: #eee; --table-border: #555;
+      --group-header-bg: #375a7f; --backup-bg: #333; --comment-color: #aaa;
+      --file-status-bg: #333; --file-status-hover: #444; --settings-bg: #333; --param-key-color: #ddd;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6;
+      color: var(--text-color); background: var(--bg-color); transition: background .3s, color .3s; }
+    .main-content { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    header { background: var(--header-bg); color: var(--header-color); padding: 1rem; margin-bottom: 20px; }
+    .header-content { display: flex; justify-content: space-between; align-items: center; max-width: 1200px; margin: 0 auto; gap: 10px; }
+    .header-actions { display: flex; align-items: center; gap: 8px; }
+    .lock-toggle, .theme-toggle {
+      background: transparent; border: 2px solid var(--header-color); color: var(--header-color);
+      border-radius: 50%; width: 36px; height: 36px; cursor: pointer; font-size: 18px;
+    }
+    .lock-toggle.locked { color: var(--danger); border-color: var(--danger); }
+    .content-box { background: var(--content-bg); border-radius: 5px; padding: 20px; margin-bottom: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.1); }
+    .file-status-panel { background: var(--file-status-bg); border: 1px solid var(--border-color);
+      border-radius: 4px; padding: 10px 15px; margin-bottom: 20px; display: flex;
+      justify-content: space-between; align-items: center; cursor: pointer; }
+    .file-status-panel.dragover { border: 2px dashed #86b7fe; background: #d1ecf1; }
+    #file-status { font-weight: bold; color: var(--secondary); }
+    .params-count { background: var(--primary); color: #fff; padding: 3px 8px; border-radius: 10px; font-size: .9em; }
+    .settings-panel { background: var(--settings-bg); border: 1px solid var(--border-color); border-radius: 4px; padding: 15px; margin-bottom: 20px; }
+    .settings-title { font-weight: bold; margin-bottom: 10px; color: var(--secondary); }
+    .settings-row { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; }
+    .settings-group { display: flex; align-items: center; gap: 10px; }
+    .filter-row { margin-bottom: 15px; }
+    .filter-row input { width: 100%; max-width: 420px; padding: 8px 12px; border: 1px solid var(--input-border);
+      border-radius: 4px; background: var(--input-bg); color: var(--text-color); }
+    .param-group { border: 1px solid var(--border-color); border-radius: 5px; margin-bottom: 20px; overflow: hidden; }
+    .param-group-header { background: var(--group-header-bg); color: var(--group-header-color); padding: 10px 15px;
+      cursor: pointer; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+    .param-group-body { padding: 15px; display: none; overflow-x: auto; }
+    .param-row { display: grid; padding: 8px 0; border-bottom: 1px solid var(--table-border); align-items: center; }
+    /* 3-column grid: label+desc | value | unit (description is now embedded in the label) */
+    .param-row.mk-grid { grid-template-columns: 55% 35% 10%; }
+    /* param-label stacks the key name above an inline description */
+    .param-label { display: flex; flex-direction: column; gap: 1px; padding-right: 8px; }
+    .param-desc-inline { font-size: 0.8em; color: var(--comment-color); }
+    /* has-axes: full-width block — one header line then a nowrap axis row */
+    .param-row.has-axes { display: block; }
+    .param-header-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0; padding-bottom: 4px; }
+    .param-header-row .param-key { flex-shrink: 0; }
+    .param-header-row .param-desc-inline { padding-left: 8px; }
+    .axis-values { display: flex; flex-wrap: nowrap; gap: 6px; padding: 2px 0; }
+    .axis-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 100px; }
+    .axis-lbl { font-weight: 700; font-size: 0.78em; color: var(--primary); letter-spacing: 0.03em; }
+    .axis-cell input { width: 100px; padding: 4px 6px; border: 1px solid var(--input-border); border-radius: 4px;
+      text-align: right; background: var(--input-bg); color: var(--text-color); font-size: 0.9em; }
+    .axis-cell input:disabled { opacity: .7; cursor: not-allowed; }
+    .axis-cell input.locked { border: 2px solid var(--danger); }
+    .axis-cell input.changed-value { border: 2px solid var(--danger); background: rgba(231,76,60,.1); }
+    .per-axis-hint { font-size: 0.82em; color: var(--primary); font-style: italic; }
+    .param-row.param-header { background: var(--table-header-bg); font-weight: bold; color: var(--table-header-text); }
+    .param-key { padding-right: 10px; color: var(--param-key-color); font-family: Consolas, monospace; font-size: .92em; word-break: break-all; }
+    .param-value input { max-width: 120px; width: 100%; padding: 4px; border: 1px solid var(--input-border);
+      border-radius: 4px; text-align: right; background: var(--input-bg); color: var(--text-color); }
+    .param-value input:disabled { opacity: .7; cursor: not-allowed; }
+    .param-value input.locked { border: 2px solid var(--danger); }
+    .param-value input.changed-value { border: 2px solid var(--danger); background: rgba(231,76,60,.1); color: var(--danger); }
+    .param-unit { text-align: center; font-size: .9em; color: var(--comment-color); }
+    .param-desc { padding-left: 10px; font-size: .9em; color: var(--comment-color); }
+    select { padding: 8px; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg); color: var(--text-color); }
+    .button-group { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0; }
+    button { padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-warning { background: var(--warning); color: #fff; }
+    button:disabled { opacity: .6; cursor: not-allowed; }
+    .alert { padding: 15px; border-radius: 4px; margin-bottom: 20px; display: none; color: #fff; }
+    .alert-warning { background: var(--warning); }
+    .alert-success { background: var(--success); }
+    .alert-danger { background: var(--danger); }
+    .alert-info { background: var(--primary); }
+    .file-input-wrapper { position: relative; overflow: hidden; display: inline-block; }
+    .file-input-wrapper input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .comment-section { margin-top: 10px; font-style: italic; color: var(--comment-color); font-size: .92em; }
+    .backup-list { max-height: 200px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 4px; padding: 10px; background: var(--backup-bg); }
+    .backup-item { padding: 5px; border-bottom: 1px solid var(--table-border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .backup-actions { display: flex; gap: 5px; }
+    .small-btn { padding: 2px 5px; font-size: .8em; }
+    .parameter-badge { display: inline-block; border-radius: 50%; width: 20px; height: 20px; text-align: center;
+      line-height: 20px; background: var(--primary); color: #fff; font-size: 12px; margin-left: 8px; }
+    #change-history-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    #change-history-table th, #change-history-table td { border-bottom: 1px solid var(--border-color); padding: 5px; text-align: left; }
+    #change-history-table th { background: var(--table-header-bg); color: var(--table-header-text); }
+    .catalog-note { font-size: .88em; color: var(--comment-color); margin-top: 6px; }
+    .param-row.has-desc-rows { grid-template-columns: 25% 75%; align-items: start; }
+    .desc-rows { display: flex; flex-direction: column; gap: 3px; padding: 4px 0; }
+    .desc-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--table-border); }
+    .desc-row.has-bits { align-items: flex-start; }
+    .desc-row:last-child { border-bottom: none; }
+    .desc-row .row-lbl { font-weight: 700; font-size: 0.78em; color: var(--primary); min-width: 52px; font-family: Consolas, monospace; letter-spacing: 0.02em; flex-shrink: 0; }
+    .desc-row input[type="number"] { width: 90px; padding: 3px 6px; border: 1px solid var(--input-border); border-radius: 4px; text-align: right; background: var(--input-bg); color: var(--text-color); font-size: 0.9em; flex-shrink: 0; }
+    .desc-row input[type="number"]:disabled { opacity: .7; cursor: not-allowed; }
+    .desc-row input[type="number"].locked { border: 2px solid var(--danger); }
+    .desc-row input[type="number"].changed-value { border: 2px solid var(--danger); background: rgba(231,76,60,.1); }
+    .desc-row .row-desc { font-size: 0.83em; color: var(--comment-color); flex: 1; padding-left: 4px; }
+    .desc-bit-wrap { flex: 1; display: flex; flex-direction: column; gap: 4px; padding-top: 1px; }
+    .row-desc-top { font-size: 0.82em; color: var(--comment-color); }
+    .bit-grid { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 2px 0; }
+    .bit-check { display: inline-flex; align-items: center; gap: 4px; font-size: 0.79em; cursor: pointer; padding: 2px 5px; border-radius: 3px; border: 1px solid transparent; transition: background .15s; }
+    .bit-check input[type="checkbox"] { cursor: pointer; accent-color: var(--success); width: 13px; height: 13px; flex-shrink: 0; }
+    .bit-check input[type="checkbox"]:disabled { cursor: not-allowed; }
+    .bit-check.bit-set { background: rgba(46,204,113,.12); border-color: var(--success); color: var(--success); font-weight: 600; }
+    .bit-check:not(.bit-set) { color: var(--comment-color); }
+    .bit-num { font-family: Consolas, monospace; font-size: 0.9em; opacity: 0.7; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-content">
+      <div>
+        <h1>Lasercomb MK Editor V1.0</h1>
+        <div class="catalog-note">Model-named <code>cfg\*.mk</code> files · catalog v<span id="catalog-version">—</span></div>
+      </div>
+      <div class="header-actions">
+        <button id="theme-toggle" class="theme-toggle" title="Toggle theme">☀️</button>
+        <button id="lock-toggle" class="lock-toggle locked" title="Unlock with password">🔒</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="main-content">
+    <div class="alert alert-warning" id="load-warning">
+      <strong>Warning!</strong> Changes take effect after rebooting the NC or downloading the MK-file to the controller.
+    </div>
+    <div class="alert alert-success" id="save-success"><strong>Success!</strong> File saved.</div>
+    <div class="alert alert-danger" id="error-message"><strong>Error!</strong> <span id="error-text"></span></div>
+    <div class="alert alert-info" id="unit-conversion-info"><strong>Unit conversion:</strong> <span id="conversion-info-text"></span></div>
+
+    <div class="content-box">
+      <div class="file-status-panel" id="file-status-panel">
+        <div id="file-status">Drop a .mk file here or click Open File</div>
+        <div id="params-loaded" class="params-count">0 parameters</div>
+      </div>
+
+      <div class="settings-panel">
+        <div class="settings-title">Unit configuration</div>
+        <div class="settings-row">
+          <div class="settings-group">
+            <label for="machine-units">Machine units:</label>
+            <select id="machine-units"><option value="mm">Millimeters (mm)</option><option value="inch">Inches (in)</option></select>
+          </div>
+          <div class="settings-group">
+            <label for="display-units">Display units:</label>
+            <select id="display-units"><option value="mm">Millimeters (mm)</option><option value="inch">Inches (in)</option></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="filter-row">
+        <input type="search" id="param-filter" placeholder="Filter parameters by name or description…" autocomplete="off" />
+      </div>
+
+      <div class="button-group">
+        <div class="file-input-wrapper">
+          <button class="btn-primary">Open .mk File</button>
+          <input type="file" id="file-input" accept=".mk,.MK" />
+        </div>
+        <button class="btn-warning" onclick="MkEditor.loadSampleData()">Load Sample</button>
+        <button class="btn-success" id="save-button" onclick="MkEditor.saveFile()" disabled>Save Changes</button>
+        <button class="btn-warning" id="reset-button" onclick="MkEditor.resetChanges()" disabled>Reset</button>
+        <button class="btn-primary" onclick="MkEditor.expandAllGroups()">Expand All</button>
+        <button class="btn-primary" onclick="MkEditor.collapseAllGroups()">Collapse All</button>
+      </div>
+
+      <div id="parameters-container"></div>
+
+      <div class="comment-section">
+        Dimensional values shown in <span id="display-unit-text">millimeters (mm)</span>, saved in <span id="machine-unit-text">millimeters (mm)</span>.
+        Unknown keys stay in dynamic groups and are preserved on save.
+      </div>
+    </div>
+
+    <div class="content-box">
+      <h3>Backup information</h3>
+      <p>Each save creates a session backup you can download or restore.</p>
+      <div id="backup-list" class="backup-list"><div class="backup-item">No backups yet</div></div>
+    </div>
+
+    <div class="content-box">
+      <h3>Parameter change history</h3>
+      <label><input type="checkbox" id="append-history" checked /> Append changes as comments in the .mk file</label>
+      <table id="change-history-table">
+        <thead><tr><th>Timestamp</th><th>Parameter</th><th>Old</th><th>New</th></tr></thead>
+        <tbody id="change-history-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="mk_param_catalog.js"></script>
+  <script>
+    document.getElementById('catalog-version').textContent =
+      typeof MK_CATALOG_VERSION !== 'undefined' ? MK_CATALOG_VERSION : 'none';
+  </script>
+  <script src="mk_editor_core.js"></script>
+</body>
+</html>

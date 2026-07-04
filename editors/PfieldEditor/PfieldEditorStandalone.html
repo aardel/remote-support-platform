@@ -1,0 +1,3160 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lasercomb Lasers Pfield Editor - pfields.dat</title>
+  <style>
+    :root {
+      /* Light theme variables */
+      --primary: #3498db;
+      --secondary: #2c3e50;
+      --success: #2ecc71;
+      --danger: #e74c3c;
+      --warning: #f39c12;
+      --light: #ecf0f1;
+      --dark: #34495e;
+      --bg-light: #f8f9fa;
+      --text-color: #333;
+      --bg-color: #f8f9fa;
+      --content-bg: #ffffff;
+      --border-color: #dee2e6;
+      --header-color: #ffffff;
+      --input-bg: #ffffff;
+      --input-border: #ddd;
+      --header-bg: #2c3e50;
+      --table-header-bg: #f5f5f5;
+      --table-header-text: #333;
+      --table-border: #eee;
+      --group-header-bg: #2c3e50;
+      --group-header-color: #ffffff;
+      --backup-bg: #f9f9f9;
+      --comment-color: #666;
+      --file-status-bg: #f8f9fa;
+      --file-status-hover: #e9ecef;
+      --settings-bg: #f8f9f9;
+      --param-key-color: inherit;
+    }
+
+    /* Dark theme variables */
+    html[data-theme="dark"] {
+      --primary: #4fa3e0;
+      --secondary: #375a7f;
+      --success: #00bc8c;
+      --danger: #e74c3c;
+      --warning: #f39c12;
+      --light: #222;
+      --dark: #444;
+      --bg-light: #222;
+      --text-color: #eee;
+      --bg-color: #303030;
+      --content-bg: #444;
+      --border-color: #555;
+      --header-color: #eee;
+      --input-bg: #333;
+      --input-border: #555;
+      --header-bg: #375a7f;
+      --table-header-bg: #444;
+      --table-header-text: #eee;
+      --table-border: #555;
+      --group-header-bg: #375a7f;
+      --group-header-color: #eee;
+      --backup-bg: #333;
+      --comment-color: #aaa;
+      --file-status-bg: #333;
+      --file-status-hover: #444;
+      --settings-bg: #333;
+      --param-key-color: #ddd;
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      line-height: 1.6;
+      color: var(--text-color);
+      background-color: var(--bg-color);
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+    
+    .container-fluid {
+      width: 100%;
+      padding: 0;
+    }
+    
+    .main-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    header {
+      background-color: var(--header-bg);
+      color: var(--header-color);
+      padding: 1rem;
+      margin-bottom: 20px;
+    }
+    
+    .header-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .version-info {
+      font-size: 0.9rem;
+      text-align: right;
+    }
+
+    .lock-toggle {
+      background-color: transparent;
+      border: 2px solid var(--header-color);
+      color: var(--header-color);
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 18px;
+      margin-right: 10px;
+    }
+    
+    .lock-toggle:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+      transform: rotate(30deg);
+    }
+
+    .lock-toggle.locked {
+      color: var(--danger);
+      border-color: var(--danger);
+    }
+
+    .param-value input:disabled {
+      background-color: var(--input-bg);
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+
+    .param-value input.locked {
+      border: 2px solid var(--danger);
+    }
+    
+    .theme-toggle {
+      background-color: transparent;
+      border: 2px solid var(--header-color);
+      color: var(--header-color);
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 18px;
+    }
+    
+    .theme-toggle:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+      transform: rotate(30deg);
+    }
+    
+    .content-box {
+      background-color: var(--content-bg);
+      border-radius: 5px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      transition: background-color 0.3s ease;
+    }
+    
+    .file-status-panel {
+      background-color: var(--file-status-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 10px 15px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    
+    .file-status-panel:hover {
+      background-color: var(--file-status-hover);
+    }
+    
+    .file-status-panel.dragover {
+      background-color: #d1ecf1;
+      border: 2px dashed #86b7fe;
+    }
+    
+    #file-status {
+      font-weight: bold;
+      font-size: 1.1em;
+      color: var(--secondary);
+    }
+    
+    .params-count {
+      background-color: var(--primary);
+      color: white;
+      padding: 3px 8px;
+      border-radius: 10px;
+      font-size: 0.9em;
+    }
+    
+    .settings-panel {
+      background-color: var(--settings-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 15px;
+      margin-bottom: 20px;
+    }
+    
+    .settings-title {
+      font-weight: bold;
+      margin-bottom: 10px;
+      color: var(--secondary);
+    }
+    
+    .settings-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    
+    .settings-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .settings-group label {
+      font-weight: bold;
+    }
+    
+    .param-group {
+      border: 1px solid var(--border-color);
+      border-radius: 5px;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    
+    .param-group-header {
+      background-color: var(--group-header-bg);
+      color: var(--group-header-color);
+      padding: 10px 15px;
+      cursor: pointer;
+      font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .param-group-body {
+      padding: 15px;
+      display: none;
+      overflow-x: auto;
+    }
+    
+    .param-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    /* 5 columns: Parameter, Index, Value, Unit, Description */
+    .param-row {
+      display: grid;
+      grid-template-columns: 35% 10% 10% 5% 40%;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--table-border);
+      align-items: center;
+    }
+    
+    .param-row.param-header {
+      background-color: var(--table-header-bg);
+      font-weight: bold;
+      color: var(--table-header-text);
+    }
+    
+    .param-key {
+      padding-right: 10px;
+      color: var(--param-key-color);
+    }
+    
+    .param-index {
+      text-align: center;
+      font-family: monospace;
+      color: var(--comment-color);
+    }
+    
+    .param-value input {
+      max-width: 80px;
+      width: 100%;
+      padding: 4px;
+      border: 1px solid var(--input-border);
+      border-radius: 4px;
+      text-align: right;
+      background-color: var(--input-bg);
+      color: var(--text-color);
+    }
+    
+    .param-unit {
+      text-align: center;
+      font-size: 0.9em;
+      color: var(--comment-color);
+    }
+    
+    .param-desc {
+      padding-left: 10px;
+      font-size: 0.9em;
+      color: var(--comment-color);
+    }
+    
+    select {
+      padding: 8px;
+      border: 1px solid var(--input-border);
+      border-radius: 4px;
+      background-color: var(--input-bg);
+      color: var(--text-color);
+    }
+    
+    .button-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 20px 0;
+    }
+    
+    button {
+      padding: 10px 15px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    
+    .btn-primary {
+      background-color: var(--primary);
+      color: white;
+    }
+    
+    .btn-success {
+      background-color: var(--success);
+      color: white;
+    }
+    
+    .btn-warning {
+      background-color: var(--warning);
+      color: white;
+    }
+    
+    button:hover {
+      opacity: 0.9;
+      transform: translateY(-2px);
+    }
+    
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    .alert {
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      display: none;
+    }
+    
+    .alert-success {
+      background-color: var(--success);
+      color: white;
+      border: 1px solid transparent;
+    }
+    
+    .alert-danger {
+      background-color: var(--danger);
+      color: white;
+      border: 1px solid transparent;
+    }
+    
+    .alert-warning {
+      background-color: var(--warning);
+      color: white;
+      border: 1px solid transparent;
+    }
+    
+    .alert-info {
+      background-color: var(--primary);
+      color: white;
+      border: 1px solid transparent;
+    }
+    
+    .file-input-wrapper {
+      position: relative;
+      overflow: hidden;
+      display: inline-block;
+    }
+    
+    .file-input-wrapper input[type=file] {
+      position: absolute;
+      left: 0;
+      top: 0;
+      opacity: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+    }
+    
+    .comment-section {
+      margin-top: 10px;
+      font-style: italic;
+      color: var(--comment-color);
+    }
+    
+    .backup-info {
+      margin-top: 20px;
+      font-size: 0.9em;
+      color: var(--comment-color);
+    }
+    
+    .backup-list {
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 10px;
+      background-color: var(--backup-bg);
+    }
+    
+    .backup-item {
+      padding: 5px;
+      border-bottom: 1px solid var(--table-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    
+    .backup-item:last-child {
+      border-bottom: none;
+    }
+    
+    .backup-actions {
+      display: flex;
+      gap: 5px;
+    }
+    
+    .backup-date {
+      font-weight: bold;
+    }
+    
+    .small-btn {
+      padding: 2px 5px;
+      font-size: 0.8em;
+    }
+    
+    .last-update-info {
+      font-style: italic;
+      font-size: 0.85em;
+      color: var(--comment-color);
+      max-width: 600px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .parameter-badge {
+      display: inline-block;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      text-align: center;
+      line-height: 20px;
+      background-color: var(--primary);
+      color: white;
+      font-size: 12px;
+      margin-left: 10px;
+    }
+    
+    /* Parameter Change History Panel */
+    #change-history-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    #change-history-table th, #change-history-table td {
+      border-bottom: 1px solid var(--border-color);
+      padding: 5px;
+      text-align: left;
+    }
+    #change-history-table th {
+      background-color: var(--table-header-bg);
+      color: var(--table-header-text);
+    }
+    
+    /* Validation styling */
+    .param-value input:invalid {
+      border: 2px solid var(--danger);
+      background-color: #ffeeee;
+    }
+    
+    .validation-message {
+      font-size: 0.85em;
+      margin-top: 4px;
+      padding: 3px 6px;
+      border-radius: 3px;
+      display: none;
+    }
+    
+    .validation-error {
+      color: #721c24;
+      background-color: #f8d7da;
+      border: 1px solid #f5c6cb;
+      display: block;
+    }
+
+    .param-value input.changed-value {
+      border: 2px solid var(--danger);
+      background-color: rgba(231, 76, 60, 0.1);
+      color: var(--danger);
+    }
+    
+    .tooltip {
+      position: relative;
+      display: inline-block;
+    }
+    
+    .tooltip .tooltiptext {
+      visibility: hidden;
+      width: 180px;
+      background-color: var(--secondary);
+      color: #fff;
+      text-align: center;
+      border-radius: 6px;
+      padding: 5px;
+      position: absolute;
+      z-index: 1;
+      bottom: 125%;
+      left: 50%;
+      margin-left: -90px;
+      opacity: 0;
+      transition: opacity 0.3s;
+      font-size: 0.85em;
+    }
+    
+    .tooltip .tooltiptext::after {
+      content: "";
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      margin-left: -5px;
+      border-width: 5px;
+      border-style: solid;
+      border-color: var(--secondary) transparent transparent transparent;
+    }
+    
+    .tooltip:hover .tooltiptext {
+      visibility: visible;
+      opacity: 1;
+    }
+
+    .bitwise-param-value {
+      display: flex;
+      flex-direction: column;
+      gap: 8px; /* Increased gap for group separation */
+      padding-top: 5px;
+      padding-bottom: 5px;
+    }
+
+    .bitwise-group-label {
+      font-weight: bold;
+      font-size: 0.9em; /* Slightly smaller than param-key */
+      color: var(--secondary);
+      margin-bottom: -2px; /* Pull options slightly closer to label */
+      margin-top: 5px; /* Add some space above new group labels */
+    }
+    .bitwise-param-value .bitwise-group-label:first-of-type {
+        margin-top: 0; /* No extra top margin for the very first group label */
+    }
+
+    .bitwise-total-value {
+        margin-top: 10px;
+        font-weight: bold;
+        font-size: 0.9em;
+        color: var(--primary);
+        padding: 5px;
+        background-color: var(--bg-light);
+        border-radius: 3px;
+        text-align: right;
+    }
+
+    .bitwise-option {
+        display: flex;
+        align-items: center;
+        gap: 8px; /* Space between checkbox and its label */
+    }
+
+    .bitwise-option label {
+        font-size: 0.9em;
+        color: var(--text-color);
+        cursor: pointer;
+    }
+    .bitwise-option input[type="checkbox"] {
+        cursor: pointer;
+        width: auto; /* Override global input width for checkboxes */
+        margin-right: 5px; /* Add some margin for visual separation */
+    }
+
+    .calc-voltage-range {
+        display: block; /* Makes it appear on a new line */
+        font-size: 0.85em;
+        color: var(--comment-color); /* Use comment color or a distinct info color */
+        margin-top: 4px;
+        font-style: italic;
+    }
+
+    .calc-voltage-range.conflict {
+        color: #e74c3c;
+        font-weight: 600;
+        font-style: normal;
+    }
+
+    .chuck-sensor-warn {
+        margin: 8px 12px 4px;
+        padding: 8px 10px;
+        border-radius: 6px;
+        font-size: 0.88em;
+        line-height: 1.45;
+    }
+
+    .chuck-sensor-warn.ok {
+        background: rgba(34, 197, 94, 0.12);
+        color: #15803d;
+        border: 1px solid rgba(34, 197, 94, 0.35);
+    }
+
+    .chuck-sensor-warn.conflict {
+        background: rgba(231, 76, 60, 0.1);
+        color: #c0392b;
+        border: 1px solid rgba(231, 76, 60, 0.35);
+    }
+
+    /* Modal base */
+    .modal {
+      display: none; 
+      position: fixed; 
+      z-index: 1000; 
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto; 
+      background-color: rgba(0,0,0,0.6);
+    }
+
+    .modal-content {
+      background-color: var(--content-bg);
+      margin: 10% auto;
+      padding: 25px;
+      border: 1px solid var(--border-color);
+      width: 80%;
+      max-width: 650px;
+      border-radius: 8px;
+      position: relative;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    }
+
+    .modal-close-btn {
+      color: var(--comment-color);
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      line-height: 1;
+    }
+
+    .modal-close-btn:hover,
+    .modal-close-btn:focus {
+      color: var(--danger);
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .modal-content h3 {
+      margin-top: 0;
+      color: var(--primary);
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 10px;
+      margin-bottom: 15px;
+    }
+    .modal-content p {
+        font-size: 0.95em;
+        margin-bottom: 15px;
+    }
+
+    .xshift-scenario-container {
+      display: flex;
+      justify-content: space-around;
+      margin-bottom: 20px;
+      gap: 15px;
+      flex-wrap: wrap;
+    }
+
+    .xshift-scenario {
+      border: 1px solid var(--border-color);
+      padding: 15px;
+      border-radius: 5px;
+      text-align: center;
+      background-color: var(--bg-light);
+      flex: 1;
+      min-width: 250px;
+    }
+    .xshift-scenario input[type="radio"] {
+        margin-right: 8px;
+    }
+    .xshift-scenario label {
+        display: block;
+        margin-bottom: 10px;
+        font-weight: bold;
+    }
+    .xshift-svg {
+      display: block;
+      margin: 0 auto;
+      border: 1px dashed var(--border-color);
+      background-color: var(--input-bg); 
+    }
+
+    .xshift-input-group {
+      margin-bottom: 15px;
+    }
+    .xshift-input-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    .xshift-input-group input[type="number"] {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid var(--input-border);
+      border-radius: 4px;
+      background-color: var(--input-bg);
+      color: var(--text-color);
+    }
+     .xshift-current-value, .xshift-calculated-value {
+        font-size: 0.9em;
+        padding: 8px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        margin-bottom:10px;
+        background-color: var(--bg-light);
+    }
+    .xshift-current-value span, .xshift-calculated-value span {
+        font-weight: bold;
+        color: var(--primary);
+    }
+
+    .modal-button-group {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .param-value-container {
+        display: flex;
+        align-items: center;
+        gap: 5px; /* Adjust gap as needed */
+    }
+
+    .param-value-container input[type="number"] {
+        flex-grow: 1; /* Allows input to take available space */
+    }
+
+    .calibrate-btn {
+        padding: 4px 8px;
+        font-size: 0.8em;
+        line-height: 1.2;
+        height: auto;
+        min-width: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container-fluid">
+    <header>
+      <div class="header-content">
+        <h1>Lasercomb Lasers Pfield Editor V2.3</h1>
+        <button id="theme-toggle" class="theme-toggle" title="Toggle Dark/Light Mode">☀️</button>
+        <button id="lock-toggle" class="lock-toggle" title="Toggle Lock/Unlock">🔒</button>
+      </div>
+    </header>
+    
+    <div class="main-content">
+      <!-- Alerts -->
+      <div class="alert alert-warning" id="load-warning">
+        <strong>Warning!</strong> Changes will only take effect after rebooting the NC or downloading an MK-file.
+      </div>
+      <div class="alert alert-success" id="save-success">
+        <strong>Success!</strong> File has been saved successfully and a backup created.
+      </div>
+      <div class="alert alert-danger" id="error-message">
+        <strong>Error!</strong> <span id="error-text"></span>
+      </div>
+      <div class="alert alert-info" id="unit-conversion-info">
+        <strong>Unit Conversion Active:</strong> <span id="conversion-info-text"></span>
+      </div>
+      
+      <!-- File Status, Settings, and Parameter Groups -->
+      <div class="content-box">
+        <div class="file-status-panel" id="file-status-panel">
+          <div id="file-status">No file loaded</div>
+          <div id="params-loaded" class="params-count">0 parameters loaded</div>
+        </div>
+        
+        <div class="settings-panel">
+          <div class="settings-title">Unit Configuration</div>
+          <div class="settings-row">
+            <div class="settings-group">
+              <label for="machine-units">Machine Setting:</label>
+              <select id="machine-units">
+                <option value="mm">Millimeters (mm)</option>
+                <option value="inch">Inches (in)</option>
+              </select>
+            </div>
+            <div class="settings-group">
+              <label for="display-units">Display/Input Units:</label>
+              <select id="display-units">
+                <option value="mm">Millimeters (mm)</option>
+                <option value="inch">Inches (in)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        
+        <div class="button-group">
+          <div class="file-input-wrapper">
+            <button class="btn-primary" id="file-button">Open File</button>
+            <input type="file" id="file-input" accept=".dat">
+          </div>
+          <button id="load-sample-button" class="btn-warning" onclick="loadSampleData()">Load Sample Data</button>
+          <button id="save-button" class="btn-success" onclick="saveFile()" disabled>Save Changes</button>
+          <button id="reset-button" class="btn-warning" onclick="resetChanges()" disabled>Reset Changes</button>
+          <button id="expand-all" class="btn-primary" onclick="expandAllGroups()">Expand All</button>
+          <button id="collapse-all" class="btn-primary" onclick="collapseAllGroups()">Collapse All</button>
+        </div>
+        
+        <!-- Parameters Container -->
+        <div id="parameters-container">
+          <!-- Parameter groups will be dynamically generated here -->
+        </div>
+        
+        <div class="comment-section">
+          <p>Note: All dimensional values are displayed in <span id="display-unit-text">millimeters (mm)</span> but saved in <span id="machine-unit-text">millimeters (mm)</span></p>
+        </div>
+      </div>
+      
+      <!-- Backup Information -->
+      <div class="content-box">
+        <div class="backup-info">
+          <h3>Backup Information</h3>
+          <p>Backups are automatically created whenever you save changes to the file. The original file is preserved with a timestamp.</p>
+          <div id="backup-list" class="backup-list">
+            <div class="backup-item">No backups yet</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Parameter Change History -->
+      <div class="content-box">
+        <h3>Parameter Change History</h3>
+        <div style="margin-bottom: 10px;">
+          <input type="checkbox" id="append-history" checked>
+          <label for="append-history">Append changes as comments in the .dat file</label>
+        </div>
+        <table id="change-history-table">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Parameter</th>
+              <th>Index</th>
+              <th>Old Value</th>
+              <th>New Value</th>
+            </tr>
+          </thead>
+          <tbody id="change-history-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // Global constants
+    const MM_TO_INCH = 0.0393701;
+    const INCH_TO_MM = 25.4;
+    
+    // Parameter type definitions with units and step values
+    const PARAM_TYPES = {
+      'length': { step: 0.0001, units: { mm: 'mm', inch: 'in' } },
+      'angle': { step: 1, units: { mm: '°', inch: '°' } },
+      'time': { step: 10, units: { mm: 'ms', inch: 'ms' } },
+      'speed': { step: 100, units: { mm: 'rpm', inch: 'rpm' } },
+      'power': { step: 100, units: { mm: 'W', inch: 'W' } },
+      'voltage': { step: 0.1, units: { mm: 'V', inch: 'V' } },
+      'none': { step: 1, units: { mm: '-', inch: '-' } }
+    };
+    
+    // Global state variables
+    let originalFileContent = '';
+    let fileName = 'pfields.dat';
+    let fileVersion = 'Version 2.0';
+    let parsedParams = {};
+    let parameterGroups = {};
+    let originalValues = {};
+    let userEditedParams = new Set();
+    let hasUnsavedChanges = false;
+    let machineUnits = 'mm';
+    let displayUnits = 'mm';
+    let backups = [];
+    let changeHistory = [];
+    // Set by an embedding parent via window.PfieldEditor.setSaveHandler(fn) to
+    // receive saved content directly instead of triggering a browser download.
+    // Standalone use (no embedding parent) is unaffected when left null.
+    let embeddedSaveCallback = null;
+	    let fileComments = []; 
+	    let inChangeHistorySection = false;
+	    let isLocked = true; // Default to locked state
+	    const PASSWORD = '456852'; // Password for unlocking
+
+	    function escapeHtml(value) {
+	      return String(value)
+	        .replace(/&/g, '&amp;')
+	        .replace(/</g, '&lt;')
+	        .replace(/>/g, '&gt;')
+	        .replace(/"/g, '&quot;')
+	        .replace(/'/g, '&#39;');
+	    }
+
+	    function escapeJsStringSingle(value) {
+	      return String(value)
+	        .replace(/\\/g, '\\\\')
+	        .replace(/'/g, "\\'")
+	        .replace(/\r?\n/g, '\\n');
+	    }
+    
+    // Default parameter group definitions
+    const DEFAULT_GROUPS = {
+      'Tool Changer Parameters': {
+        paramTypes: {
+          'TCHG_ACT_TOOL': 'none',
+          'TCHG_DEFAULT_TOOLLENGHT': 'length',
+          'TCHG_COUNT_PLACES': 'none',
+          'TCHG_OFFSET_PLACE_1': 'length',
+          'TCHG_OFFSET_PLACE_2': 'length',
+          'TCHG_OFFSET_MEASURING_SENSOR': 'length',
+          'TCHG_DISTANCE_PLACES': 'length',
+          'TCHG_TOOL_REMOVING_AID_X': 'length',
+          'TCHG_SAFETY_OFFSET_X': 'length',
+          'TCHG_VPOS_MOUNT': 'length',
+          'TCHG_MIN_ANGLE_A': 'angle',
+          'TCHG_TOOL_DETECTION_ZPOS': 'length',
+          'TCHG_PLACE_OFFSET': 'none'
+        }
+      },
+      'Spindle Parameters': {
+        paramTypes: {
+          'SPINDLE_TIME_START': 'time',
+          'SPINDLE_TIME_STOP': 'time',
+          'SPINDLE_SPEED_FACTOR': 'speed',
+          'SPINDLE_MAX_IDLE_POWER': 'power',
+          'SPINDLE_POWER_10V': 'power',
+          'SPINDLE_IDLE_POWER_REVOLUTIONS': 'speed'
+        }
+      },
+      'Tool Offset Parameters': {
+        paramTypes: {
+          'X_SHIFT_MILLING': 'length',
+          'Y_SHIFT_MILLING': 'length',
+          'SCREWDRV_SHIFT_X': 'length',
+          'SCREWDRV_SHIFT_Y': 'length',
+          'SCREWDRV_WORK_POS_Z': 'length',
+          'SCREWDRV_PRE_DRILL_TOOL': 'none',
+          'SCREWDRV_PRE_DRILL_DEPTH': 'length',
+          'SCREWDRV_MAX_SCREW_TIME': 'time'
+        }
+      },
+      'Tool Measurement Parameters': {
+        paramTypes: {
+          'TOOL_MEASURING_SENSOR_PLACE': 'none',
+          'TOOL_MEASURING_SENSOR_ZPOS': 'length',
+          'TOOL_MEASURING_MAX_LENGTH_DIFF': 'length',
+          'TOOL_MEASURING_MIN_ZPOS': 'length',
+          'TOOL_CHK_MODE': 'none'
+        }
+      },
+      'Chuck Sensor Parameters': {
+        paramTypes: {
+          'CHUCK_SENSOR_OPEN': 'voltage',
+          'CHUCK_SENSOR_BAD': 'voltage',
+          'CHUCK_SENSOR_GOOD': 'voltage',
+          'CHUCK_SENSOR_EMPTY': 'voltage',
+          'CHUCK_SENSOR_NO_TOOL': 'voltage',
+          'CHUCK_SENSOR_OPEN_TOL': 'voltage',
+          'CHUCK_SENSOR_GOOD_TOL': 'voltage',
+          'CHUCK_SENSOR_EMPTY_TOL': 'voltage'
+        }
+      },
+      'Capacitive Tracking & Speed': {
+        paramTypes: {
+          'MaxMathTicknessDeviation': 'length',
+          'MaxDeviationCapacitiveTracking': 'length',
+          'CAPACITIVE_TRACKING_MAX_DEVIATION': 'length',
+          'CAPACITIVE_TRACKING_GAIN': 'none',
+          'SPEED_COMPENSATION_X': 'none',
+          'SPEED_COMPENSATION_Y': 'none',
+          'SPEED_LIMIT_WARNINGAREA': 'length',
+          'SUCTION_SLIDER_DELAY': 'time',
+          'SCANNER_SUCTION_SLIDER_DELAY': 'time'
+        }
+      },
+      'Kerf Probing — Test Cut': {
+        paramTypes: {
+          'CutHSystem': 'none',
+          'CutFocusLen': 'length',
+          'CutSpeed': 'none',
+          'CutBoxX': 'length',
+          'CutBoxY': 'length',
+          'CutMode': 'none',
+          'CutBoxX0': 'none',
+          'CutBoxY0': 'none'
+        }
+      },
+      'Kerf Probing — Slot Width': {
+        paramTypes: {
+          'MeasureCountPoints': 'none',
+          'MeasureMargin': 'length',
+          'MeasureDirection': 'none',
+          'MeasuredWidth': 'length',
+          'MeasuredWidthAvg': 'length',
+          'MeasureLevelStart': 'none',
+          'MeasureLevelLength': 'length',
+          'MeasureLevelCount': 'none',
+          'MeasureLevelIdx': 'none',
+          'BoxCount': 'none',
+          'BoxDistX': 'length',
+          'BoxDistY': 'length',
+          'MeasurementsPerBoxCount': 'none'
+        }
+      },
+      'Kerf Probing — Touch Probe': {
+        paramTypes: {
+          'ProbeOffsetX': 'length',
+          'ProbeOffsetY': 'length',
+          'ProbeOffsetZ': 'length',
+          'ProbeDiameterXY': 'length',
+          'ProbeDiameterZ': 'length',
+          'ProbeDelay': 'time',
+          'SearchSpeed': 'none'
+        }
+      },
+      'Other Parameters': {
+        paramTypes: {
+          'MAGAZINE_POS_TIME': 'time',
+          'MAGAZINE_RECOVER_TIME': 'time',
+          'SCANNING_LIMIT_ROT_X_M': 'length',
+          'SCANNING_LIMIT_ROT_X_P': 'length',
+          'SERVICE_MODE': 'none'
+        }
+      }
+    };
+
+    // English descriptions for all recognized parameters (overrides German text from machine files)
+    const PARAM_DESCRIPTIONS = {
+      // Tool changer
+      'TCHG_ACT_TOOL': 'Tool changer: actual tool number',
+      'TCHG_DEFAULT_TOOLLENGHT': 'Tool changer: default tool length',
+      'TCHG_COUNT_PLACES': 'Tool changer: number of magazine places',
+      'TCHG_OFFSET_PLACE_1': 'Tool changer: U-position for mounting a tool (place 1)',
+      'TCHG_OFFSET_PLACE_2': 'Tool changer: U-position for mounting a tool (place 2)',
+      'TCHG_OFFSET_MEASURING_SENSOR': 'Tool changer: offset for length measuring sensor',
+      'TCHG_DISTANCE_PLACES': 'Tool changer: distance between magazine places',
+      'TCHG_TOOL_REMOVING_AID_X': 'Tool changer: X movement while dropping a tool',
+      'TCHG_SAFETY_OFFSET_X': 'Tool changer: safety offset in X during magazine positioning',
+      'TCHG_VPOS_MOUNT': 'Tool changer: Z-position for mounting a tool',
+      'TCHG_MIN_ANGLE_A': 'Tool changer: minimum A-axis angle for tool change',
+      'TCHG_TOOL_DETECTION_ZPOS': 'Tool changer: Z-position for tool detection',
+      'TCHG_PLACE_OFFSET': 'Tool changer: magazine place at reference switch',
+      // Spindle
+      'SPINDLE_TIME_START': 'Spindle: start duration [ms] (minimum 3000 ms)',
+      'SPINDLE_TIME_STOP': 'Spindle: stop duration [ms] (minimum 7000 ms)',
+      'SPINDLE_SPEED_FACTOR': 'Spindle speed [rpm] at 10 V output',
+      'SPINDLE_MAX_IDLE_POWER': 'Spindle: maximum idle power [W]',
+      'SPINDLE_POWER_10V': 'Spindle power at 10 V output [W]',
+      'SPINDLE_IDLE_POWER_REVOLUTIONS': 'Spindle speed [rpm] for idle power measurement',
+      // Tool offset / screw driver
+      'X_SHIFT_MILLING': 'Compensation of milling head X-offset',
+      'Y_SHIFT_MILLING': 'Compensation of milling head Y-offset',
+      'SCREWDRV_SHIFT_X': 'Screw driver: X-offset',
+      'SCREWDRV_SHIFT_Y': 'Screw driver: Y-offset',
+      'SCREWDRV_WORK_POS_Z': 'Screw driver: working Z-position',
+      'SCREWDRV_PRE_DRILL_TOOL': 'Screw driver: magazine place of pre-drilling tool',
+      'SCREWDRV_PRE_DRILL_DEPTH': 'Screw driver: pre-drilling depth',
+      'SCREWDRV_MAX_SCREW_TIME': 'Screw driver: maximum screwing time [ms]',
+      // Tool measurement
+      'TOOL_MEASURING_SENSOR_PLACE': 'Magazine place of length measuring sensor (1…n, 0 = n/a)',
+      'TOOL_MEASURING_SENSOR_ZPOS': 'Z-position of tool length measuring sensor',
+      'TOOL_MEASURING_MAX_LENGTH_DIFF': 'Maximum difference between nominal and actual tool length',
+      'TOOL_MEASURING_MIN_ZPOS': 'Lower Z-limit for tool down',
+      'TOOL_CHK_MODE': 'b0: once per job, b1: check with length sensor, b3: measure always, b4: check with chuck sensor',
+      // Chuck sensor
+      'CHUCK_SENSOR_OPEN': 'Sensor voltage: chuck open',
+      'CHUCK_SENSOR_BAD': 'Sensor voltage: bad tool clamping (alternate name, same role as open/low)',
+      'CHUCK_SENSOR_GOOD': 'Sensor voltage: tool clamped correctly',
+      'CHUCK_SENSOR_EMPTY': 'Sensor voltage: no tool',
+      'CHUCK_SENSOR_NO_TOOL': 'Sensor voltage: no tool (alternate name for empty/high)',
+      'CHUCK_SENSOR_OPEN_TOL': 'Voltage tolerance for chuck open (P1635)',
+      'CHUCK_SENSOR_GOOD_TOL': 'Voltage tolerance for good clamping (P1636)',
+      'CHUCK_SENSOR_EMPTY_TOL': 'Voltage tolerance for no tool (P1637)',
+      // Capacitive tracking & speed
+      'MaxMathTicknessDeviation': 'Permissible material thickness deviation [mm] (0 = no check)',
+      'MaxDeviationCapacitiveTracking': 'Max nozzle deviation during capacitive tracking [mm] (0 = off)',
+      'CAPACITIVE_TRACKING_MAX_DEVIATION': 'Max nozzle deviation during capacitive tracking [mm] (0 = off)',
+      'CAPACITIVE_TRACKING_GAIN': 'Capacitive tracking gain',
+      'SPEED_COMPENSATION_X': 'Speed compensation factor X',
+      'SPEED_COMPENSATION_Y': 'Speed compensation factor Y',
+      'SPEED_LIMIT_WARNINGAREA': 'Speed limit in warning area',
+      'SUCTION_SLIDER_DELAY': 'Suction slider delay [s]',
+      'SCANNER_SUCTION_SLIDER_DELAY': 'Scanner suction slider delay [s]',
+      // Kerf probing — test cut (slot cut before measuring)
+      'CutHSystem': 'Kerf test cut: H-system, or -1 to use program value',
+      'CutFocusLen': 'Kerf test cut: focus height [mm], or -1 to use table value',
+      'CutSpeed': 'Kerf test cut: speed, or -1 to use table value',
+      'CutBoxX': 'Kerf test cut: slot length [mm]',
+      'CutBoxY': 'Kerf test cut: slot width [mm]',
+      'CutMode': 'Kerf test cut direction: 0 same +, 1 same -, 2 CW, 3 CCW',
+      'CutBoxX0': 'Kerf probing: reserved (slot origin X)',
+      'CutBoxY0': 'Kerf probing: reserved (slot origin Y)',
+      // Kerf probing — slot width measurement
+      'MeasureCountPoints': 'Kerf probing: number of measure points across the slot',
+      'MeasureMargin': 'Kerf probing: inset from slot corner to first measure point [mm]',
+      'MeasureDirection': 'Kerf probing: measure along slot (0 = X, 1 = Y)',
+      'MeasuredWidth': 'Kerf probing: last measured slot width [mm] (runtime result)',
+      'MeasuredWidthAvg': 'Kerf probing: average measured slot width [mm] (runtime result)',
+      'MeasureLevelStart': 'Kerf probing: start index of first measure level',
+      'MeasureLevelLength': 'Kerf probing: depth/ extent of each measure level [mm]',
+      'MeasureLevelCount': 'Kerf probing: number of measure levels in the slot',
+      'MeasureLevelIdx': 'Kerf probing: reserved (active measure level)',
+      'BoxCount': 'Kerf probing: number of test slots (boxes) on the sheet',
+      'BoxDistX': 'Kerf probing: spacing between test slots in X [mm]',
+      'BoxDistY': 'Kerf probing: spacing between test slots in Y [mm]',
+      'MeasurementsPerBoxCount': 'Kerf probing: measure repetitions per test slot',
+      // Kerf probing — touch probe setup
+      'ProbeOffsetX': 'Kerf probe: touch probe offset X [mm]',
+      'ProbeOffsetY': 'Kerf probe: touch probe offset Y [mm]',
+      'ProbeOffsetZ': 'Kerf probe: touch probe offset Z [mm]',
+      'ProbeDiameterXY': 'Kerf probe: ball diameter XY [mm] (calibration)',
+      'ProbeDiameterZ': 'Kerf probe: ball diameter Z [mm] (calibration)',
+      'ProbeDelay': 'Kerf probe: switch debounce delay [ms]',
+      'SearchSpeed': 'Kerf probe: search feed rate when finding slot edges [mm/min]',
+      // Other
+      'MAGAZINE_POS_TIME': 'Festo magazine: pressure-on time [ms]',
+      'MAGAZINE_RECOVER_TIME': 'Festo magazine: recovery time [ms]',
+      'SCANNING_LIMIT_ROT_X_M': 'Negative software X limit for scanning with rotation',
+      'SCANNING_LIMIT_ROT_X_P': 'Positive software X limit for scanning with rotation',
+      'SERVICE_MODE': 'Service mode flags: b0 = no suction, b1 = leave roller door open'
+    };
+
+    function englishDescription(key, fileDescription) {
+      return PARAM_DESCRIPTIONS[key] || fileDescription;
+    }
+    
+    // Sample data for testing - Updated with correct header format
+    const SAMPLE_DATA = `;-----------------------------------------------------
+; pfields.dat
+; Version 1.1 - 16.01.2015
+; Last modified: 06.03.2025
+;
+; Changes will be in affect after rebooting the NC or
+; after downloading an MK-file
+;-----------------------------------------------------
+
+Key                                     |Index|      Value|Description
+>---------------------------------------+-----+----------+-----------------------------------------------
+
+TCHG_ACT_TOOL                           |P1600|         3|Tool changer: Actual tool
+TCHG_DEFAULT_TOOLLENGHT                 |P1601|    73.250|Tool changer: Default tool length
+TCHG_COUNT_PLACES                       |P1602|         5|Tool changer: Count of places
+TCHG_OFFSET_PLACE_1                     |P1603|  -51.9036|Tool changer: U-Position for mounting a tool
+TCHG_VPOS_MOUNT                         |P1605|    9.2012|Tool changer: Z-Position for mounting a tool
+TCHG_MIN_ANGLE_A                        |P1606|        90|Tool changer: Minimum angle for A-axis for tool change
+TCHG_TOOL_DETECTION_ZPOS                |P1607|   14.4882|Tool changer: Z-Position for tool detection
+SPINDLE_TIME_START                      |P1608|      3000|Spindle: Duration [ms] of starting the spindle (Min is 3000 ms)
+SPINDLE_TIME_STOP                       |P1609|      8000|Spindle: Duration [ms] of stopping the spindle (Min is 7000 ms)
+X_SHIFT_MILLING                         |P1611|    0.0039|Compensation of X-offset of miller
+SCREWDRV_SHIFT_X                        |P1612|    0.3937|X-offset screw driver
+SCREWDRV_SHIFT_Y                        |P1613|    3.3071|Y-offset screw driver
+SCREWDRV_WORK_POS_Z                     |P1614|    0.3937|Screw driver working position
+TOOL_MEASURING_SENSOR_PLACE             |P1615|         8|Place in magazine for tool length measuring sensor ( 1 ..., 0: n.a.)
+TOOL_MEASURING_SENSOR_ZPOS              |P1616|   11.0969|Z-position of tool length measuring sensor
+TOOL_MEASURING_MAX_LENGTH_DIFF          |P1617|    0.0787|Maximal difference between nominal and actual tool length
+SPINDLE_SPEED_FACTOR                    |P1618|     50000|Spindlespeed (1/min) at 10 volts output voltage
+TCHG_PLACE_OFFSET                       |P1619|         6|Number of place when on reference switch
+TOOL_MEASURING_MIN_ZPOS                 |P1620|   10.2362|Lower Z-position for tool down
+TOOL_CHK_MODE                           |P1621|        17|b0: Once per Job, b1: Check with length sensor, b3: Measure always, b4: Check with chuck sensor
+MAGAZINE_POS_TIME                       |P1622|       500|Festo-Magazine: Pressure on time in ms
+MAGAZINE_RECOVER_TIME                   |P1623|       200|Festo-Magazine: Recovery time in ms
+SCREWDRV_PRE_DRILL_TOOL                 |P1625|         0|Tool-Place of pre-drilling tool
+SCREWDRV_PRE_DRILL_DEPTH                |P1626|    0.0000|Pre-drilling depth
+SCANNING_LIMIT_ROT_X_M                  |P1630|    1.9685|Neg. software limit X for scanning on rotation
+SCANNING_LIMIT_ROT_X_P                  |P1631|  115.3545|Pos. software limit X for scanning on rotation
+SPINDLE_MAX_IDLE_POWER                  |P1632|      3000|Maximal idle spindle power in Watts
+SPINDLE_POWER_10V                       |P1633|      1000|Spindle power at 10V output voltage in Watts
+SPINDLE_IDLE_POWER_REVOLUTIONS          |P1634|     15000|Spindle revolutions for recording idle power in rpm
+CHUCK_SENSOR_OPEN                       |P1635|       1.1|Sensor voltage indicating open clamp
+CHUCK_SENSOR_GOOD                       |P1636|       4.2|Sensor voltage indicating good tool clamping
+CHUCK_SENSOR_EMPTY                      |P1637|         9|Sensor voltage indicating no tool
+CHUCK_SENSOR_OPEN_TOL                   |P1638|       0.5|Voltage tolerance for P1635
+CHUCK_SENSOR_GOOD_TOL                   |P1639|         2|Voltage tolerance for P1636
+CHUCK_SENSOR_EMPTY_TOL                  |P1640|       0.5|Voltage tolerance for P1637`;
+    
+    // Initialize the application when DOM is loaded
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('CNC Parameter Editor initializing...');
+      
+      // Load theme from localStorage if available
+      loadSavedTheme();
+      
+      // Add the settings title warning element placeholder
+      const settingsTitle = document.querySelector('.settings-title');
+      if (settingsTitle) {
+        const warningElement = document.createElement('span');
+        warningElement.id = 'unit-detection-warning';
+        warningElement.style.color = '#e74c3c';
+        warningElement.style.marginLeft = '10px';
+        warningElement.style.fontWeight = 'normal';
+        warningElement.style.fontSize = '0.9em';
+        warningElement.style.display = 'none'; // Hidden by default
+        settingsTitle.appendChild(warningElement);
+      }
+      
+      // Setup UI event listeners
+      setupEventListeners();
+      
+      // Initialize UI state
+      const loadWarning = document.getElementById('load-warning');
+      if (loadWarning) loadWarning.style.display = 'block';
+      
+      console.log('Initialization complete');
+    });
+    
+    // Load saved theme from localStorage
+    function loadSavedTheme() {
+      const savedTheme = localStorage.getItem('pfield-editor-theme');
+      if (savedTheme) {
+        const html = document.documentElement;
+        html.setAttribute('data-theme', savedTheme);
+        
+        // Update theme toggle button icon
+        const themeToggle = document.getElementById('theme-toggle');
+        if (themeToggle) {
+          themeToggle.innerHTML = savedTheme === 'light' ? '☀️' : '🌙';
+        }
+        console.log(`Loaded saved theme: ${savedTheme}`);
+      }
+    }
+    
+    // Setup event listeners
+    function setupEventListeners() {
+      // File input
+      const fileInput = document.getElementById('file-input');
+      if (fileInput) {
+        fileInput.addEventListener('change', handleFileSelect);
+      }
+      
+      // Unit settings
+      const machineUnitsSelect = document.getElementById('machine-units');
+      const displayUnitsSelect = document.getElementById('display-units');
+      
+      if (machineUnitsSelect && displayUnitsSelect) {
+        machineUnitsSelect.addEventListener('change', updateUnitSettings);
+        displayUnitsSelect.addEventListener('change', updateUnitSettings);
+      }
+      
+      // Setup drag and drop
+      setupDragAndDrop();
+
+      // Theme toggle
+      const themeToggle = document.getElementById('theme-toggle');
+      if (themeToggle) {
+        themeToggle.addEventListener('click', toggleTheme);
+      }
+
+      // Lock toggle
+      const lockToggle = document.getElementById('lock-toggle');
+      if (lockToggle) {
+        lockToggle.addEventListener('click', toggleLock);
+      }
+    }
+    
+    // Setup drag and drop
+    function setupDragAndDrop() {
+      const dropZone = document.getElementById('file-status-panel');
+      if (!dropZone) return;
+      
+      dropZone.addEventListener('dragover', function(e) {
+        e.preventDefault(); 
+        e.stopPropagation(); 
+        this.classList.add('dragover');
+      });
+      
+      dropZone.addEventListener('dragleave', function(e) {
+        e.preventDefault(); 
+        e.stopPropagation(); 
+        this.classList.remove('dragover');
+      });
+      
+      dropZone.addEventListener('drop', function(e) {
+        e.preventDefault(); 
+        e.stopPropagation(); 
+        this.classList.remove('dragover');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+          const fileInput = document.getElementById('file-input');
+          if (fileInput) {
+            fileInput.files = files;
+            fileInput.dispatchEvent(new Event('change'));
+          }
+        }
+      });
+    }
+    
+    // Handle file selection with proper parameter initialization
+    function handleFileSelect(event) {
+      console.log('Handling file select...');
+      const file = event.target.files[0];
+      if (!file) {
+        console.log('No file selected');
+        return;
+      }
+
+      console.log(`Processing file: ${file.name}, size: ${file.size} bytes`);
+      const reader = new FileReader();
+      reader.onload = (e) => loadContent(e.target.result, file.name);
+      reader.onerror = function(error) {
+        console.error('Error reading file:', error);
+        showAlert(`Error reading file: ${error.message || 'Unknown error'}`, 'error');
+      };
+      reader.readAsText(file);
+    }
+
+    // Extracted from handleFileSelect so content can also be injected directly
+    // (e.g. by an embedding parent via window.PfieldEditor.loadContent) without
+    // needing a real File object.
+    function loadContent(content, name) {
+      try {
+        console.log('File loaded successfully');
+        fileName = name || fileName;
+        originalFileContent = content;
+
+        // Reset tracking
+        originalValues = {};
+        userEditedParams.clear();
+        hasUnsavedChanges = false;
+        changeHistory = [];
+        fileComments = [];
+
+        // Parse parameters
+        const paramCount = parseParameterFile(originalFileContent);
+        console.log(`Parsed ${paramCount} parameters`);
+
+        // Update UI
+        updateFileInfo();
+
+        if (paramCount > 0) {
+          organizeParametersIntoGroups();
+          displayParameters();
+          storeOriginalValues();
+          enableButtons();
+          expandAllGroups();
+
+          // Start in locked state
+          isLocked = true;
+          updateLockState();
+
+          showAlert(`File loaded successfully: ${fileName} with ${paramCount} parameters`, 'info');
+          updateChuckSensorVoltageRanges();
+        } else {
+          showAlert('File loaded but no parameters were found. Check file format.', 'error');
+        }
+      } catch (error) {
+        console.error('Error processing file:', error);
+        showAlert(`Error processing file: ${error.message}`, 'error');
+      }
+    }
+    
+    // Apply P1621 Group 2 Defaulting rules
+    function applyP1621Defaults(index) {
+        const b1Checkbox = document.getElementById(`p${index}_b1_check`);
+        const b4Checkbox = document.getElementById(`p${index}_b4_check`);
+
+        if (b1Checkbox && b4Checkbox) { // Ensure elements exist
+            if (!b1Checkbox.checked && !b4Checkbox.checked) {
+                b1Checkbox.checked = true;
+                // Call handleToolChkModeChange to update hidden input and trigger change handling
+                handleToolChkModeChange(index);
+            }
+        }
+    }
+
+    // Load sample data function
+    function loadSampleData() {
+      console.log('Loading sample data...');
+      originalFileContent = SAMPLE_DATA;
+      fileName = 'pfields.dat';
+      
+      // Reset tracking
+      originalValues = {};
+      userEditedParams.clear();
+      hasUnsavedChanges = false;
+      changeHistory = [];
+      fileComments = [];
+      
+      // Parse parameters
+      const paramCount = parseParameterFile(SAMPLE_DATA);
+      console.log(`Parsed ${paramCount} parameters from sample data`);
+      
+      // Update UI
+      updateFileInfo();
+      
+      if (paramCount > 0) {
+        organizeParametersIntoGroups();
+        displayParameters();
+        storeOriginalValues();
+        enableButtons();
+        expandAllGroups();
+        
+        // Start in locked state
+        isLocked = true;
+        updateLockState();
+        
+        showAlert('Sample data loaded successfully', 'info');
+        updateChuckSensorVoltageRanges();
+      }
+    }
+    
+    // Parse parameter file - Modified to better extract Last modified date
+    function parseParameterFile(content) {
+      if (!content) {
+        console.error('Empty file content');
+        return 0;
+      }
+      
+      const lines = content.split(/\r\n|\r|\n/);
+      
+      parsedParams = {};
+      fileComments = []; // Store all comment lines
+      inChangeHistorySection = false;
+      let lastModifiedDate = null;
+      let paramCount = 0;
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        // Extract version if found
+        if (line.includes('Version')) {
+          fileVersion = line.split('-')[1]?.trim() || fileVersion;
+          const fileVersionElement = document.getElementById('file-version');
+          if (fileVersionElement) {
+            fileVersionElement.textContent = fileName + ' - ' + fileVersion;
+          }
+        }
+        
+        // Look for last modified date in comment lines
+        if (line.startsWith(';') && (line.includes('Last modified:') || line.includes('Last modified'))) {
+          const dateMatch = line.match(/Last modified:?\s*(.+)/i);
+          if (dateMatch && dateMatch[1]) {
+            lastModifiedDate = dateMatch[1].trim();
+          }
+        }
+        
+        // Store comment lines
+        if (line.startsWith(';')) {
+          fileComments.push(line);
+          
+          // Check if this is a change history comment
+          if (line.includes('Parameter Change History')) {
+            inChangeHistorySection = true;
+          }
+          else if (inChangeHistorySection && line.startsWith('; [')) {
+            // Parse change history entry
+            try {
+              // Format: ; [timestamp] PindexNumber paramKey oldValue -> newValue
+              const historyMatch = line.match(/; \[(.*?)\] P(\d+) (\w+) ([\d\.\-]+) -> ([\d\.\-]+)/);
+              if (historyMatch) {
+                const [, timestamp, index, key, oldValue, newValue] = historyMatch;
+                changeHistory.push({
+                  timestamp,
+                  index,
+                  key,
+                  oldValue: parseFloat(oldValue),
+                  newValue: parseFloat(newValue)
+                });
+              }
+            } catch (e) {
+              console.warn('Failed to parse history line:', line);
+            }
+          }
+          continue;
+        }
+        
+        // Skip headers and separators
+        if (line === '' || line.startsWith('Key') || line.startsWith('>-')) continue;
+        
+        // Parse parameter lines
+        if (line.includes('|')) {
+          const parts = line.split('|');
+          if (parts.length >= 4) {
+            const key = parts[0].trim();
+            const indexWithP = parts[1].trim();
+            const value = parts[2].trim();
+            const description = parts.slice(3).join('|').trim();
+
+            const indexMatch = indexWithP.match(/^P?(\d+)$/i);
+            if (!indexMatch) continue;
+            const indexNumber = indexMatch[1];
+            parsedParams[indexNumber] = {
+              key,
+              value,
+              description: englishDescription(key, description)
+            };
+            paramCount++;
+          }
+        }
+      }
+      
+      // Auto-detect machine units based on P1601 value
+      detectMachineUnits();
+      
+      // Update change history display
+      renderChangeHistory();
+      
+      const paramsLoadedElement = document.getElementById('params-loaded');
+      if (paramsLoadedElement) {
+        paramsLoadedElement.textContent = `${paramCount} parameters loaded`;
+      }
+      
+      return paramCount;
+    }
+    
+    // Format date in DD.MM.YYYY format for header
+    function formatDateForHeader(date) {
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}.${month}.${year}`;
+    }
+    
+    // Auto-detect machine units based on TCHG_DEFAULT_TOOLLENGHT (P1601)
+    function detectMachineUnits() {
+      // Check if we have the P1601 parameter
+      if (parsedParams['1601']) {
+        const toolLengthValue = parseFloat(parsedParams['1601'].value);
+        console.log(`Detected tool length value: ${toolLengthValue}`);
+        
+        if (!isNaN(toolLengthValue)) {
+          // Use 50 as the threshold as values around 73.xx are clearly mm, and 2.xx are clearly inches
+          const detectedUnits = toolLengthValue < 50 ? 'inch' : 'mm';
+          console.log(`Auto-detected machine units: ${detectedUnits} based on tool length value ${toolLengthValue}`);
+          
+          // Set the machine units select
+          const machineUnitsSelect = document.getElementById('machine-units');
+          if (machineUnitsSelect) {
+            machineUnitsSelect.value = detectedUnits;
+            machineUnits = detectedUnits;
+          }
+          
+          // Add a warning
+          showUnitDetectionWarning(detectedUnits);
+        }
+      }
+    }
+    
+    // Show unit detection warning
+    function showUnitDetectionWarning(detectedUnits) {
+      const unitWarningElement = document.getElementById('unit-detection-warning');
+      if (!unitWarningElement) {
+        // Create the warning element if it doesn't exist
+        const settingsTitle = document.querySelector('.settings-title');
+        if (settingsTitle) {
+          const warningElement = document.createElement('span');
+          warningElement.id = 'unit-detection-warning';
+          warningElement.style.color = '#e74c3c';
+          warningElement.style.marginLeft = '10px';
+          warningElement.style.fontWeight = 'normal';
+          warningElement.style.fontSize = '0.9em';
+          warningElement.textContent = `⚠️ Machine Units automatically detected as ${detectedUnits === 'mm' ? 'millimeters' : 'inches'}`;
+          settingsTitle.appendChild(warningElement);
+        }
+      } else {
+        // Update existing warning
+        unitWarningElement.textContent = `⚠️ Machine Units automatically detected as ${detectedUnits === 'mm' ? 'millimeters' : 'inches'}`;
+        unitWarningElement.style.display = 'inline';
+      }
+    }
+    
+    // Update unit settings function with debug logging
+    function updateUnitSettings() {
+      const machineUnitsSelect = document.getElementById('machine-units');
+      const displayUnitsSelect = document.getElementById('display-units');
+      
+      if (!machineUnitsSelect || !displayUnitsSelect) return;
+      
+      const oldMachineUnits = machineUnits;
+      const oldDisplayUnits = displayUnits;
+      
+      machineUnits = machineUnitsSelect.value;
+      displayUnits = displayUnitsSelect.value;
+      
+      console.log('Unit settings updated:', {
+        oldMachineUnits,
+        newMachineUnits: machineUnits,
+        oldDisplayUnits,
+        newDisplayUnits: displayUnits
+      });
+      
+      // Update unit labels
+      document.getElementById('display-unit-text').textContent = 
+        displayUnits === 'mm' ? 'millimeters (mm)' : 'inches (in)';
+      document.getElementById('machine-unit-text').textContent = 
+        machineUnits === 'mm' ? 'millimeters (mm)' : 'inches (in)';
+      
+      // Update unit labels and convert displayed values
+      for (const groupName in parameterGroups) {
+        if (!parameterGroups[groupName].params) continue;
+        
+        parameterGroups[groupName].params.forEach(param => {
+          // Update unit label
+          const unitDiv = document.getElementById(`unit-${param.index}`);
+          if (unitDiv && param.type) {
+            unitDiv.textContent = PARAM_TYPES[param.type]?.units?.[displayUnits] || '-';
+          }
+          
+          // Convert displayed values if display units changed
+          if (oldDisplayUnits !== displayUnits) {
+            const inputEl = document.getElementById(param.index);
+            if (inputEl && param.type === 'length') {
+              const currentValue = parseFloat(inputEl.value);
+              if (!isNaN(currentValue)) {
+                const convertedValue = convertValue(currentValue, oldDisplayUnits, displayUnits);
+                console.log(`Converting display value for ${param.key}:`, {
+                  paramIndex: param.index,
+                  from: currentValue,
+                  fromUnit: oldDisplayUnits,
+                  to: convertedValue,
+                  toUnit: displayUnits
+                });
+                inputEl.value = convertedValue.toFixed(4);
+              }
+            }
+          }
+        });
+      }
+      
+      // Show or hide conversion info
+      const needsConversion = machineUnits !== displayUnits;
+      const conversionInfoAlert = document.getElementById('unit-conversion-info');
+      const conversionInfoText = document.getElementById('conversion-info-text');
+      
+      if (needsConversion && conversionInfoAlert && conversionInfoText) {
+        conversionInfoAlert.style.display = 'block';
+        conversionInfoText.textContent = `Values are displayed in ${displayUnits === 'mm' ? 'millimeters' : 'inches'} but will be saved in ${machineUnits === 'mm' ? 'millimeters' : 'inches'}.`;
+      } else if (conversionInfoAlert) {
+        conversionInfoAlert.style.display = 'none';
+      }
+      
+      // Enable save button if machine units have changed, as this is a change that can be saved
+      if (oldMachineUnits !== machineUnits && originalFileContent) {
+        const saveButton = document.getElementById('save-button');
+        const resetButton = document.getElementById('reset-button');
+        
+        if (saveButton) {
+          saveButton.disabled = false;
+          hasUnsavedChanges = true; // Mark that there are unsaved changes
+          console.log('Save button enabled due to machine units change');
+        }
+        
+        if (resetButton) {
+          resetButton.disabled = false;
+        }
+      }
+      
+      // Hide auto-detection warning when user manually selects units
+      const unitWarningElement = document.getElementById('unit-detection-warning');
+      if (unitWarningElement) {
+        unitWarningElement.style.display = 'none';
+      }
+    }
+    
+    // Toggle parameter group expansion
+    function toggleGroup(header) {
+      const body = header.nextElementSibling;
+      body.style.display = (body.style.display === 'block') ? 'none' : 'block';
+    }
+    
+    // Expand all parameter groups
+    function expandAllGroups() {
+      const bodies = document.querySelectorAll('.param-group-body');
+      bodies.forEach(body => body.style.display = 'block');
+    }
+    
+    // Collapse all parameter groups
+    function collapseAllGroups() {
+      const bodies = document.querySelectorAll('.param-group-body');
+      bodies.forEach(body => body.style.display = 'none');
+    }
+    
+    // Enable the save and reset buttons
+	    function enableButtons() {
+	      const saveButton = document.getElementById('save-button');
+	      const resetButton = document.getElementById('reset-button');
+	      
+	      if (saveButton) saveButton.disabled = false;
+	      if (resetButton) resetButton.disabled = false;
+	    }
+    
+    // Organize parameters into groups based on their names
+    function organizeParametersIntoGroups() {
+      parameterGroups = JSON.parse(JSON.stringify(DEFAULT_GROUPS));
+      
+      // Initialize params array for each group
+      for (const groupName in parameterGroups) {
+        parameterGroups[groupName].params = [];
+      }
+      
+      // Categorize parameters into groups
+      for (const [index, param] of Object.entries(parsedParams)) {
+        let assigned = false;
+        
+        // Try to match parameter to a group based on its key
+        for (const [groupName, group] of Object.entries(parameterGroups)) {
+          if (group.paramTypes && group.paramTypes[param.key]) {
+            parameterGroups[groupName].params.push({
+              ...param,
+              index,
+              type: group.paramTypes[param.key]
+            });
+            assigned = true;
+            break;
+          }
+        }
+        
+        // If parameter doesn't match any group, add to Other Parameters
+        if (!assigned) {
+          parameterGroups['Other Parameters'].params.push({
+            ...param,
+            index,
+            type: 'none'
+          });
+        }
+      }
+    }
+    
+    // Display parameters in the UI
+    function displayParameters() {
+      const container = document.getElementById('parameters-container');
+      if (!container) return;
+      
+      // Clear existing content
+      container.innerHTML = '';
+      
+      // Create groups
+      for (const [groupName, group] of Object.entries(parameterGroups)) {
+        if (!group.params || group.params.length === 0) continue;
+        
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'param-group';
+        
+        // Create group header
+        const header = document.createElement('div');
+        header.className = 'param-group-header';
+        header.textContent = groupName;
+        const badge = document.createElement('span');
+        badge.className = 'parameter-badge';
+        badge.textContent = String(group.params.length);
+        header.appendChild(document.createTextNode(' '));
+        header.appendChild(badge);
+        header.onclick = () => toggleGroup(header);
+        
+        // Create group body
+        const body = document.createElement('div');
+        body.className = 'param-group-body';
+        
+        // Create parameter table header
+        const tableHeader = document.createElement('div');
+        tableHeader.className = 'param-row param-header';
+        tableHeader.innerHTML = `
+          <div class="param-key">Parameter</div>
+          <div class="param-index">Index</div>
+          <div class="param-value">Value</div>
+          <div class="param-unit">Unit</div>
+          <div class="param-desc">Description</div>
+        `;
+        body.appendChild(tableHeader);
+        
+        // Add parameters
+        group.params.forEach(param => {
+          const paramRow = document.createElement('div');
+          paramRow.className = 'param-row';
+          
+          const keyEscaped = escapeHtml(param.key);
+          const indexEscaped = escapeHtml(param.index);
+          const originalValueEscaped = escapeHtml(param.value);
+          const descriptionEscaped = escapeHtml(param.description);
+          
+          // Get parameter type and unit
+          const paramType = param.type || 'none';
+          const paramUnit = escapeHtml(PARAM_TYPES[paramType]?.units?.[displayUnits] || '-');
+          
+          if (param.index === '1621') { // Special handling for TOOL_CHK_MODE (P1621)
+            const currentValue = parseInt(param.value) || 0;
+            const isB3SetFreq = (currentValue & 8) ? true : false;
+            const isB4SetSensor = (currentValue & 16) ? true : false;
+
+            paramRow.innerHTML = `
+              <div class="param-key">${keyEscaped}</div>
+              <div class="param-index">P${indexEscaped}</div>
+              <div class="param-value bitwise-param-value" id="bitwise-controls-${param.index}">
+                
+                <div class="bitwise-group-label">Execution Frequency:</div>
+                <div class="bitwise-option">
+                  <input type="radio" name="p${param.index}_freq" id="p${param.index}_b0_radio" data-bitvalue="1" onchange="handleToolChkModeChange('${param.index}')" ${isB3SetFreq ? '' : 'checked'}>
+                  <label for="p${param.index}_b0_radio">Once per Job (b0)</label>
+                </div>
+                <div class="bitwise-option">
+                  <input type="radio" name="p${param.index}_freq" id="p${param.index}_b3_radio" data-bitvalue="8" onchange="handleToolChkModeChange('${param.index}')" ${isB3SetFreq ? 'checked' : ''}>
+                  <label for="p${param.index}_b3_radio">Measure always (b3)</label>
+                </div>
+
+                <div class="bitwise-group-label">Sensor Check Method:</div>
+                <div class="bitwise-option">
+                  <input type="radio" name="p${param.index}_sensor_check" id="p${param.index}_b1_radio_sensor" data-bitvalue="2" onchange="handleToolChkModeChange('${param.index}')" ${isB4SetSensor ? '' : 'checked'}>
+                  <label for="p${param.index}_b1_radio_sensor">Length Sensor (b1)</label>
+                </div>
+                <div class="bitwise-option">
+                  <input type="radio" name="p${param.index}_sensor_check" id="p${param.index}_b4_radio_sensor" data-bitvalue="16" onchange="handleToolChkModeChange('${param.index}')" ${isB4SetSensor ? 'checked' : ''}>
+                  <label for="p${param.index}_b4_radio_sensor">Chuck Sensor (b4)</label>
+                </div>
+                
+                <input type="hidden" id="${param.index}" value="${currentValue}" data-original="${originalValueEscaped}" onchange="handleParameterChange(this)">
+                <div class="bitwise-total-value" id="p${param.index}_total_display">Calculated Value: ${currentValue}</div>
+              </div>
+              <div class="param-unit" id="unit-${param.index}">-</div>
+              <div class="param-desc">${descriptionEscaped}</div>
+            `;
+          } else {
+            // Convert value if needed for display
+            let displayValue = param.value;
+            if (paramType === 'length' && machineUnits !== displayUnits && machineUnits && displayUnits) {
+                const numericValue = parseFloat(param.value);
+                if (!isNaN(numericValue)) {
+                    displayValue = convertValue(numericValue, machineUnits, displayUnits).toFixed(4);
+                }
+            }
+            const displayValueEscaped = escapeHtml(displayValue);
+
+            let descriptionHtml = descriptionEscaped;
+            // Check if this is one of the main chuck sensor value parameters
+            if (['1635', '1636', '1637'].includes(param.index)) {
+                descriptionHtml += `<span class="calc-voltage-range" id="calc-range-${param.index}"></span>`;
+            }
+
+            // Container for value input and potential calibrate button
+            let valueCellHtml = `
+                <input type="number" 
+                  id="${param.index}"
+                  value="${displayValueEscaped}"
+                  step="${PARAM_TYPES[paramType]?.step || 1}"
+                  onchange="handleParameterChange(this)"
+                  data-original="${originalValueEscaped}">`;
+
+            if (param.index === '1611') { // X_SHIFT_MILLING
+                 valueCellHtml = `
+                    <div class="param-value-container">
+                        <input type="number" 
+                          id="${param.index}"
+                          value="${displayValueEscaped}"
+                          step="${PARAM_TYPES[paramType]?.step || 1}"
+                          onchange="handleParameterChange(this)"
+                          data-original="${originalValueEscaped}"
+                          style="width: calc(100% - 70px);"> 
+                        <button class="btn-primary calibrate-btn" onclick="openXShiftModal()">Cal</button>
+                    </div>`;
+            } else {
+                 valueCellHtml = `
+                    <input type="number" 
+                      id="${param.index}"
+                      value="${displayValueEscaped}"
+                      step="${PARAM_TYPES[paramType]?.step || 1}"
+                      onchange="handleParameterChange(this)"
+                      data-original="${originalValueEscaped}">`;
+            }
+
+            paramRow.innerHTML = `
+              <div class="param-key">${keyEscaped}</div>
+              <div class="param-index">P${indexEscaped}</div>
+              <div class="param-value">${valueCellHtml}</div>
+              <div class="param-unit" id="unit-${param.index}">${paramUnit}</div>
+              <div class="param-desc">${descriptionHtml}</div>
+            `;
+          }
+          body.appendChild(paramRow);
+        });
+        
+        if (groupName === 'Chuck Sensor Parameters') {
+          const warnDiv = document.createElement('div');
+          warnDiv.id = 'chuck-sensor-warn';
+          warnDiv.className = 'chuck-sensor-warn ok';
+          body.appendChild(warnDiv);
+        }
+
+        groupDiv.appendChild(header);
+        groupDiv.appendChild(body);
+        container.appendChild(groupDiv);
+      }
+    }
+    
+    // Update file info in UI
+    function updateFileInfo() {
+      const fileStatus = document.getElementById('file-status');
+      const fileVersion = document.getElementById('file-version');
+      
+      if (fileStatus) {
+        fileStatus.textContent = `Editing: ${fileName}`;
+      }
+      
+      if (fileVersion) {
+        fileVersion.textContent = `${fileName} - ${fileVersion}`;
+      }
+    }
+    
+    // Handle parameter value changes
+    function handleParameterChange(input) {
+      // Allow P1611 to be edited even when locked
+      if (isLocked && input.id !== '1611') {
+        showAlert('Parameters are locked. Please unlock to make changes.', 'error');
+        input.value = input.dataset.original;
+        return;
+      }
+      
+      const index = input.id;
+      const originalValueSource = document.getElementById(index);
+      const originalValue = originalValueSource.dataset.original;
+      const newValue = input.value;
+
+      if (originalValue !== newValue) {
+          userEditedParams.add(index);
+          hasUnsavedChanges = true;
+
+          const saveButton = document.getElementById('save-button');
+          const resetButton = document.getElementById('reset-button');
+          if (saveButton) {
+              saveButton.disabled = false;
+              console.log('Save button enabled');
+          }
+          if (resetButton) {
+              resetButton.disabled = false;
+              console.log('Reset button enabled');
+          }
+
+          if (index !== '1621' && input.type === 'number') {
+              input.classList.add('changed-value');
+              const tooltip = document.createElement('span');
+              tooltip.className = 'tooltiptext';
+              tooltip.textContent = `Original: ${originalValue}`;
+              if (input.parentElement && input.parentElement.classList.contains('param-value')) {
+                  input.parentElement.classList.add('tooltip');
+                  input.parentElement.appendChild(tooltip);
+              }
+          }
+      } else if (userEditedParams.has(index)) {
+          if (index !== '1621' && input.type === 'number') {
+              input.classList.remove('changed-value');
+              const tooltip = input.parentElement.querySelector('.tooltiptext');
+              if (tooltip) {
+                  tooltip.remove();
+                  if (input.parentElement && input.parentElement.classList.contains('param-value')) {
+                      input.parentElement.classList.remove('tooltip');
+                  }
+              }
+          }
+      }
+
+      const chuckSensorParamIds = ['1635', '1636', '1637', '1638', '1639', '1640'];
+      if (chuckSensorParamIds.includes(index)) {
+          updateChuckSensorVoltageRanges();
+      }
+    }
+    
+    // New function: Generate change history when saving
+    function generateChangeHistory() {
+      const changes = [];
+      
+      // Only process parameters that were edited by the user
+      userEditedParams.forEach(index => {
+        const inputEl = document.getElementById(index);
+        if (!inputEl) return;
+        
+        const newValue = parseFloat(inputEl.value);
+        const originalValue = parseFloat(originalValues[index]);
+        const param = parsedParams[index];
+        
+        // Skip if values are the same after conversion/rounding
+        if (Math.abs(newValue - originalValue) < 0.00001) return;
+        
+        // Get parameter key and type
+        const key = param.key;
+        const paramType = getParameterType(key);
+        
+        // For length parameters, convert to machine units for history
+        let finalNewValue = newValue;
+        if (paramType === 'length') {
+          if (displayUnits === 'inch' && machineUnits === 'mm') {
+            finalNewValue = newValue * INCH_TO_MM;
+          } else if (displayUnits === 'mm' && machineUnits === 'inch') {
+            finalNewValue = newValue * MM_TO_INCH;
+          }
+        }
+        
+        // Create the change record
+        const now = new Date();
+        const formattedTimestamp = formatTimestampForHistory(now);
+        
+        changes.push({
+          timestamp: formattedTimestamp,
+          index,
+          key,
+          oldValue: originalValue,
+          newValue: finalNewValue,
+          isUserEdit: true
+        });
+      });
+      
+      return changes;
+    }
+    
+    // Store original parameter values
+    function storeOriginalValues() {
+      for (const [index, param] of Object.entries(parsedParams)) {
+        originalValues[index] = param.value;
+      }
+    }
+    
+    // Add debug logging to value conversion
+    function convertValue(value, fromUnit, toUnit) {
+      console.log('Converting value:', {
+        value,
+        fromUnit,
+        toUnit
+      });
+      
+      if (fromUnit === toUnit) {
+        console.log('No conversion needed - units are the same');
+        return value;
+      }
+      
+      // Convert from inches to mm
+      if (fromUnit === 'inch' && toUnit === 'mm') {
+        const result = value * INCH_TO_MM;
+        console.log('Converting from inches to mm:', result);
+        return result;
+      }
+      
+      // Convert from mm to inches
+      if (fromUnit === 'mm' && toUnit === 'inch') {
+        const result = value * MM_TO_INCH;
+        console.log('Converting from mm to inches:', result);
+        return result;
+      }
+      
+      console.warn('Unknown unit conversion:', fromUnit, 'to', toUnit);
+      return value;
+    }
+    
+    // Show alert message
+    function showAlert(message, type) {
+      const alerts = {
+        success: document.getElementById('save-success'),
+        error: document.getElementById('error-message'),
+        warning: document.getElementById('load-warning'),
+        info: document.getElementById('unit-conversion-info')
+      };
+      
+      // Hide all alerts first
+      Object.values(alerts).forEach(alert => {
+        if (alert) alert.style.display = 'none';
+      });
+      
+      // Show the requested alert
+      const alert = alerts[type];
+      if (alert) {
+        if (type === 'error') {
+          const errorText = document.getElementById('error-text');
+          if (errorText) errorText.textContent = message;
+        }
+        alert.style.display = 'block';
+        
+        // Auto-hide success and error messages after 5 seconds
+        if (type === 'success' || type === 'error') {
+          setTimeout(() => {
+            alert.style.display = 'none';
+          }, 5000);
+        }
+      }
+    }
+    
+    // Render change history in the UI
+    function renderChangeHistory() {
+      const tbody = document.getElementById('change-history-body');
+      if (!tbody) return;
+      
+      // Clear existing entries
+      tbody.innerHTML = '';
+      
+      // Add each history entry
+      changeHistory.forEach(entry => {
+        const row = document.createElement('tr');
+
+        const timestamp = escapeHtml(entry.timestamp);
+        const key = escapeHtml(entry.key);
+        const index = escapeHtml(entry.index);
+        const oldValue = escapeHtml(formatValue(entry.oldValue));
+        const newValue = escapeHtml(formatValue(entry.newValue));
+        
+        // Format the cells
+        row.innerHTML = `
+          <td>${timestamp}</td>
+          <td>${key}</td>
+          <td>P${index}</td>
+          <td>${oldValue}</td>
+          <td>${newValue}</td>
+        `;
+        
+        tbody.appendChild(row);
+      });
+    }
+    
+    // Format numeric values for display
+    function formatValue(value) {
+      // Handle different numeric formats
+      if (typeof value === 'number') {
+        if (Number.isInteger(value)) {
+          return value.toString();
+        }
+        return value.toFixed(4);
+      }
+      return value;
+    }
+
+    // COMPLETELY REWRITTEN - Save file function with correct unit handling
+    function saveFile() {
+      console.log('SAVE FILE - Current settings:', {
+        machineUnits,
+        displayUnits
+      });
+    
+      if (!originalFileContent) {
+        showAlert('No content to save', 'error');
+        return;
+      }
+
+      const chuckBands = getChuckSensorBands();
+      if (chuckBands) {
+        const chuckCheck = validateChuckSensorBands(chuckBands);
+        if (!chuckCheck.ok) {
+          const msg = 'Chuck sensor bands conflict:\n\n' + chuckCheck.issues.join('\n');
+          if (!confirm(msg + '\n\nSave anyway?')) {
+            return;
+          }
+        }
+      }
+    
+      try {
+        // Create backup of original content
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const backupName = `${fileName.replace('.dat', '')}_backup_${timestamp}.dat`;
+        createBackup(backupName, originalFileContent);
+    
+        // Parse original file to maintain structure
+        const lines = originalFileContent.split(/\r\n|\r|\n/);
+        let newFileContent = [];
+        
+        // Process the file line by line
+        let inHeader = true;
+        let headerEnded = false;
+        let foundChangeHistory = false;
+        
+        // Instead of tracking changes during edit, generate them now at save time
+        const userChanges = generateChangeHistory();
+        
+        // First pass - keep header and identify sections
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          
+          // Header section handling
+          if (inHeader) {
+            if (line.startsWith(';---') && !headerEnded) {
+              // We're at the end of the header section
+              newFileContent.push(line);
+              // Add/update last modified date
+              const now = new Date();
+              const formattedDate = formatDateForHeader(now);
+              newFileContent.push(`; Last modified: ${formattedDate}`);
+              headerEnded = true;
+              continue;
+            }
+            else if (line.toLowerCase().includes('last modified:')) {
+              // Skip existing last modified lines, we'll add our own
+              continue;
+            }
+            else if (line.startsWith('Key') || line.startsWith('>--')) {
+              // We've reached the table header - end of the header section
+              inHeader = false;
+              newFileContent.push(line);
+              continue;
+            }
+            
+            // Keep all other header lines
+            newFileContent.push(line);
+          }
+          // Parameter table handling
+          else if (line.includes('|')) {
+            // This is a parameter line - we'll handle it in the second pass
+            continue;
+          }
+          // Change history section
+          else if (line.includes('Parameter Change History')) {
+            // Mark that we found the history section (so we don't add it twice)
+            foundChangeHistory = true;
+            // Skip this line - we'll rebuild the change history section
+            continue;
+          }
+          else if (line.startsWith('; [')) {
+            // Skip existing history entries - we'll rebuild them
+            continue;
+          }
+          // Keep all other lines
+          else {
+            newFileContent.push(line);
+          }
+        }
+        
+        // Add table headers if they were somehow missing
+        if (!newFileContent.some(l => l.startsWith('Key'))) {
+          newFileContent.push('');
+          newFileContent.push('Key                                     |Index|      Value|Description');
+          newFileContent.push('>---------------------------------------+-----+----------+-----------------------------------------------');
+          newFileContent.push('');
+        }
+        
+        // Second pass - add all the parameters with updated values
+        console.log("Machine units for save:", machineUnits);
+        
+        // Get all parameter entries
+        const allParams = [];
+        for (const indexNum in parsedParams) {
+          const param = parsedParams[indexNum];
+          
+          // Get the parameter key and type
+          const key = param.key;
+          const indexStr = `P${indexNum}`;
+          const paramType = getParameterType(key);
+          const description = param.description;
+          
+          // Get the current value from the input field
+          const inputEl = document.getElementById(indexNum);
+          let valueToSave;
+          
+          if (inputEl) {
+            // Convert value if needed based on machine units setting
+            valueToSave = parseFloat(inputEl.value);
+            
+            // For length parameters, we need to handle unit conversion
+            if (paramType === 'length') {
+              // First, get the current displayed value in the current display units
+              console.log(`Parameter ${key} (${paramType}):`, {
+                displayValue: valueToSave,
+                displayUnits,
+                targetUnits: machineUnits
+              });
+              
+              // If displaying in inches but machine is in mm
+              if (displayUnits === 'inch' && machineUnits === 'mm') {
+                valueToSave = valueToSave * INCH_TO_MM;
+                console.log(`  Converting from inches to mm: ${valueToSave}`);
+              }
+              
+              // If displaying in mm but machine is in inches
+              else if (displayUnits === 'mm' && machineUnits === 'inch') {
+                valueToSave = valueToSave * MM_TO_INCH;
+                console.log(`  Converting from mm to inches: ${valueToSave}`);
+              }
+            }
+          } else {
+            // If input element not found, use original value
+            valueToSave = parseFloat(param.value);
+          }
+          
+          // Format the parameter for saving
+          const formattedValue = formatNumberForSave(valueToSave);
+          
+          allParams.push({
+            indexNum,
+            indexStr,
+            key,
+            value: formattedValue,
+            description
+          });
+        }
+        
+        // Sort parameters by index number
+        allParams.sort((a, b) => parseInt(a.indexNum) - parseInt(b.indexNum));
+        
+        // Add the parameters to the file content
+        allParams.forEach(param => {
+          // Format with proper spacing
+          const paddedKey = param.key.padEnd(40);
+          const paddedIndex = param.indexStr.padEnd(5);
+          const paddedValue = param.value.padStart(10);
+          
+          const paramLine = `${paddedKey}|${paddedIndex}|${paddedValue}|${param.description}`;
+          newFileContent.push(paramLine);
+        });
+        
+        // Add two blank lines after the last parameter
+        newFileContent.push('');
+        newFileContent.push('');
+        
+        // Check if we should add change history comments to the file
+        const appendHistory = document.getElementById('append-history').checked;
+        
+        if (appendHistory) {
+          // Only proceed with history if we have any changes to record
+          if (userChanges.length > 0 || changeHistory.length > 0) {
+            // Add change history section heading if not already found
+            if (!foundChangeHistory) {
+              newFileContent.push('; Parameter Change History');
+            }
+            
+            // Add existing history entries that were loaded from the file
+            if (changeHistory.length > 0) {
+              changeHistory.forEach(entry => {
+                // Only include entries that aren't from the current session
+                if (!entry.isUserEdit) {
+                  const oldValueFormatted = formatNumberForSave(entry.oldValue);
+                  const newValueFormatted = formatNumberForSave(entry.newValue);
+                  
+                  const historyLine = `; [${entry.timestamp}] P${entry.index} ${entry.key} ${oldValueFormatted} -> ${newValueFormatted}`;
+                  newFileContent.push(historyLine);
+                }
+              });
+            }
+            
+            // Add new user changes from this session
+            if (userChanges.length > 0) {
+              userChanges.forEach(change => {
+                const oldValueFormatted = formatNumberForSave(change.oldValue);
+                const newValueFormatted = formatNumberForSave(change.newValue);
+                
+                const historyLine = `; [${change.timestamp}] P${change.index} ${change.key} ${oldValueFormatted} -> ${newValueFormatted}`;
+                newFileContent.push(historyLine);
+                
+                // Also add to the in-memory change history for UI display
+                changeHistory.push(change);
+              });
+              
+              // Update the change history display in the UI
+              renderChangeHistory();
+            }
+          }
+        }
+        
+        // Join the new file content into a single string
+        const finalContent = newFileContent.join('\r\n');
+        const preSaveContent = originalFileContent; // capture before it's reassigned below
+
+        if (embeddedSaveCallback) {
+          // Embedded in a parent (e.g. remote-support session viewer): hand the
+          // saved content back directly instead of triggering a browser download.
+          embeddedSaveCallback(finalContent, fileName, preSaveContent);
+        } else {
+          // Create a blob and trigger download
+          const blob = new Blob([finalContent], { type: 'text/plain' });
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        }
+
+        // Update original file content and reset state
+        originalFileContent = finalContent;
+        storeOriginalValues();
+        userEditedParams.clear();
+        hasUnsavedChanges = false;
+        
+        // Disable save and reset buttons
+        const saveButton = document.getElementById('save-button');
+        const resetButton = document.getElementById('reset-button');
+        if (saveButton) saveButton.disabled = true;
+        if (resetButton) resetButton.disabled = true;
+        
+        showAlert('File saved successfully', 'success');
+        
+      } catch (error) {
+        console.error('Error saving file:', error);
+        showAlert(`Error saving file: ${error.message}`, 'error');
+      }
+    }
+    
+    // Get parameter type from parameter key
+    function getParameterType(key) {
+      // Search through all groups to find the parameter type
+      for (const group of Object.values(DEFAULT_GROUPS)) {
+        if (group.paramTypes && group.paramTypes[key]) {
+          return group.paramTypes[key];
+        }
+      }
+      
+      // If not found in any group, log and return default
+      console.log(`Parameter type not found for key: ${key}, defaulting to 'none'`);
+      return 'none';
+    }
+
+    // Toggle between light and dark theme
+    function toggleTheme() {
+      const html = document.documentElement;
+      const currentTheme = html.getAttribute('data-theme');
+      const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+      
+      // Update the theme attribute
+      html.setAttribute('data-theme', newTheme);
+      
+      // Update the button icon
+      const themeToggle = document.getElementById('theme-toggle');
+      if (themeToggle) {
+        themeToggle.innerHTML = newTheme === 'light' ? '☀️' : '🌙';
+      }
+      
+      // Store the user preference in localStorage for persistence
+      localStorage.setItem('pfield-editor-theme', newTheme);
+      
+      console.log(`Theme switched to ${newTheme} mode`);
+    }
+    
+    // Helper function to format numbers consistently for saving
+    function formatNumberForSave(value) {
+      // Handle integer vs decimal numbers
+      if (Number.isInteger(value)) {
+        return value.toString();
+      } else {
+        // Use 4 decimal places for non-integers
+        return value.toFixed(4);
+      }
+    }
+
+    // Format timestamp for history entries
+    function formatTimestampForHistory(date) {
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${day}.${month}.${year} ${hours}:${minutes}`;
+    }
+
+    // Backup management functions
+    function createBackup(backupName, content) {
+      console.log('Creating backup:', backupName);
+      const backup = {
+        name: backupName,
+        content: content,
+        timestamp: new Date().toISOString()
+      };
+      backups.push(backup);
+      updateBackupList();
+      return backup;
+    }
+
+    function updateBackupList() {
+      const backupList = document.getElementById('backup-list');
+      if (!backupList) return;
+      if (backups.length === 0) {
+        backupList.innerHTML = '<div class="backup-item">No backups yet</div>';
+        return;
+      }
+      backupList.innerHTML = backups.map(backup => `
+        <div class="backup-item">
+          <span class="backup-date">${new Date(backup.timestamp).toLocaleString()}</span>
+          <div class="backup-actions">
+            <button class="small-btn btn-primary" onclick="downloadBackup('${escapeJsStringSingle(backup.name)}')">Download</button>
+            <button class="small-btn btn-warning" onclick="restoreBackup('${escapeJsStringSingle(backup.name)}')">Restore</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function downloadBackup(backupName) {
+      const backup = backups.find(b => b.name === backupName);
+      if (!backup) {
+        console.error('Backup not found:', backupName);
+        return;
+      }
+      const blob = new Blob([backup.content], { type: 'text/plain' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = backup.name;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    }
+
+    function restoreBackup(backupName) {
+      const backup = backups.find(b => b.name === backupName);
+      if (!backup) {
+        console.error('Backup not found:', backupName);
+        return;
+      }
+      if (confirm('Are you sure you want to restore this backup? Any unsaved changes will be lost.')) {
+        originalFileContent = backup.content;
+        parseParameterFile(backup.content);
+        organizeParametersIntoGroups();
+        displayParameters();
+        storeOriginalValues();
+        showAlert('Backup restored successfully', 'success');
+      }
+    }
+
+    // Reset changes function
+    function resetChanges() {
+      console.log('Reset changes called');
+      if (!originalFileContent && userEditedParams.size === 0 && !hasUnsavedChanges) { // Added more checks
+        console.log('No file loaded or no changes to reset');
+        return;
+      }
+      
+      try {
+        let chuckSensorRelatedChangesWereReset = false;
+        const chuckSensorParamIds = ['1635', '1636', '1637', '1638', '1639', '1640'];
+
+        // Iterate over a copy of userEditedParams for safety if modifying the set
+        const paramsToReset = new Set(userEditedParams);
+
+        paramsToReset.forEach(index => {
+          const inputEl = document.getElementById(index);
+          if (inputEl) {
+            const originalValStr = originalValues[index]; // This is always in machine units for lengths
+            const paramData = parsedParams[index]; // Contains key and original description
+            const paramKey = paramData ? paramData.key : '';
+            const paramType = getParameterType(paramKey);
+            
+            let displayValueToReset = originalValStr;
+            if (paramType === 'length' && machineUnits !== displayUnits && machineUnits && displayUnits) {
+                const numericOriginalVal = parseFloat(originalValStr);
+                if (!isNaN(numericOriginalVal)) {
+                     displayValueToReset = convertValue(numericOriginalVal, machineUnits, displayUnits).toFixed(4);
+                }
+            }
+            
+            inputEl.value = displayValueToReset;
+            console.log(`Reset parameter ${index} (${paramKey || 'Unknown Key'}) to ${displayValueToReset}`);
+            
+            // Remove changed-value class and tooltip for non-P1621
+            if (index !== '1621' && inputEl.type === 'number') { 
+                inputEl.classList.remove('changed-value');
+                const tooltip = inputEl.parentElement.querySelector('.tooltiptext');
+                if (tooltip) {
+                  tooltip.remove();
+                  if (inputEl.parentElement && inputEl.parentElement.classList.contains('param-value')){
+                      inputEl.parentElement.classList.remove('tooltip');
+                  }
+                }
+            }
+
+            // If it's TOOL_CHK_MODE (P1621), also update radio buttons and total display
+            if (index === '1621') {
+                const originalDecimalValue = parseInt(originalValues[index]) || 0;
+                const bitwiseContainer = document.getElementById(`bitwise-controls-${index}`);
+                if (bitwiseContainer) {
+                    const b0RadioReset = document.getElementById(`p${index}_b0_radio`);
+                    const b3RadioReset = document.getElementById(`p${index}_b3_radio`);
+                    const b1SensorRadioReset = document.getElementById(`p${index}_b1_radio_sensor`);
+                    const b4SensorRadioReset = document.getElementById(`p${index}_b4_radio_sensor`);
+
+                    if (b0RadioReset && b3RadioReset) {
+                        if (originalDecimalValue & 8) { // Bit 3 is set for Freq
+                            b3RadioReset.checked = true;
+                        } else { // Default to B0 for Freq
+                            b0RadioReset.checked = true;
+                        }
+                    }
+                    
+                    if (b1SensorRadioReset && b4SensorRadioReset) {
+                        if (originalDecimalValue & 16) { // Bit 4 is set for Sensor
+                            b4SensorRadioReset.checked = true;
+                        } else { // Default to B1 for Sensor
+                            b1SensorRadioReset.checked = true;
+                        }
+                    }
+                    // After UI elements are set (including defaults), update the hidden input & total display
+                    handleToolChkModeChange(index); 
+                }
+            }
+            if (chuckSensorParamIds.includes(index)) {
+                chuckSensorRelatedChangesWereReset = true;
+            }
+          }
+        });
+        
+        // Update chuck sensor ranges if any relevant parameter was reset
+        if (chuckSensorRelatedChangesWereReset) {
+            updateChuckSensorVoltageRanges();
+        }
+
+        // Reset state
+        userEditedParams.clear();
+        hasUnsavedChanges = false;
+        
+        // Clear change history for user changes (keep loaded history)
+        // First save the original loaded history
+        const loadedHistory = changeHistory.filter(entry => !entry.isUserEdit);
+        changeHistory = [...loadedHistory];
+        renderChangeHistory();
+        
+        // Disable buttons
+        const saveButton = document.getElementById('save-button');
+        const resetButton = document.getElementById('reset-button');
+        if (saveButton) saveButton.disabled = true;
+        if (resetButton) resetButton.disabled = true;
+        
+        showAlert('Changes have been reset', 'success');
+        
+      } catch (error) {
+        console.error('Error resetting changes:', error);
+        showAlert(`Error resetting changes: ${error.message}`, 'error');
+      }
+    }
+
+    // Handle TOOL_CHK_MODE (P1621) checkbox changes
+    function handleToolChkModeChange(index) {
+      const bitwiseContainer = document.getElementById(`bitwise-controls-${index}`);
+      if (!bitwiseContainer) return; // Should not happen
+      
+      let calculatedValue = 0;
+
+      // Handle radio buttons for frequency (bits 0 and 3)
+      const b0Radio = document.getElementById(`p${index}_b0_radio`);
+      const b3Radio = document.getElementById(`p${index}_b3_radio`);
+      if (b3Radio && b3Radio.checked) {
+          calculatedValue += parseInt(b3Radio.dataset.bitvalue); // Add bit 3 value
+      } else if (b0Radio && b0Radio.checked) {
+          calculatedValue += parseInt(b0Radio.dataset.bitvalue); // Add bit 0 value
+      } else if (b0Radio) { // Should not happen if HTML radios are named correctly, but for safety
+          b0Radio.checked = true; 
+          calculatedValue += parseInt(b0Radio.dataset.bitvalue);
+      }
+
+      // Handle radio buttons for sensor checks (bits 1 and 4)
+      const b1SensorRadio = document.getElementById(`p${index}_b1_radio_sensor`);
+      const b4SensorRadio = document.getElementById(`p${index}_b4_radio_sensor`);
+
+      if (b4SensorRadio && b4SensorRadio.checked) {
+          calculatedValue += parseInt(b4SensorRadio.dataset.bitvalue);
+      } else if (b1SensorRadio && b1SensorRadio.checked) {
+          calculatedValue += parseInt(b1SensorRadio.dataset.bitvalue);
+      } else if (b1SensorRadio) { // Default to b1 if somehow none are checked (safety for radio groups)
+          b1SensorRadio.checked = true;
+          calculatedValue += parseInt(b1SensorRadio.dataset.bitvalue);
+      }
+      
+      const hiddenInput = document.getElementById(index);
+      if (hiddenInput) {
+        hiddenInput.value = calculatedValue;
+        // Manually trigger the change event for the hidden input
+        // so that handleParameterChange picks it up.
+        const event = new Event('change', { bubbles: true });
+        hiddenInput.dispatchEvent(event);
+      }
+
+      // Update the total display
+      const totalDisplay = document.getElementById(`p${index}_total_display`);
+      if (totalDisplay) {
+          totalDisplay.textContent = `Calculated Value: ${calculatedValue}`;
+      }
+    }
+
+    // Chuck sensor bands: each state is center ± tolerance; bands must not overlap
+    // and centers should rise Open → Good → Empty (low → mid → high voltage).
+    function getChuckSensorBands() {
+        const defs = [
+            { name: 'Open', baseId: '1635', tolId: '1638', displayId: 'calc-range-1635' },
+            { name: 'Good', baseId: '1636', tolId: '1639', displayId: 'calc-range-1636' },
+            { name: 'Empty', baseId: '1637', tolId: '1640', displayId: 'calc-range-1637' }
+        ];
+        const bands = [];
+        for (const def of defs) {
+            const baseInput = document.getElementById(def.baseId);
+            const tolInput = document.getElementById(def.tolId);
+            if (!baseInput || !tolInput) return null;
+            const center = parseFloat(baseInput.value);
+            const tol = parseFloat(tolInput.value);
+            if (isNaN(center) || isNaN(tol) || tol < 0) return null;
+            bands.push({
+                ...def,
+                center,
+                tol,
+                min: center - tol,
+                max: center + tol
+            });
+        }
+        return bands;
+    }
+
+    function validateChuckSensorBands(bands) {
+        const issues = [];
+        if (!bands || bands.length !== 3) {
+            return { ok: false, issues: ['Chuck sensor values incomplete or invalid.'] };
+        }
+        const [open, good, empty] = bands;
+        if (!(open.center < good.center && good.center < empty.center)) {
+            issues.push(
+                `Center voltages must rise Open (${open.center} V) < Good (${good.center} V) < Empty (${empty.center} V).`
+            );
+        }
+        if (open.max > good.min) {
+            issues.push(
+                `Open band (max ${open.max.toFixed(2)} V) overlaps Good band (min ${good.min.toFixed(2)} V) by ${(open.max - good.min).toFixed(2)} V.`
+            );
+        } else {
+            const gap = good.min - open.max;
+            if (gap < 0.1) {
+                issues.push(
+                    `Open → Good gap is only ${gap.toFixed(2)} V — consider more separation.`
+                );
+            }
+        }
+        if (good.max > empty.min) {
+            issues.push(
+                `Good band (max ${good.max.toFixed(2)} V) overlaps Empty band (min ${empty.min.toFixed(2)} V) by ${(good.max - empty.min).toFixed(2)} V.`
+            );
+        } else {
+            const gap = empty.min - good.max;
+            if (gap < 0.1) {
+                issues.push(
+                    `Good → Empty gap is only ${gap.toFixed(2)} V — consider more separation.`
+                );
+            }
+        }
+        return { ok: issues.length === 0, issues };
+    }
+
+    // Update displayed voltage ranges for Chuck Sensor Parameters
+    function updateChuckSensorVoltageRanges() {
+        const bands = getChuckSensorBands();
+        const validation = validateChuckSensorBands(bands);
+        const warnEl = document.getElementById('chuck-sensor-warn');
+
+        if (bands) {
+            bands.forEach(b => {
+                const displayElement = document.getElementById(b.displayId);
+                if (!displayElement) return;
+                const gapNext = b.name === 'Open' ? bands[1].min - b.max
+                              : b.name === 'Good' ? bands[2].min - b.max : null;
+                let text = `Min: ${b.min.toFixed(2)} V, Max: ${b.max.toFixed(2)} V`;
+                if (gapNext !== null && gapNext >= 0) {
+                    text += `  ·  gap to next: ${gapNext.toFixed(2)} V`;
+                }
+                const overlaps = (b.name === 'Open' && b.max > bands[1].min)
+                              || (b.name === 'Good' && b.max > bands[2].min);
+                displayElement.textContent = text;
+                displayElement.classList.toggle('conflict', overlaps);
+            });
+        } else {
+            ['1635', '1636', '1637'].forEach(id => {
+                const el = document.getElementById('calc-range-' + id);
+                if (el) {
+                    el.textContent = 'Min/Max: N/A (invalid input)';
+                    el.classList.remove('conflict');
+                }
+            });
+        }
+
+        if (warnEl) {
+            if (!bands) {
+                warnEl.className = 'chuck-sensor-warn conflict';
+                warnEl.textContent = 'Enter valid voltages and tolerances for all three chuck states.';
+            } else if (validation.ok) {
+                warnEl.className = 'chuck-sensor-warn ok';
+                warnEl.textContent = 'Bands OK — Open, Good, and Empty ranges do not overlap.';
+            } else {
+                warnEl.className = 'chuck-sensor-warn conflict';
+                warnEl.innerHTML = validation.issues.map(i => '⚠ ' + escapeHtml(i)).join('<br>');
+            }
+        }
+    }
+
+    // X-Shift Milling Assistant Modal Functions
+    function openXShiftModal() {
+        // alert('openXShiftModal called!'); // For debugging
+        console.log('openXShiftModal function called'); // Line ~2446
+        const modal = document.getElementById('xShiftModal');
+        console.log('Attempting to find modal (xShiftModal):', modal);
+
+        const currentP1611Input = document.getElementById('1611'); // This is P1611 on the main page
+        console.log('Attempting to find currentP1611Input (1611):', currentP1611Input);
+
+        const currentP1611Display = document.getElementById('xShiftCurrentP1611');
+        console.log('Attempting to find currentP1611Display (xShiftCurrentP1611):', currentP1611Display);
+
+        const calculatedP1611Display = document.getElementById('xShiftCalculatedP1611');
+        console.log('Attempting to find calculatedP1611Display (xShiftCalculatedP1611):', calculatedP1611Display);
+
+        const measuredDistanceInput = document.getElementById('xShiftMeasuredDistance');
+        console.log('Attempting to find measuredDistanceInput (xShiftMeasuredDistance):', measuredDistanceInput);
+
+        const millDiameterInput = document.getElementById('xShiftMillDiameter');
+        console.log('Attempting to find millDiameterInput (xShiftMillDiameter):', millDiameterInput);
+
+        const errorDisplay = document.getElementById('xShiftError');
+        console.log('Attempting to find errorDisplay (xShiftError):', errorDisplay);
+
+        // Get current display units
+        const currentDisplayUnits = document.getElementById('display-units').value;
+        const unitSuffix = currentDisplayUnits === 'inch' ? 'in' : 'mm';
+
+        // Update labels in the modal
+        const millDiameterLabel = document.getElementById('xShiftMillDiameterLabel');
+        if (millDiameterLabel) millDiameterLabel.textContent = `Milling Tool Diameter Used (${unitSuffix}):`;
+        const measuredDistanceLabel = document.getElementById('xShiftMeasuredDistanceLabel');
+        if (measuredDistanceLabel) measuredDistanceLabel.textContent = `Measured gap (D) as per diagram (${unitSuffix}):`;
+
+        if (modal && currentP1611Input && currentP1611Display && calculatedP1611Display && measuredDistanceInput && millDiameterInput && errorDisplay) {
+            currentP1611Display.textContent = parseFloat(currentP1611Input.value).toFixed(4);
+            measuredDistanceInput.value = '';
+            
+            // Set default mill diameter considering current display units
+            const defaultMillDiameterMm = 8.0;
+            if (currentDisplayUnits === 'inch') {
+                millDiameterInput.value = (defaultMillDiameterMm * MM_TO_INCH).toFixed(3);
+            } else {
+                millDiameterInput.value = defaultMillDiameterMm.toFixed(1);
+            }
+
+            calculatedP1611Display.textContent = 'N/A';
+            errorDisplay.style.display = 'none';
+            errorDisplay.textContent = '';
+            document.getElementById('xShiftMillLeft').checked = true; // Default selection
+            modal.style.display = 'block';
+            previewXShiftCalculation(); // Initialize/update preview on open
+        } else {
+            console.error('XShift Modal or one of its critical components not found. Check IDs and DOM.'); // Line ~2466
+            showAlert('Could not open calibration tool. Required UI elements are missing.', 'error');
+        }
+    }
+
+    function closeXShiftModal() {
+        const modal = document.getElementById('xShiftModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    }
+
+    function calculateAndApplyXShift() {
+        const measuredDistanceInput = document.getElementById('xShiftMeasuredDistance');
+        const currentP1611Input = document.getElementById('1611'); // P1611 input on main page
+        const calculatedP1611Display = document.getElementById('xShiftCalculatedP1611');
+        const errorDisplay = document.getElementById('xShiftError');
+        const millDiameterInput = document.getElementById('xShiftMillDiameter');
+
+        if (!measuredDistanceInput || !currentP1611Input || !calculatedP1611Display || !errorDisplay || !millDiameterInput) {
+            showAlert('Error in calibration tool: core elements missing.', 'error');
+            return;
+        }
+        
+        errorDisplay.style.display = 'none';
+        errorDisplay.textContent = '';
+        
+        let measuredDistance = parseFloat(measuredDistanceInput.value);
+        let millDiameter = parseFloat(millDiameterInput.value);
+        const currentDisplayUnitsApply = document.getElementById('display-units').value;
+
+        if (currentDisplayUnitsApply === 'inch') {
+            measuredDistance = measuredDistance * INCH_TO_MM;
+            millDiameter = millDiameter * INCH_TO_MM;
+        }
+
+        if (isNaN(measuredDistance) || measuredDistance < 0) { 
+            errorDisplay.textContent = 'Measured gap (D) must be a non-negative number.';
+            errorDisplay.style.display = 'block';
+            calculatedP1611Display.textContent = 'Error';
+            return;
+        }
+        
+        if (isNaN(millDiameter) || millDiameter <= 0) {
+            errorDisplay.textContent = 'Please enter a valid, positive milling tool diameter.';
+            errorDisplay.style.display = 'block';
+            calculatedP1611Display.textContent = 'Error';
+            return;
+        }
+
+        const currentP1611Value = parseFloat(currentP1611Input.value);
+        if (isNaN(currentP1611Value)) {
+            errorDisplay.textContent = 'Current P1611 value on the main page is invalid.';
+            errorDisplay.style.display = 'block';
+            calculatedP1611Display.textContent = 'Error';
+            return;
+        }
+
+        const laserDiameter = 9.5;
+        const diffDia = laserDiameter - millDiameter;
+        const intermediateResult = measuredDistance - diffDia;
+        const shiftMagnitude = intermediateResult / 2.0;
+
+        const millIsLeft = document.getElementById('xShiftMillLeft').checked;
+        let newP1611Value;
+        if (millIsLeft) {
+            newP1611Value = currentP1611Value + shiftMagnitude;
+        } else { // Mill is Right
+            newP1611Value = currentP1611Value - shiftMagnitude;
+        }
+
+        calculatedP1611Display.textContent = newP1611Value.toFixed(4);
+
+        // Apply to the main input field and trigger change
+        currentP1611Input.value = newP1611Value.toFixed(4);
+        const event = new Event('change', { bubbles: true });
+        currentP1611Input.dispatchEvent(event);
+        
+        closeXShiftModal();
+        showAlert('P1611 value updated from calibration tool.', 'info');
+    }
+
+    function previewXShiftCalculation() {
+        const currentP1611Input = document.getElementById('1611');
+        const measuredDistanceInput = document.getElementById('xShiftMeasuredDistance');
+        const calculatedP1611Display = document.getElementById('xShiftCalculatedP1611');
+        const errorDisplay = document.getElementById('xShiftError');
+        const millDiameterInput = document.getElementById('xShiftMillDiameter');
+
+        if (!currentP1611Input || !measuredDistanceInput || !calculatedP1611Display || !errorDisplay || !millDiameterInput) {
+            if(calculatedP1611Display) calculatedP1611Display.textContent = 'Error: UI Missing';
+            return;
+        }
+
+        errorDisplay.style.display = 'none'; // Clear previous errors
+        errorDisplay.textContent = '';
+
+        const currentDisplayUnitsPreview = document.getElementById('display-units').value;
+
+        const measuredDistanceStr = measuredDistanceInput.value;
+        if (measuredDistanceStr.trim() === '' || measuredDistanceStr === null) {
+            calculatedP1611Display.textContent = 'N/A';
+            return;
+        }
+        let measuredDistance = parseFloat(measuredDistanceStr);
+        if (isNaN(measuredDistance) || measuredDistance < 0) {
+            errorDisplay.textContent = 'Measured gap (D) must be a non-negative number.';
+            errorDisplay.style.display = 'block';
+            calculatedP1611Display.textContent = 'Error';
+            return;
+        }
+
+        const millDiameterStr = millDiameterInput.value;
+        if (millDiameterStr.trim() === '' || millDiameterStr === null) {
+            calculatedP1611Display.textContent = 'N/A'; // Waiting for mill diameter
+            return;
+        }
+        let millDiameter = parseFloat(millDiameterStr);
+        if (isNaN(millDiameter) || millDiameter <= 0) {
+            errorDisplay.textContent = 'Please enter a valid, positive milling tool diameter.';
+            errorDisplay.style.display = 'block';
+            calculatedP1611Display.textContent = 'Error';
+            return;
+        }
+        
+        // Convert to mm if display units are inches, before calculation
+        if (currentDisplayUnitsPreview === 'inch') {
+            measuredDistance = measuredDistance * INCH_TO_MM;
+            millDiameter = millDiameter * INCH_TO_MM;
+        }
+
+        const currentP1611ValueStr = currentP1611Input.value;
+        const currentP1611Value = parseFloat(currentP1611ValueStr);
+        if (isNaN(currentP1611Value)) {
+            errorDisplay.textContent = 'Current P1611 on main page is invalid.';
+            errorDisplay.style.display = 'block';
+            calculatedP1611Display.textContent = 'Error';
+            return;
+        }
+
+        const laserDiameter = 9.5; 
+        const diffDia = laserDiameter - millDiameter; // millDiameter is now guaranteed to be defined if this line is reached
+        const intermediateResult = measuredDistance - diffDia;
+        const shiftMagnitude = intermediateResult / 2.0;
+
+        const millIsLeft = document.getElementById('xShiftMillLeft').checked;
+        let previewNewP1611Value;
+
+        if (millIsLeft) {
+            previewNewP1611Value = currentP1611Value + shiftMagnitude;
+        } else { // Mill is Right
+            previewNewP1611Value = currentP1611Value - shiftMagnitude; // Typo: P11Value -> previewNewP1611Value
+        }
+        // Corrected Typo:
+        // if (millIsLeft) {
+        //     previewNewP1611Value = currentP1611Value + shiftMagnitude;
+        // } else { // Mill is Right
+        //     previewNewP1611Value = currentP1611Value - shiftMagnitude;
+        // }
+
+
+        if (typeof previewNewP1611Value === 'number' && !isNaN(previewNewP1611Value)) {
+           calculatedP1611Display.textContent = previewNewP1611Value.toFixed(4);
+        } else {
+            // This case should ideally be caught by earlier validations
+            calculatedP1611Display.textContent = 'Calc Error';
+        }
+    }
+
+    // Toggle lock/unlock state
+    function toggleLock() {
+      if (isLocked) {
+        const enteredPassword = prompt('Please enter password to unlock parameters:');
+        if (enteredPassword === PASSWORD) {
+          isLocked = false;
+          updateLockState();
+          showAlert('Parameters unlocked', 'success');
+        } else {
+          showAlert('Incorrect password', 'error');
+        }
+      } else {
+        isLocked = true;
+        updateLockState();
+        showAlert('Parameters locked', 'info');
+      }
+    }
+    
+    // Update UI elements based on lock state
+    function updateLockState() {
+      const lockToggle = document.getElementById('lock-toggle');
+      if (lockToggle) {
+        lockToggle.innerHTML = isLocked ? '🔒' : '🔓';
+        lockToggle.classList.toggle('locked', isLocked);
+      }
+      
+      // Update all parameter inputs except P1611
+      const inputs = document.querySelectorAll('.param-value input[type="number"]');
+      inputs.forEach(input => {
+        if (input.id !== '1611') { // Keep P1611 always editable
+          input.disabled = isLocked;
+          input.classList.toggle('locked', isLocked);
+        }
+      });
+    }
+
+    // Public API for an embedding parent (e.g. the remote-support session
+    // viewer) to drive this editor without a real file picker/download.
+    window.PfieldEditor = {
+      loadContent,
+      saveFile,
+      setSaveHandler: (fn) => { embeddedSaveCallback = fn; }
+    };
+  </script>
+
+<!-- X Shift Modal HTML to be appended (or ensure it's within body) -->
+<div id="xShiftModal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <span class="modal-close-btn" onclick="closeXShiftModal()">&times;</span>
+    <h3>X Shift Milling Assistant (P1611)</h3>
+    <p>
+        1. Run the predefined program: <b><code>MillerOffset_Circle (487.3mm).rot</code></b>. <br>
+        (This program uses a 9.5mm laser mark).<br>
+        2. Enter the exact diameter of the milling tool used for the test in the field below.<br>
+        3. Measure the <b>gap (D) exactly as shown in your selected diagram</b>: from the outer edge of the smaller mill hole to the corresponding outer edge of the larger laser mark, along the line of their centers.<br>
+        4. Enter this measured gap D below.
+    </p>
+
+    <div class="xshift-scenario-container">
+      <div class="xshift-scenario">
+        <input type="radio" name="xShiftScenario" id="xShiftMillLeft" value="left" checked onchange="previewXShiftCalculation()">
+        <label for="xShiftMillLeft">Milling Hole is LEFT of Laser Mark Center</label>
+        <svg width="150" height="70" viewBox="0 0 150 70" class="xshift-svg">
+          <!-- Scenario: Mill Left. D is gap from Right Mill Edge to Right Laser Edge -->
+          <!-- Laser (Red outline, r=27, cx=75), Mill (Blue fill, r=24, cx=65, example offset S=10) -->
+          <circle cx="75" cy="35" r="27" fill="rgba(255,0,0,0.1)" stroke="red" stroke-width="1.5"/> <!-- Laser 9mm -->
+          <circle cx="65" cy="35" r="24" fill="rgba(0,0,255,0.3)" stroke="blue" stroke-width="1"/> <!-- Mill 8mm -->
+          <!-- D Line: from right edge of Mill (65+24=89) to right edge of Laser (75+27=102) -->
+          <line x1="89" y1="35" x2="102" y2="35" stroke="var(--text-color)" stroke-width="1.5" /> 
+          <text x="95.5" y="30" fill="var(--text-color)" font-size="10" text-anchor="middle">D</text>
+        </svg>
+      </div>
+
+      <div class="xshift-scenario">
+        <input type="radio" name="xShiftScenario" id="xShiftMillRight" value="right" onchange="previewXShiftCalculation()">
+        <label for="xShiftMillRight">Milling Hole is RIGHT of Laser Mark Center</label>
+        <svg width="150" height="70" viewBox="0 0 150 70" class="xshift-svg">
+          <!-- Scenario: Mill Right. D is gap from Left Mill Edge to Left Laser Edge -->
+          <!-- Laser (Red outline, r=27, cx=75), Mill (Blue fill, r=24, cx=85, example offset S=10) -->
+          <circle cx="75" cy="35" r="27" fill="rgba(255,0,0,0.1)" stroke="red" stroke-width="1.5"/> <!-- Laser 9mm -->
+          <circle cx="85" cy="35" r="24" fill="rgba(0,0,255,0.3)" stroke="blue" stroke-width="1"/> <!-- Mill 8mm -->
+          <!-- D Line: from left edge of Laser (75-27=48) to left edge of Mill (85-24=61) -->
+          <line x1="48" y1="35" x2="61" y2="35" stroke="var(--text-color)" stroke-width="1.5" /> 
+          <text x="54.5" y="30" fill="var(--text-color)" font-size="10" text-anchor="middle">D</text>
+        </svg>
+      </div>
+    </div>
+    
+    <div class="xshift-input-group">
+      <label for="xShiftMillDiameter" id="xShiftMillDiameterLabel">Milling Tool Diameter Used (mm):</label>
+      <input type="number" id="xShiftMillDiameter" step="0.01" value="8.0" oninput="previewXShiftCalculation()">
+    </div>
+
+    <div class="xshift-input-group">
+      <label for="xShiftMeasuredDistance" id="xShiftMeasuredDistanceLabel">Measured gap (D) as per diagram (mm):</label>
+      <input type="number" id="xShiftMeasuredDistance" step="0.001" placeholder="e.g., 0.1" oninput="previewXShiftCalculation()">
+    </div>
+     <div class="xshift-current-value">
+      Current P1611 Value: <span id="xShiftCurrentP1611">N/A</span>
+    </div>
+    <div class="xshift-calculated-value">
+      Calculated New P1611: <span id="xShiftCalculatedP1611">N/A</span>
+    </div>
+
+    <div class="modal-button-group">
+      <button class="btn-primary" onclick="calculateAndApplyXShift()">Calculate & Apply to P1611</button>
+      <button class="btn-warning" onclick="closeXShiftModal()">Cancel</button>
+    </div>
+    <div id="xShiftError" class="alert alert-danger" style="display:none; margin-top:10px;"></div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import axios from '../api/axios';
 import FileManager from '../components/FileManager';
+import MachineConfigEditor from '../components/MachineConfigEditor';
 import './SessionView.css';
 
 const SOCKET_PATH = '/remote/socket.io';
@@ -87,6 +88,7 @@ export default function SessionView({ user }) {
     const [sendProgress, setSendProgress] = useState(null);
     const [recvProgress, setRecvProgress] = useState(null);
     const [showFileManager, setShowFileManager] = useState(false);
+    const [showMachineConfig, setShowMachineConfig] = useState(false);
 
     // Case report
     const [caseOpen, setCaseOpen] = useState(false);
@@ -932,6 +934,16 @@ export default function SessionView({ user }) {
                     </button>
 
                     <button
+                        className={`toolbar-btn ${showMachineConfig ? 'active' : ''}`}
+                        onClick={() => setShowMachineConfig(s => !s)}
+                        disabled={!peerConnected}
+                        title="Machine Parameters (.mk / pfields.dat)"
+                    >
+                        <span className="tb-icon">{'\uD83D\uDEE0'}</span>
+                        <span className="tb-label">Config</span>
+                    </button>
+
+                    <button
                         className={`toolbar-btn ${showControlsHelp ? 'active' : ''}`}
                         onClick={() => setShowControlsHelp(v => !v)}
                         title="Show button guide"
@@ -951,6 +963,7 @@ export default function SessionView({ user }) {
                     <span><strong>Lock/Reboot:</strong> Lock the remote screen or restart the remote computer (asks the user first in attended sessions).</span>
                     <span><strong>Send:</strong> Upload a file to the helper machine.</span>
                     <span><strong>Files:</strong> Open remote file manager (P2P channel).</span>
+                    <span><strong>Config:</strong> Edit machine parameters (.mk / pfields.dat) with an automatic safety backup and audit trail before any change is written to the machine.</span>
                     <span><strong>Fast/Bal/HD:</strong> Stream quality presets (latency vs image quality).</span>
                     {!helperCanControl && (
                         <span className="button-help-warning">
@@ -1193,6 +1206,13 @@ export default function SessionView({ user }) {
                 <FileManager
                     channel={filesChannel.current}
                     onClose={() => setShowFileManager(false)}
+                />
+            )}
+            {showMachineConfig && (
+                <MachineConfigEditor
+                    channel={filesChannel.current}
+                    sessionId={sessionId}
+                    onClose={() => setShowMachineConfig(false)}
                 />
             )}
         </div>
