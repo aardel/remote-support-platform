@@ -1,6 +1,7 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import axios from '../api/axios';
 import { matchInstallFolder, looksLikeBackupFile, PFIELDS_FILENAME } from '../data/machineFolderMap';
+import { alignParameterLines, formatCheck } from '../utils/configTextTools';
 import './MachineConfigEditor.css';
 
 const CHUNK_SIZE = 128 * 1024;
@@ -20,6 +21,9 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
     const [selectedFile, setSelectedFile] = useState(null); // { path, name, editor }
     const [viewMode, setViewMode] = useState('structured'); // 'structured' (built-in editor) | 'text' (plain text, tab-indent)
     const [rawText, setRawText] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [matchIdx, setMatchIdx] = useState(0);
+    const [formatIssues, setFormatIssues] = useState(null); // null = not run, [] = clean, [...] = issues found
     const [pendingSave, setPendingSave] = useState(null); // { newContent, filename, oldContent }
     const [diff, setDiff] = useState(null);
     const [progressMsg, setProgressMsg] = useState('');
@@ -181,6 +185,8 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
         setViewMode(mode);
         setPhase('loading');
         setError(null);
+        setSearchQuery('');
+        setFormatIssues(null);
         try {
             const content = await readFileFull(file.path);
             fileContentRef.current = content;
@@ -205,6 +211,10 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
         api.setSaveHandler((newContent, filename, oldContent) => {
             setPendingSave({ newContent, filename: filename || selectedFile.name, oldContent: oldContent ?? fileContentRef.current });
         });
+        // Technicians are already authenticated by the platform — the editor's
+        // own password lock and local Open File/Load Sample controls (which
+        // don't apply to content fed in via loadContent()) are just friction.
+        api.enableEmbeddedMode?.();
     };
 
     // Once the embedded editor calls Save, compute a diff and require explicit confirmation
@@ -271,6 +281,50 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
             ta.selectionStart = ta.selectionEnd = selectionStart + 1;
         });
     };
+
+    // Any further edit invalidates the last Format Check result — clear it so
+    // stale "issue" text can't linger after the technician has already fixed it.
+    useEffect(() => { setFormatIssues(null); }, [rawText]);
+
+    // All (case-insensitive) match positions of the search query in the raw text.
+    const searchMatches = useMemo(() => {
+        if (!searchQuery) return [];
+        const matches = [];
+        const hay = rawText.toLowerCase();
+        const needle = searchQuery.toLowerCase();
+        let from = 0;
+        while (true) {
+            const at = hay.indexOf(needle, from);
+            if (at === -1) break;
+            matches.push({ start: at, end: at + needle.length });
+            from = at + needle.length;
+        }
+        return matches;
+    }, [rawText, searchQuery]);
+
+    useEffect(() => { setMatchIdx(0); }, [searchQuery]);
+
+    const jumpToMatch = (idx) => {
+        if (!searchMatches.length) return;
+        const wrapped = ((idx % searchMatches.length) + searchMatches.length) % searchMatches.length;
+        setMatchIdx(wrapped);
+        const m = searchMatches[wrapped];
+        const ta = textareaRef.current;
+        if (!ta) return;
+        ta.focus();
+        ta.setSelectionRange(m.start, m.end);
+        // setSelectionRange alone doesn't reliably scroll a long textarea —
+        // estimate the line and scroll proportionally to bring it into view.
+        const lineNo = rawText.slice(0, m.start).split('\n').length;
+        const totalLines = rawText.split('\n').length;
+        ta.scrollTop = (lineNo / totalLines) * ta.scrollHeight - ta.clientHeight / 2;
+    };
+
+    const findNext = () => jumpToMatch(matchIdx + 1);
+    const findPrev = () => jumpToMatch(matchIdx - 1);
+
+    const runAlign = () => setRawText(prev => alignParameterLines(prev));
+    const runFormatCheck = () => setFormatIssues(formatCheck(rawText));
 
     const saveTextEdits = () => {
         setPendingSave({ newContent: rawText, filename: selectedFile.name, oldContent: fileContentRef.current });
@@ -371,9 +425,45 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
                         {viewMode === 'text' && (
                             <div className="mce-text-editor">
                                 <div className="mce-text-toolbar">
-                                    <span className="mce-hint">Plain text — Tab inserts a real tab character, spaces stay aligned.</span>
-                                    <button className="mce-btn primary" onClick={saveTextEdits} disabled={phase !== 'editing'}>Save</button>
+                                    <div className="mce-search-box">
+                                        <input
+                                            type="text"
+                                            className="mce-search-input"
+                                            placeholder="Search..."
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') { e.preventDefault(); e.shiftKey ? findPrev() : findNext(); }
+                                            }}
+                                        />
+                                        {searchQuery && (
+                                            <span className="mce-search-count">
+                                                {searchMatches.length ? `${matchIdx + 1}/${searchMatches.length}` : '0/0'}
+                                            </span>
+                                        )}
+                                        <button className="mce-btn" onClick={findPrev} disabled={!searchMatches.length} title="Previous match">↑</button>
+                                        <button className="mce-btn" onClick={findNext} disabled={!searchMatches.length} title="Next match">↓</button>
+                                    </div>
+                                    <div className="mce-toolbar-actions">
+                                        <button className="mce-btn" onClick={runAlign} disabled={phase !== 'editing'} title="Line up parameter columns neatly">Align Parameters</button>
+                                        <button className="mce-btn" onClick={runFormatCheck} disabled={phase !== 'editing'} title="Scan for duplicate keys, typos, and malformed lines">Format Check</button>
+                                        <button className="mce-btn primary" onClick={saveTextEdits} disabled={phase !== 'editing'}>Save</button>
+                                    </div>
                                 </div>
+                                {formatIssues !== null && (
+                                    <div className="mce-format-panel">
+                                        <div className="mce-format-header">
+                                            <span>{formatIssues.length === 0 ? 'No issues found.' : `${formatIssues.length} issue${formatIssues.length !== 1 ? 's' : ''} found`}</span>
+                                            <button className="mce-close-btn" onClick={() => setFormatIssues(null)}>✕</button>
+                                        </div>
+                                        {formatIssues.map((issue, i) => (
+                                            <div key={i} className={`mce-format-issue ${issue.severity}`}>
+                                                <span className="mce-format-line">{issue.line ? `L${issue.line}` : '—'}</span>
+                                                <span>{issue.message}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                                 <textarea
                                     ref={textareaRef}
                                     className="mce-textarea"

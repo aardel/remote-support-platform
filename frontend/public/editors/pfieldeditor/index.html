@@ -846,7 +846,7 @@
         </div>
         
         <div class="button-group">
-          <div class="file-input-wrapper">
+          <div class="file-input-wrapper" id="open-file-wrapper">
             <button class="btn-primary" id="file-button">Open File</button>
             <input type="file" id="file-input" accept=".dat">
           </div>
@@ -3080,12 +3080,29 @@ CHUCK_SENSOR_EMPTY_TOL                  |P1640|       0.5|Voltage tolerance for 
       });
     }
 
+    // Called by an embedding parent (technician's session viewer): the
+    // password lock exists to stop end users from fat-fingering settings, but
+    // technicians here are already authenticated by the platform itself, so
+    // it's just an extra click. Also hides the local Open File / Load Sample
+    // controls, which don't apply when content is fed in via loadContent().
+    function enableEmbeddedMode() {
+      isLocked = false;
+      updateLockState();
+      const lockBtn = document.getElementById('lock-toggle');
+      if (lockBtn) lockBtn.style.display = 'none';
+      const openWrap = document.getElementById('open-file-wrapper');
+      if (openWrap) openWrap.style.display = 'none';
+      const sampleBtn = document.getElementById('load-sample-button');
+      if (sampleBtn) sampleBtn.style.display = 'none';
+    }
+
     // Public API for an embedding parent (e.g. the remote-support session
     // viewer) to drive this editor without a real file picker/download.
     window.PfieldEditor = {
       loadContent,
       saveFile,
-      setSaveHandler: (fn) => { embeddedSaveCallback = fn; }
+      setSaveHandler: (fn) => { embeddedSaveCallback = fn; },
+      enableEmbeddedMode
     };
   </script>
 

@@ -47,9 +47,31 @@
 
 .mce-text-editor { flex: 1; display: flex; flex-direction: column; min-height: 0; background: #0f172a; }
 .mce-text-toolbar {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
   padding: 8px 14px; border-bottom: 1px solid #334155;
 }
+.mce-search-box { display: flex; align-items: center; gap: 6px; }
+.mce-search-input {
+  background: #1e293b; border: 1px solid #475569; color: #e2e8f0;
+  border-radius: 6px; padding: 6px 10px; font-size: 13px; width: 200px;
+}
+.mce-search-count { color: #94a3b8; font-size: 12px; min-width: 44px; }
+.mce-toolbar-actions { display: flex; align-items: center; gap: 8px; }
+
+.mce-format-panel {
+  border-bottom: 1px solid #334155; background: #16202e; max-height: 180px; overflow-y: auto;
+}
+.mce-format-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px; font-size: 13px; color: #e2e8f0; font-weight: 600;
+}
+.mce-format-issue {
+  display: flex; gap: 10px; padding: 6px 14px; font-size: 12px;
+  border-top: 1px solid #263548; color: #e2e8f0;
+}
+.mce-format-issue.error { background: rgba(220, 38, 38, 0.08); }
+.mce-format-issue.warning { background: rgba(217, 119, 6, 0.08); }
+.mce-format-line { color: #64748b; min-width: 40px; font-family: "SF Mono", monospace; }
 .mce-textarea {
   flex: 1; border: none; resize: none; padding: 14px;
   background: #0b1220; color: #e2e8f0; font-family: "SF Mono", Consolas, monospace;

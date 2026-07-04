@@ -1021,12 +1021,16 @@
     const q = filterText.toLowerCase();
     if (param.key.toLowerCase().includes(q)) return true;
     if ((param.description || '').toLowerCase().includes(q)) return true;
+    if (String(param.value ?? '').toLowerCase().includes(q)) return true;
+    if (String(displayValue(param) ?? '').toLowerCase().includes(q)) return true;
+    if ((param.section || '').toLowerCase().includes(q)) return true;
     // Also search row descriptions (DW, P-field params)
     if (param.axisRows) {
       for (const ax of param.axisRows) {
         if ((ax.axisLabel || '').toLowerCase().includes(q)) return true;
         if (translateDesc(ax.rowDesc || '').toLowerCase().includes(q)) return true;
         if ((ax.bitDefs || []).some(b => translateDesc(b.desc).toLowerCase().includes(q))) return true;
+        if ((ax.rawLine || '').toLowerCase().includes(q)) return true;
       }
     }
     return false;
@@ -1039,7 +1043,10 @@
 
     for (const groupName of names) {
       const group = parameterGroups[groupName];
-      const visible = (group.params || []).filter(matchesFilter);
+      // A group-name match reveals every parameter in that group, not just the
+      // ones whose own key/description happens to contain the search text.
+      const groupNameMatches = filterText && groupName.toLowerCase().includes(filterText.toLowerCase());
+      const visible = groupNameMatches ? (group.params || []) : (group.params || []).filter(matchesFilter);
       if (!visible.length) continue;
 
       const groupDiv = document.createElement('div');
@@ -1571,6 +1578,22 @@
     applyLockState();
   }
 
+  // Called by an embedding parent (technician's session viewer): the password
+  // lock exists to stop end users from fat-fingering settings, but technicians
+  // here are already authenticated by the platform itself, so it's just an
+  // extra click. Also hides the local "Open .mk File" / "Load Sample" controls,
+  // which don't apply when content is fed in via loadContent() instead.
+  function enableEmbeddedMode() {
+    isLocked = false;
+    applyLockState();
+    const lockBtn = document.getElementById('lock-toggle');
+    if (lockBtn) lockBtn.style.display = 'none';
+    const openWrap = document.getElementById('open-file-wrapper');
+    if (openWrap) openWrap.style.display = 'none';
+    const sampleBtn = document.getElementById('load-sample-btn');
+    if (sampleBtn) sampleBtn.style.display = 'none';
+  }
+
   function setupDragDrop() {
     const zone = document.getElementById('file-status-panel');
     zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
@@ -1608,6 +1631,7 @@
     saveFile, resetChanges, expandAllGroups, collapseAllGroups,
     loadSampleData, downloadBackup, restoreBackup,
     loadContent,
-    setSaveHandler: (fn) => { embeddedSaveCallback = fn; }
+    setSaveHandler: (fn) => { embeddedSaveCallback = fn; },
+    enableEmbeddedMode
   };
 })();
