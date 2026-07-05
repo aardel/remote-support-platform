@@ -42,6 +42,7 @@ export default function SessionView({ user }) {
     const navigate = useNavigate();
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
+    const sessionViewRef = useRef(null);
     const controlChannel = useRef(null);
     const filesChannel = useRef(null);
     const pcRef = useRef(null);
@@ -404,6 +405,16 @@ export default function SessionView({ user }) {
         };
     }, [sessionId, peerConnected, viewing, user?.id, user?.username]);
 
+    /* ---------- Keep keyboard focus on the session view once connected ---------- */
+    // Without this, onKeyDown/onKeyUp on session-view never fire until the user
+    // happens to click in a way that transfers focus there — clicking the
+    // <video>/<canvas> alone doesn't do it reliably (they aren't focusable
+    // elements), so keyboard input can silently appear "not to work" while
+    // mouse/scroll (which don't need focus) work fine.
+    useEffect(() => {
+        if (peerConnected) sessionViewRef.current?.focus();
+    }, [peerConnected]);
+
     /* ---------- Viewing timer ---------- */
     useEffect(() => {
         if (peerConnected && viewing) {
@@ -513,6 +524,11 @@ export default function SessionView({ user }) {
 
     const handleMouseDown = useCallback((e) => {
         if (!isControlEnabled) return;
+        // The <video>/<canvas> aren't natively focusable, so clicking them doesn't
+        // reliably move keyboard focus to the ancestor session-view div in every
+        // browser — without this, onKeyDown/onKeyUp there silently never fire
+        // (mouse/scroll still work since those don't require focus at all).
+        sessionViewRef.current?.focus();
         const coords = getVideoCoords(e);
         if (!coords) return;
         sendInput({ kind: 'mouse', type: 'down', button: e.button, ...coords });
@@ -541,8 +557,17 @@ export default function SessionView({ user }) {
     }, [isControlEnabled, getVideoCoords, sendInput]);
 
     /* ---------- Keyboard handlers ---------- */
+    // FileManager, MachineConfigEditor, and the chat box all render inside this
+    // same container, so typing into any of their text fields would otherwise
+    // bubble up here and get forwarded to the remote machine too — ignore
+    // anything that didn't originate directly on the video/canvas surface.
+    const isRemoteControlTarget = (e) => {
+        const tag = e.target?.tagName;
+        return tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT' && !e.target?.isContentEditable;
+    };
+
     const handleKeyDown = useCallback((e) => {
-        if (!isControlEnabled) return;
+        if (!isControlEnabled || !isRemoteControlTarget(e)) return;
         e.preventDefault();
         sendInput({
             kind: 'keyboard', type: 'down', key: e.key, code: e.code, keyCode: e.keyCode,
@@ -551,7 +576,7 @@ export default function SessionView({ user }) {
     }, [isControlEnabled, sendInput]);
 
     const handleKeyUp = useCallback((e) => {
-        if (!isControlEnabled) return;
+        if (!isControlEnabled || !isRemoteControlTarget(e)) return;
         e.preventDefault();
         sendInput({
             kind: 'keyboard', type: 'up', key: e.key, code: e.code, keyCode: e.keyCode,
@@ -754,7 +779,7 @@ export default function SessionView({ user }) {
 
     /* ---------- Render ---------- */
     return (
-        <div className="session-view" tabIndex={0} onKeyDown={handleKeyDown} onKeyUp={handleKeyUp}>
+        <div ref={sessionViewRef} className="session-view" tabIndex={0} onKeyDown={handleKeyDown} onKeyUp={handleKeyUp}>
             {/* Toolbar */}
             <div className="session-toolbar">
                 <div className="toolbar-left">
