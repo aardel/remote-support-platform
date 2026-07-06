@@ -12,11 +12,10 @@ function joinPath(dir, name) {
     return dir.endsWith(sep) ? dir + name : dir + sep + name;
 }
 
-// Same naming convention MkEditor's own local backup uses
-// (`${name}_backup_${timestamp}.mk`) — written next to the original file so a
-// technician (or the customer) opening the machine's filesystem with any other
-// tool, not just this one, sees the exact same kind of backup they'd expect
-// from a manual copy-before-editing workflow.
+// One stable backup filename per original file (e.g. ptsneo_backup.mk) — not
+// re-timestamped per event, so repeated edits don't litter cfg\ with a new
+// file every time. Written next to the original so a technician (or the
+// customer) opening the machine's filesystem with any other tool sees it too.
 function backupFilePath(originalPath) {
     const sep = originalPath.includes('/') ? '/' : '\\';
     const idx = originalPath.lastIndexOf(sep);
@@ -25,12 +24,39 @@ function backupFilePath(originalPath) {
     const dotIdx = fileName.lastIndexOf('.');
     const base = dotIdx === -1 ? fileName : fileName.slice(0, dotIdx);
     const ext = dotIdx === -1 ? '' : fileName.slice(dotIdx);
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupName = `${base}_backup_${timestamp}${ext}`;
+    const backupName = `${base}_backup${ext}`;
     return dir ? `${dir}${sep}${backupName}` : backupName;
 }
 
-export default function MachineConfigEditor({ channel, sessionId, deviceId, onClose }) {
+const BACKUP_HISTORY_HEADER = '; Backup History';
+
+// Builds the new content for the single on-machine backup file: the latest
+// snapshot, plus a running "Backup History" trailer with one timestamped
+// entry per backup event — same pattern as the built-in editor's own
+// "append changes as comments" feature, just applied to the backup file
+// instead of the live one. Prior history lines are preserved across saves so
+// nothing is lost each time the file gets overwritten with a fresh snapshot.
+function buildBackupContent(existingBackupContent, snapshotContent, reason, technician, changes) {
+    let priorHistory = [];
+    if (existingBackupContent) {
+        const idx = existingBackupContent.indexOf(BACKUP_HISTORY_HEADER);
+        if (idx !== -1) {
+            priorHistory = existingBackupContent.slice(idx).split(/\r\n|\r|\n/).slice(1).filter(l => l.trim());
+        }
+    }
+    const timestamp = new Date().toISOString();
+    const newLines = [`; [${timestamp}] ${reason} backup by ${technician || 'technician'}`];
+    if (changes && changes.length) {
+        changes.forEach(c => {
+            newLines.push(`;   ${c.key || `line ${c.line}`}: ${c.oldValue || '(empty)'} -> ${c.newValue || '(empty)'}`);
+        });
+    }
+    const trimmedSnapshot = snapshotContent.replace(/[\r\n]+$/, '');
+    const historyBlock = [BACKUP_HISTORY_HEADER, ...priorHistory, ...newLines].join('\r\n');
+    return `${trimmedSnapshot}\r\n\r\n${historyBlock}\r\n`;
+}
+
+export default function MachineConfigEditor({ channel, sessionId, deviceId, technicianName, onClose }) {
     const [phase, setPhase] = useState('detecting'); // detecting | picking | loading | editing | confirming | saving | done | error
     const [error, setError] = useState(null);
     const [browsePath, setBrowsePath] = useState(ROOT_PATH);
@@ -196,19 +222,24 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
         } catch (e) { setError(e.message); }
     };
 
-    // Writes a timestamped backup copy onto the machine itself (best-effort —
-    // failure here is surfaced but doesn't block the DB record, which remains
-    // the authoritative safety net), then records it server-side. Returns the
-    // backup row (with on_machine_path set if the on-machine write succeeded).
-    const createSafetyBackup = async (filePath, content, reason) => {
+    // Updates the single on-machine backup file (best-effort — failure here is
+    // surfaced but doesn't block the DB record, which remains the authoritative
+    // safety net) by appending a timestamped entry to its "Backup History"
+    // trailer, then records the same event server-side. `changes` (from the
+    // pre-save diff, when available) gets logged per-key, same as the built-in
+    // editor's own change-history comments. Returns the backup row.
+    const createSafetyBackup = async (filePath, content, reason, changes = null) => {
         const bkPath = backupFilePath(filePath);
         let onMachinePath = null;
         try {
-            await writeFileFull(bkPath, content);
+            let existing = null;
+            try { existing = await readFileFull(bkPath); } catch (_) { /* no backup file yet — start fresh */ }
+            const combined = buildBackupContent(existing, content, reason, technicianName, changes);
+            await writeFileFull(bkPath, combined);
             onMachinePath = bkPath;
             setBackupWarning(null);
         } catch (e) {
-            setBackupWarning(`Could not write an on-machine backup copy (${e.message}) — a server-side backup was still taken, but nothing will be visible if the machine's files are opened outside this tool.`);
+            setBackupWarning(`Could not write the on-machine backup file (${e.message}) — a server-side backup was still taken, but nothing will be visible if the machine's files are opened outside this tool.`);
         }
         const backupResp = await axios.post('/api/machine-config/backup', {
             sessionId, deviceId, filePath, content, reason, onMachinePath
@@ -341,7 +372,7 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
             // already saved once this session, that snapshot no longer reflects
             // what's about to be overwritten.
             setProgressMsg('Creating safety backup...');
-            const backup = await createSafetyBackup(selectedFile.path, pendingSave.oldContent, 'pre-save');
+            const backup = await createSafetyBackup(selectedFile.path, pendingSave.oldContent, 'pre-save', diff?.changes);
             const preSaveBackupId = backup?.id || null;
             setBackupInfo(backup);
 

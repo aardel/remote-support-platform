@@ -1237,6 +1237,7 @@ export default function SessionView({ user }) {
                 <MachineConfigEditor
                     channel={filesChannel.current}
                     sessionId={sessionId}
+                    technicianName={user?.displayName || user?.username}
                     onClose={() => setShowMachineConfig(false)}
                 />
             )}
