@@ -33,8 +33,12 @@ function diffContent(oldText, newText) {
     return changes;
 }
 
-// One-time safety snapshot taken the moment a file is opened for editing —
-// guarantees a pre-edit copy exists even if something goes wrong before save.
+const VALID_BACKUP_REASONS = ['pre-edit', 'pre-save', 'post-edit'];
+
+// Safety snapshot — taken when a file is opened ("pre-edit") and again right
+// before every write-back to the machine ("pre-save", covering the case where
+// a technician saves more than once in the same session — otherwise only the
+// very first open would be recoverable, not the state just before a later edit).
 router.post('/backup', requireAuth, rateLimit({ windowMs: 60 * 1000, max: 30 }), async (req, res) => {
     try {
         const { sessionId, deviceId, filePath, content, reason } = req.body || {};
@@ -44,7 +48,7 @@ router.post('/backup', requireAuth, rateLimit({ windowMs: 60 * 1000, max: 30 }),
         const row = await MachineConfigBackup.create({
             sessionId, deviceId, filePath, content,
             technician: req.user?.username || req.user?.displayName || 'technician',
-            reason: reason === 'post-edit' ? 'post-edit' : 'pre-edit'
+            reason: VALID_BACKUP_REASONS.includes(reason) ? reason : 'pre-edit'
         });
         AuditLog.log('machine_config_backup', {
             sessionId, deviceId, actor: req.user?.username,

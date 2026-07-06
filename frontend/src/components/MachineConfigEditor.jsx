@@ -27,6 +27,10 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
     const [pendingSave, setPendingSave] = useState(null); // { newContent, filename, oldContent }
     const [diff, setDiff] = useState(null);
     const [progressMsg, setProgressMsg] = useState('');
+    const [backupInfo, setBackupInfo] = useState(null); // most recent backup for the open file: { id, created_at, reason }
+    const [showHistory, setShowHistory] = useState(false);
+    const [backupHistory, setBackupHistory] = useState([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
 
     const reqIdCounter = useRef(0);
     const pending = useRef(new Map());
@@ -187,6 +191,9 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
         setError(null);
         setSearchQuery('');
         setFormatIssues(null);
+        setBackupInfo(null);
+        setShowHistory(false);
+        setBackupHistory([]);
         try {
             const content = await readFileFull(file.path);
             fileContentRef.current = content;
@@ -195,10 +202,27 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
                 sessionId, deviceId, filePath: file.path, content, reason: 'pre-edit'
             });
             backupIdRef.current = backupResp.data?.backup?.id || null;
+            setBackupInfo(backupResp.data?.backup || null);
             setPhase('editing');
         } catch (e) {
             setError(e.message);
             setPhase('error');
+        }
+    };
+
+    const loadBackupHistory = async () => {
+        if (!selectedFile) return;
+        setShowHistory(true);
+        setHistoryLoading(true);
+        try {
+            const resp = await axios.get('/api/machine-config/backups', {
+                params: { filePath: selectedFile.path, deviceId, limit: 50 }
+            });
+            setBackupHistory(resp.data?.backups || []);
+        } catch (e) {
+            setBackupHistory([]);
+        } finally {
+            setHistoryLoading(false);
         }
     };
 
@@ -241,13 +265,24 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
         setPhase('saving');
         setError(null);
         try {
+            // A fresh backup of the state right before THIS write — the one taken
+            // at file-open only covers the very first edit; if the technician has
+            // already saved once this session, that snapshot no longer reflects
+            // what's about to be overwritten.
+            setProgressMsg('Creating safety backup...');
+            const backupResp = await axios.post('/api/machine-config/backup', {
+                sessionId, deviceId, filePath: selectedFile.path, content: pendingSave.oldContent, reason: 'pre-save'
+            });
+            const preSaveBackupId = backupResp.data?.backup?.id || null;
+            setBackupInfo(backupResp.data?.backup || null);
+
             setProgressMsg('Writing to the machine...');
             await writeFileFull(selectedFile.path, pendingSave.newContent);
             setProgressMsg('Recording change history...');
             await axios.post('/api/machine-config/log-change', {
                 sessionId, deviceId, filePath: selectedFile.path,
                 oldContent: pendingSave.oldContent, newContent: pendingSave.newContent,
-                backupId: backupIdRef.current
+                backupId: preSaveBackupId || backupIdRef.current
             });
             fileContentRef.current = pendingSave.newContent;
             setPendingSave(null);
@@ -411,6 +446,40 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
 
                 {(phase === 'editing' || phase === 'confirming' || phase === 'saving') && selectedFile && (
                     <div className="mce-editor-wrap">
+                        <div className="mce-backup-bar">
+                            {backupInfo ? (
+                                <span className="mce-backup-status">
+                                    🛡️ Safety backup saved — {new Date(backupInfo.created_at).toLocaleTimeString()}
+                                </span>
+                            ) : (
+                                <span className="mce-backup-status warn">⚠ No backup confirmation received</span>
+                            )}
+                            <button className="mce-btn" onClick={loadBackupHistory}>View Backup History</button>
+                        </div>
+
+                        {showHistory && (
+                            <div className="mce-history-overlay" onClick={() => setShowHistory(false)}>
+                                <div className="mce-history-box" onClick={(e) => e.stopPropagation()}>
+                                    <div className="mce-format-header">
+                                        <span>Backup history — {selectedFile.name}</span>
+                                        <button className="mce-close-btn" onClick={() => setShowHistory(false)}>✕</button>
+                                    </div>
+                                    {historyLoading && <div className="mce-hint" style={{ padding: 14 }}>Loading...</div>}
+                                    {!historyLoading && backupHistory.length === 0 && (
+                                        <div className="mce-hint" style={{ padding: 14 }}>No backups found for this file yet.</div>
+                                    )}
+                                    {!historyLoading && backupHistory.map(b => (
+                                        <div key={b.id} className="mce-history-row">
+                                            <span className="mce-history-time">{new Date(b.created_at).toLocaleString()}</span>
+                                            <span className={`mce-history-reason ${b.reason}`}>{b.reason}</span>
+                                            <span className="mce-history-tech">{b.technician || 'unknown'}</span>
+                                            <span className="mce-history-size">{b.content_length} bytes</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         {viewMode === 'structured' && editorUrl && (
                             <iframe
                                 ref={iframeRef}

@@ -42,8 +42,38 @@
 .mce-browse-file:hover { background: none; }
 .mce-browse-file .mce-cand-actions { width: auto; margin-top: 0; margin-left: auto; }
 
-.mce-editor-wrap { flex: 1; position: relative; display: flex; min-height: 0; }
+.mce-editor-wrap { flex: 1; position: relative; display: flex; flex-direction: column; min-height: 0; }
 .mce-iframe { flex: 1; border: none; background: #fff; }
+
+.mce-backup-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px; background: #052e1c; border-bottom: 1px solid #14532d;
+  font-size: 12px; flex-shrink: 0;
+}
+.mce-backup-status { color: #86efac; }
+.mce-backup-status.warn { color: #fca5a5; }
+
+.mce-history-overlay {
+  position: absolute; inset: 0; background: rgba(0,0,0,.6);
+  display: flex; align-items: center; justify-content: center; z-index: 15;
+}
+.mce-history-box {
+  width: 640px; max-width: 92vw; max-height: 70vh; overflow-y: auto;
+  background: #1e293b; border: 1px solid #475569; border-radius: 8px;
+  color: #e2e8f0;
+}
+.mce-history-row {
+  display: flex; gap: 14px; align-items: center; padding: 8px 14px;
+  font-size: 12px; border-top: 1px solid #263548;
+}
+.mce-history-time { color: #e2e8f0; min-width: 160px; }
+.mce-history-reason {
+  padding: 2px 8px; border-radius: 10px; font-size: 11px; text-transform: uppercase;
+  background: #334155; color: #93c5fd;
+}
+.mce-history-reason.pre-save { background: #78350f; color: #fed7aa; }
+.mce-history-tech { color: #94a3b8; flex: 1; }
+.mce-history-size { color: #64748b; }
 
 .mce-text-editor { flex: 1; display: flex; flex-direction: column; min-height: 0; background: #0f172a; }
 .mce-text-toolbar {
