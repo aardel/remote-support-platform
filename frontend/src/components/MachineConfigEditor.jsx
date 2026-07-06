@@ -12,6 +12,24 @@ function joinPath(dir, name) {
     return dir.endsWith(sep) ? dir + name : dir + sep + name;
 }
 
+// Same naming convention MkEditor's own local backup uses
+// (`${name}_backup_${timestamp}.mk`) — written next to the original file so a
+// technician (or the customer) opening the machine's filesystem with any other
+// tool, not just this one, sees the exact same kind of backup they'd expect
+// from a manual copy-before-editing workflow.
+function backupFilePath(originalPath) {
+    const sep = originalPath.includes('/') ? '/' : '\\';
+    const idx = originalPath.lastIndexOf(sep);
+    const dir = idx === -1 ? '' : originalPath.slice(0, idx);
+    const fileName = idx === -1 ? originalPath : originalPath.slice(idx + 1);
+    const dotIdx = fileName.lastIndexOf('.');
+    const base = dotIdx === -1 ? fileName : fileName.slice(0, dotIdx);
+    const ext = dotIdx === -1 ? '' : fileName.slice(dotIdx);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupName = `${base}_backup_${timestamp}${ext}`;
+    return dir ? `${dir}${sep}${backupName}` : backupName;
+}
+
 export default function MachineConfigEditor({ channel, sessionId, deviceId, onClose }) {
     const [phase, setPhase] = useState('detecting'); // detecting | picking | loading | editing | confirming | saving | done | error
     const [error, setError] = useState(null);
@@ -28,9 +46,12 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
     const [diff, setDiff] = useState(null);
     const [progressMsg, setProgressMsg] = useState('');
     const [backupInfo, setBackupInfo] = useState(null); // most recent backup for the open file: { id, created_at, reason }
+    const [backupWarning, setBackupWarning] = useState(null); // non-blocking: on-machine copy failed but DB backup still succeeded
     const [showHistory, setShowHistory] = useState(false);
     const [backupHistory, setBackupHistory] = useState([]);
     const [historyLoading, setHistoryLoading] = useState(false);
+    const [viewingBackup, setViewingBackup] = useState(null); // { id, content, created_at, reason } — full content fetched on demand
+    const [viewingLoading, setViewingLoading] = useState(null); // id currently being fetched
 
     const reqIdCounter = useRef(0);
     const pending = useRef(new Map());
@@ -175,6 +196,26 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
         } catch (e) { setError(e.message); }
     };
 
+    // Writes a timestamped backup copy onto the machine itself (best-effort —
+    // failure here is surfaced but doesn't block the DB record, which remains
+    // the authoritative safety net), then records it server-side. Returns the
+    // backup row (with on_machine_path set if the on-machine write succeeded).
+    const createSafetyBackup = async (filePath, content, reason) => {
+        const bkPath = backupFilePath(filePath);
+        let onMachinePath = null;
+        try {
+            await writeFileFull(bkPath, content);
+            onMachinePath = bkPath;
+            setBackupWarning(null);
+        } catch (e) {
+            setBackupWarning(`Could not write an on-machine backup copy (${e.message}) — a server-side backup was still taken, but nothing will be visible if the machine's files are opened outside this tool.`);
+        }
+        const backupResp = await axios.post('/api/machine-config/backup', {
+            sessionId, deviceId, filePath, content, reason, onMachinePath
+        });
+        return backupResp.data?.backup || null;
+    };
+
     const pickFile = (item, mode = 'structured') => {
         const editor = /\.mk$/i.test(item.name) ? 'mk'
             : item.name.toLowerCase() === PFIELDS_FILENAME ? 'pfields'
@@ -192,17 +233,16 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
         setSearchQuery('');
         setFormatIssues(null);
         setBackupInfo(null);
+        setBackupWarning(null);
         setShowHistory(false);
         setBackupHistory([]);
         try {
             const content = await readFileFull(file.path);
             fileContentRef.current = content;
             if (mode === 'text') setRawText(content);
-            const backupResp = await axios.post('/api/machine-config/backup', {
-                sessionId, deviceId, filePath: file.path, content, reason: 'pre-edit'
-            });
-            backupIdRef.current = backupResp.data?.backup?.id || null;
-            setBackupInfo(backupResp.data?.backup || null);
+            const backup = await createSafetyBackup(file.path, content, 'pre-edit');
+            backupIdRef.current = backup?.id || null;
+            setBackupInfo(backup);
             setPhase('editing');
         } catch (e) {
             setError(e.message);
@@ -223,6 +263,37 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
             setBackupHistory([]);
         } finally {
             setHistoryLoading(false);
+        }
+    };
+
+    const viewBackup = async (id) => {
+        setViewingLoading(id);
+        try {
+            const resp = await axios.get(`/api/machine-config/backups/${id}`);
+            setViewingBackup(resp.data?.backup || null);
+        } catch (e) {
+            setBackupWarning(`Could not load that backup: ${e.message}`);
+        } finally {
+            setViewingLoading(null);
+        }
+    };
+
+    // Loads a past backup's content as a pending change — it goes through the
+    // exact same diff + confirmation + write pipeline as any other edit, so
+    // restoring is reviewed just as carefully as a normal save, never silent.
+    const restoreBackup = async (id) => {
+        setViewingLoading(id);
+        try {
+            const resp = await axios.get(`/api/machine-config/backups/${id}`);
+            const content = resp.data?.backup?.content;
+            if (typeof content !== 'string') throw new Error('Backup has no content');
+            setShowHistory(false);
+            setViewingBackup(null);
+            setPendingSave({ newContent: content, filename: selectedFile.name, oldContent: fileContentRef.current });
+        } catch (e) {
+            setBackupWarning(`Could not load that backup: ${e.message}`);
+        } finally {
+            setViewingLoading(null);
         }
     };
 
@@ -270,11 +341,9 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
             // already saved once this session, that snapshot no longer reflects
             // what's about to be overwritten.
             setProgressMsg('Creating safety backup...');
-            const backupResp = await axios.post('/api/machine-config/backup', {
-                sessionId, deviceId, filePath: selectedFile.path, content: pendingSave.oldContent, reason: 'pre-save'
-            });
-            const preSaveBackupId = backupResp.data?.backup?.id || null;
-            setBackupInfo(backupResp.data?.backup || null);
+            const backup = await createSafetyBackup(selectedFile.path, pendingSave.oldContent, 'pre-save');
+            const preSaveBackupId = backup?.id || null;
+            setBackupInfo(backup);
 
             setProgressMsg('Writing to the machine...');
             await writeFileFull(selectedFile.path, pendingSave.newContent);
@@ -285,6 +354,16 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
                 backupId: preSaveBackupId || backupIdRef.current
             });
             fileContentRef.current = pendingSave.newContent;
+            // Keep whatever's currently displayed in sync with what's now actually
+            // on the machine — matters for restore, where newContent is an old
+            // backup, not what the technician was just looking at.
+            if (viewMode === 'text') {
+                setRawText(pendingSave.newContent);
+            } else {
+                const win = iframeRef.current?.contentWindow;
+                const api = selectedFile.editor === 'mk' ? win?.MkEditor : win?.PfieldEditor;
+                api?.loadContent(pendingSave.newContent, selectedFile.name);
+            }
             setPendingSave(null);
             setDiff(null);
             setPhase('editing');
@@ -447,13 +526,19 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
                 {(phase === 'editing' || phase === 'confirming' || phase === 'saving') && selectedFile && (
                     <div className="mce-editor-wrap">
                         <div className="mce-backup-bar">
-                            {backupInfo ? (
-                                <span className="mce-backup-status">
-                                    🛡️ Safety backup saved — {new Date(backupInfo.created_at).toLocaleTimeString()}
-                                </span>
-                            ) : (
-                                <span className="mce-backup-status warn">⚠ No backup confirmation received</span>
-                            )}
+                            <div className="mce-backup-status-group">
+                                {backupInfo ? (
+                                    <span className="mce-backup-status">
+                                        🛡️ Safety backup saved — {new Date(backupInfo.created_at).toLocaleTimeString()}
+                                        {backupInfo.on_machine_path && (
+                                            <span className="mce-backup-onmachine"> · on machine as {backupInfo.on_machine_path.split(/[\\/]/).pop()}</span>
+                                        )}
+                                    </span>
+                                ) : (
+                                    <span className="mce-backup-status warn">⚠ No backup confirmation received</span>
+                                )}
+                                {backupWarning && <span className="mce-backup-status warn">⚠ {backupWarning}</span>}
+                            </div>
                             <button className="mce-btn" onClick={loadBackupHistory}>View Backup History</button>
                         </div>
 
@@ -474,8 +559,31 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, onCl
                                             <span className={`mce-history-reason ${b.reason}`}>{b.reason}</span>
                                             <span className="mce-history-tech">{b.technician || 'unknown'}</span>
                                             <span className="mce-history-size">{b.content_length} bytes</span>
+                                            {b.on_machine_path && (
+                                                <span className="mce-history-onmachine" title={b.on_machine_path}>on machine</span>
+                                            )}
+                                            <div className="mce-history-actions">
+                                                <button className="mce-btn" disabled={viewingLoading === b.id} onClick={() => viewBackup(b.id)}>View</button>
+                                                <button className="mce-btn" disabled={viewingLoading === b.id} onClick={() => restoreBackup(b.id)}>Restore</button>
+                                            </div>
                                         </div>
                                     ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {viewingBackup && (
+                            <div className="mce-history-overlay" onClick={() => setViewingBackup(null)}>
+                                <div className="mce-history-box mce-view-box" onClick={(e) => e.stopPropagation()}>
+                                    <div className="mce-format-header">
+                                        <span>Backup content — {new Date(viewingBackup.created_at).toLocaleString()} ({viewingBackup.reason})</span>
+                                        <button className="mce-close-btn" onClick={() => setViewingBackup(null)}>✕</button>
+                                    </div>
+                                    <textarea className="mce-textarea mce-view-textarea" value={viewingBackup.content} readOnly spellCheck={false} />
+                                    <div className="mce-confirm-actions" style={{ padding: '10px 14px' }}>
+                                        <button className="mce-btn primary" onClick={() => restoreBackup(viewingBackup.id)}>Restore This Version</button>
+                                        <button className="mce-btn" onClick={() => setViewingBackup(null)}>Close</button>
+                                    </div>
                                 </div>
                             </div>
                         )}

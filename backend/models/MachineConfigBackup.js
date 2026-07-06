@@ -20,6 +20,12 @@ function ensureTable() {
             created_at TIMESTAMP DEFAULT NOW()
         )
     `)
+        // On-machine copy of the backup (same folder as the original, timestamped
+        // filename) so anyone opening the machine's own filesystem — not just this
+        // tool — can see it too. Added after the table already existed elsewhere;
+        // ADD COLUMN IF NOT EXISTS keeps existing rows intact (NULL = DB-only,
+        // pre-dates this feature).
+        .then(() => pool.query('ALTER TABLE machine_config_backups ADD COLUMN IF NOT EXISTS on_machine_path TEXT'))
         .then(() => pool.query('CREATE INDEX IF NOT EXISTS idx_mcb_device ON machine_config_backups(device_id)'))
         .then(() => pool.query('CREATE INDEX IF NOT EXISTS idx_mcb_session ON machine_config_backups(session_id)'))
         .then(() => pool.query('CREATE INDEX IF NOT EXISTS idx_mcb_created ON machine_config_backups(created_at DESC)'))
@@ -28,12 +34,12 @@ function ensureTable() {
 }
 
 class MachineConfigBackup {
-    static async create({ sessionId, deviceId, filePath, content, technician, reason = 'pre-edit' }) {
+    static async create({ sessionId, deviceId, filePath, content, technician, reason = 'pre-edit', onMachinePath = null }) {
         await ensureTable();
         const r = await pool.query(
-            `INSERT INTO machine_config_backups (session_id, device_id, file_path, content, technician, reason)
-             VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, session_id, device_id, file_path, technician, reason, created_at`,
-            [sessionId || null, deviceId || null, filePath, content, technician || null, reason]
+            `INSERT INTO machine_config_backups (session_id, device_id, file_path, content, technician, reason, on_machine_path)
+             VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, session_id, device_id, file_path, technician, reason, on_machine_path, created_at`,
+            [sessionId || null, deviceId || null, filePath, content, technician || null, reason, onMachinePath]
         );
         return r.rows[0];
     }
@@ -49,7 +55,7 @@ class MachineConfigBackup {
         const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
         values.push(Math.min(Number(limit) || 100, 500));
         const r = await pool.query(
-            `SELECT id, session_id, device_id, file_path, technician, reason, created_at, length(content) AS content_length
+            `SELECT id, session_id, device_id, file_path, technician, reason, on_machine_path, created_at, length(content) AS content_length
                FROM machine_config_backups ${where}
               ORDER BY created_at DESC LIMIT $${values.length}`,
             values

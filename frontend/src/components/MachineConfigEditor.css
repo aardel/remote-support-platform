@@ -46,12 +46,14 @@
 .mce-iframe { flex: 1; border: none; background: #fff; }
 
 .mce-backup-bar {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 8px 14px; background: #052e1c; border-bottom: 1px solid #14532d;
-  font-size: 12px; flex-shrink: 0;
+  font-size: 12px; flex-shrink: 0; flex-wrap: wrap;
 }
+.mce-backup-status-group { display: flex; flex-direction: column; gap: 2px; }
 .mce-backup-status { color: #86efac; }
 .mce-backup-status.warn { color: #fca5a5; }
+.mce-backup-onmachine { color: #4ade80; opacity: .85; }
 
 .mce-history-overlay {
   position: absolute; inset: 0; background: rgba(0,0,0,.6);
@@ -73,7 +75,19 @@
 }
 .mce-history-reason.pre-save { background: #78350f; color: #fed7aa; }
 .mce-history-tech { color: #94a3b8; flex: 1; }
-.mce-history-size { color: #64748b; }
+.mce-history-size { color: #64748b; white-space: nowrap; }
+.mce-history-onmachine {
+  background: #14532d; color: #86efac; font-size: 10px; padding: 2px 7px;
+  border-radius: 10px; white-space: nowrap;
+}
+.mce-history-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.mce-view-box { width: 800px; display: flex; flex-direction: column; max-height: 80vh; }
+.mce-view-textarea {
+  flex: 1; min-height: 300px; border: none; resize: none; padding: 14px;
+  background: #0b1220; color: #e2e8f0; font-family: "SF Mono", Consolas, monospace;
+  font-size: 12px; line-height: 1.5; white-space: pre; overflow: auto;
+}
 
 .mce-text-editor { flex: 1; display: flex; flex-direction: column; min-height: 0; background: #0f172a; }
 .mce-text-toolbar {

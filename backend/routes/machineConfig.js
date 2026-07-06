@@ -41,18 +41,19 @@ const VALID_BACKUP_REASONS = ['pre-edit', 'pre-save', 'post-edit'];
 // very first open would be recoverable, not the state just before a later edit).
 router.post('/backup', requireAuth, rateLimit({ windowMs: 60 * 1000, max: 30 }), async (req, res) => {
     try {
-        const { sessionId, deviceId, filePath, content, reason } = req.body || {};
+        const { sessionId, deviceId, filePath, content, reason, onMachinePath } = req.body || {};
         if (!filePath || tooLarge(content)) {
             return res.status(400).json({ error: 'filePath and content (<=5MB) are required' });
         }
         const row = await MachineConfigBackup.create({
             sessionId, deviceId, filePath, content,
             technician: req.user?.username || req.user?.displayName || 'technician',
-            reason: VALID_BACKUP_REASONS.includes(reason) ? reason : 'pre-edit'
+            reason: VALID_BACKUP_REASONS.includes(reason) ? reason : 'pre-edit',
+            onMachinePath: typeof onMachinePath === 'string' ? onMachinePath.slice(0, 1000) : null
         });
         AuditLog.log('machine_config_backup', {
             sessionId, deviceId, actor: req.user?.username,
-            detail: { filePath, backupId: row.id, reason: row.reason }
+            detail: { filePath, backupId: row.id, reason: row.reason, onMachinePath: row.on_machine_path }
         });
         res.json({ success: true, backup: row });
     } catch (e) {
