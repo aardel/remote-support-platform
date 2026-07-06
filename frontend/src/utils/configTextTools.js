@@ -104,7 +104,7 @@ function alignPfieldsParameterLines(text) {
 // delimiter, then exactly 4 spaces, then the comment. Applies uniformly to
 // every parameter line (keyed or a bare continuation value) — no block
 // grouping needed since the target column is constant.
-const MK_DELIMITER_COLUMN = 30;
+const MK_DELIMITER_COLUMN = 28;
 
 function alignMkLine(line, delimiterColumn) {
     const m = line.match(/^(.*?)([,;])(.*)$/);
