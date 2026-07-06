@@ -66,7 +66,9 @@ function alignBlock(lines, type) {
     return alignByFirstDelimiter(lines);
 }
 
-export function alignParameterLines(text) {
+// Dynamic per-block alignment (max-width-in-block) — used for pfields.dat,
+// which has its own layout distinct from .mk (see alignMkParameterLines).
+function alignPfieldsParameterLines(text) {
     const eol = text.includes('\r\n') ? '\r\n' : '\n';
     const lines = text.split(/\r\n|\r|\n/);
     const out = [];
@@ -77,17 +79,6 @@ export function alignParameterLines(text) {
         const block = [lines[i]];
         i++;
         let blankRun = 0;
-        // 'cont' lines extend whatever block precedes them — a run of bare
-        // continuation values (P761, P762, ...) belongs to the same array as
-        // the keyed line above it (P760), not its own separate block, and not
-        // pipe blocks (which have no comparable bare-continuation style). A
-        // single blank line also doesn't end the block — these files
-        // routinely put one blank line between every parameter as visual
-        // spacing, even between otherwise-unrelated single-line parameters,
-        // so treating every blank line as a hard break would mean almost
-        // nothing outside a multi-line array ever gets grouped with its
-        // neighbors. Two blank lines in a row is treated as a real section
-        // break, same as a comment or header line.
         while (i < lines.length) {
             const nextType = classifyLine(lines[i]);
             if (nextType === type || (nextType === 'cont' && type !== 'pipe')) {
@@ -104,6 +95,57 @@ export function alignParameterLines(text) {
         out.push(...alignBlock(block, type));
     }
     return out.join(eol);
+}
+
+// .mk-specific alignment, per exact spec measured against a real file: the
+// comma/semicolon always lands at a fixed column (counted from the start of
+// the line), regardless of neighboring lines — not a per-block computed
+// maximum. The value is right-justified so it ends immediately before the
+// delimiter, then exactly 4 spaces, then the comment. Applies uniformly to
+// every parameter line (keyed or a bare continuation value) — no block
+// grouping needed since the target column is constant.
+const MK_DELIMITER_COLUMN = 30;
+
+function alignMkLine(line, delimiterColumn) {
+    const m = line.match(/^(.*?)([,;])(.*)$/);
+    if (!m) return null;
+    const before = m[1];
+    const delim = m[2];
+    const after = m[3];
+    const valueMatch = before.match(/(\S+)\s*$/);
+    if (!valueMatch) return null;
+    const valueToken = valueMatch[1];
+    const prefix = before.slice(0, before.length - valueMatch[0].length);
+    const gap = Math.max(delimiterColumn - prefix.length - valueToken.length, 1);
+    const trimmedAfter = after.replace(/^\s+/, '');
+    const padded = prefix + ' '.repeat(gap) + valueToken + delim;
+    return trimmedAfter ? `${padded}    ${trimmedAfter}` : padded;
+}
+
+function alignMkParameterLines(text) {
+    const eol = text.includes('\r\n') ? '\r\n' : '\n';
+    const lines = text.split(/\r\n|\r|\n/);
+    let inBlockComment = false;
+    const out = lines.map((line) => {
+        const trimmed = line.trim();
+        if (inBlockComment) {
+            if (trimmed.includes('*/')) inBlockComment = false;
+            return line;
+        }
+        if (!trimmed) return line;
+        if (/^\/\*/.test(trimmed) && !trimmed.includes('*/')) { inBlockComment = true; return line; }
+        if (/^[/*;]/.test(trimmed)) return line; // single-line comment
+        if (/^\[.*\]$/.test(trimmed)) return line; // [Section] header
+        const aligned = alignMkLine(line, MK_DELIMITER_COLUMN);
+        return aligned !== null ? aligned : line;
+    });
+    return out.join(eol);
+}
+
+// fileType: 'mk' uses the fixed-column .mk-specific rule; anything else
+// (pfields.dat) keeps the dynamic per-block alignment.
+export function alignParameterLines(text, fileType) {
+    return fileType === 'mk' ? alignMkParameterLines(text) : alignPfieldsParameterLines(text);
 }
 
 // Levenshtein distance, capped — used only to flag near-identical key names

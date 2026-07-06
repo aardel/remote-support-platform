@@ -681,7 +681,7 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
     }, [rawText]);
 
     const runAlign = () => {
-        const aligned = alignParameterLines(rawText);
+        const aligned = alignParameterLines(rawText, selectedFile?.editor);
         setRawTextProgrammatic(aligned);
         pushTextHistory('Align Parameters', aligned);
     };
