@@ -14,6 +14,12 @@ function classifyLine(line) {
     if (/^[A-Za-z_][\w.]*\s*=/.test(trimmed)) return 'eq';
     if (/^[A-Za-z_][\w.]*\s*\|/.test(trimmed)) return 'pipe';
     if (/^[A-Za-z_][\w.]*(\s{2,}|\t)\S/.test(trimmed)) return 'ws';
+    // Continuation line: no key of its own, just an indented bare value
+    // immediately followed by a comma/semicolon. Real .mk files use this for
+    // multi-line parameter arrays — one keyed line (e.g. MK_TECHNOLOGIEDATEN1)
+    // followed by several value-only lines (P761, P762, ... continuing the
+    // same array) with nothing but whitespace before the number.
+    if (/^-?[\d.]+\s*[,;]/.test(trimmed)) return 'cont';
     return null;
 }
 
@@ -59,10 +65,18 @@ export function alignParameterLines(text) {
     while (i < lines.length) {
         const type = classifyLine(lines[i]);
         if (!type) { out.push(lines[i]); i++; continue; }
-        const block = [];
-        while (i < lines.length && classifyLine(lines[i]) === type) {
-            block.push(lines[i]);
-            i++;
+        const block = [lines[i]];
+        i++;
+        // 'cont' lines extend whatever block precedes them — a run of bare
+        // continuation values (P761, P762, ...) belongs to the same array as
+        // the keyed line above it (P760), not its own separate block, and not
+        // pipe blocks (which have no comparable bare-continuation style).
+        while (i < lines.length) {
+            const nextType = classifyLine(lines[i]);
+            if (nextType === type || (nextType === 'cont' && type !== 'pipe')) {
+                block.push(lines[i]);
+                i++;
+            } else break;
         }
         out.push(...alignBlock(block, type));
     }

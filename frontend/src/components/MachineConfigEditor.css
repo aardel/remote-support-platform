@@ -155,6 +155,13 @@
 .mce-history-step { cursor: pointer; }
 .mce-history-step:hover { background: #263548; }
 .mce-history-step.current { background: rgba(37, 99, 235, 0.15); color: #93c5fd; font-weight: 600; }
+.mce-textarea-wrap { flex: 1; display: flex; min-height: 0; }
+.mce-line-gutter {
+  flex-shrink: 0; margin: 0; padding: 14px 10px 14px 14px; text-align: right;
+  background: #0a0f1a; color: #475569; font-family: "SF Mono", Consolas, monospace;
+  font-size: 13px; line-height: 1.5; overflow: hidden; user-select: none;
+  border-right: 1px solid #1e293b;
+}
 .mce-textarea {
   flex: 1; border: none; resize: none; padding: 14px;
   background: #0b1220; color: #e2e8f0; font-family: "SF Mono", Consolas, monospace;

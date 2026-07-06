@@ -88,6 +88,7 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
     const pending = useRef(new Map());
     const iframeRef = useRef(null);
     const textareaRef = useRef(null);
+    const gutterRef = useRef(null);
     const fileContentRef = useRef(''); // original content of the currently-open file
     const backupIdRef = useRef(null);
     const lastBackedUpContentRef = useRef(null); // content captured by the most recent backup — skip taking an identical one again
@@ -576,6 +577,16 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
     // stale "issue" text can't linger after the technician has already fixed it.
     useEffect(() => { setFormatIssues(null); }, [rawText]);
 
+    const lineNumbers = useMemo(() => {
+        const count = rawText.split(/\r\n|\r|\n/).length;
+        return Array.from({ length: count }, (_, i) => i + 1).join('\n');
+    }, [rawText]);
+
+    // Keeps the line-number gutter's scroll position matched to the textarea.
+    const syncGutterScroll = (e) => {
+        if (gutterRef.current) gutterRef.current.scrollTop = e.target.scrollTop;
+    };
+
     // All (case-insensitive) match positions of the search query in the raw text.
     const searchMatches = useMemo(() => {
         if (!searchQuery) return [];
@@ -933,15 +944,19 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
                                         ))}
                                     </div>
                                 )}
-                                <textarea
-                                    ref={textareaRef}
-                                    className="mce-textarea"
-                                    value={rawText}
-                                    onChange={(e) => setRawText(e.target.value)}
-                                    onKeyDown={handleTextareaKeyDown}
-                                    spellCheck={false}
-                                    disabled={phase !== 'editing'}
-                                />
+                                <div className="mce-textarea-wrap">
+                                    <pre ref={gutterRef} className="mce-line-gutter">{lineNumbers}</pre>
+                                    <textarea
+                                        ref={textareaRef}
+                                        className="mce-textarea"
+                                        value={rawText}
+                                        onChange={(e) => setRawText(e.target.value)}
+                                        onKeyDown={handleTextareaKeyDown}
+                                        onScroll={syncGutterScroll}
+                                        spellCheck={false}
+                                        disabled={phase !== 'editing'}
+                                    />
+                                </div>
                             </div>
                         )}
 
