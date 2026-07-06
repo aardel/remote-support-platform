@@ -23,22 +23,31 @@ function classifyLine(line) {
     return null;
 }
 
-// Aligns a block of lines on their first comma or semicolon: the portion
-// before it is padded to a uniform width so the delimiters all land in the
-// same column, and everything after (typically a trailing comment) starts at
-// a consistent column too. Lines with no comma/semicolon are left untouched.
+// Aligns a block of lines on their first comma or semicolon: the value token
+// immediately before the delimiter is right-justified so it — and the
+// delimiter right after it — land in the same column on every line (padding
+// is inserted as extra leading whitespace before the value, not as a gap
+// between the value and the delimiter), and everything after the delimiter
+// (typically a trailing comment) starts at a consistent column too. Lines
+// with no comma/semicolon are left untouched.
 function alignByFirstDelimiter(lines) {
     const parsed = lines.map(l => {
         const m = l.match(/^(.*?)([,;])(.*)$/);
-        return m ? { before: m[1], delim: m[2], after: m[3] } : { before: l, delim: null, after: null };
+        if (!m) return { hasDelim: false, raw: l };
+        const before = m[1];
+        const valueMatch = before.match(/(\S+)\s*$/);
+        const valueToken = valueMatch ? valueMatch[1] : before.trim();
+        const prefix = valueMatch ? before.slice(0, before.length - valueMatch[0].length) : '';
+        return { hasDelim: true, prefix, valueToken, delim: m[2], after: m[3] };
     });
-    const withDelim = parsed.filter(p => p.delim !== null);
-    if (!withDelim.length) return lines;
-    const maxBeforeLen = Math.max(...withDelim.map(p => p.before.length));
+    const withDelim = parsed.filter(p => p.hasDelim);
+    if (!withDelim.length) return lines.map(l => l);
+    const maxLen = Math.max(...withDelim.map(p => p.prefix.length + p.valueToken.length));
     return parsed.map(p => {
-        if (p.delim === null) return p.before;
+        if (!p.hasDelim) return p.raw;
         const trimmedAfter = p.after.replace(/^\s+/, '');
-        const padded = p.before.padEnd(maxBeforeLen) + p.delim;
+        const gap = Math.max(maxLen - p.prefix.length - p.valueToken.length, 1);
+        const padded = p.prefix + ' '.repeat(gap) + p.valueToken + p.delim;
         return trimmedAfter ? `${padded}   ${trimmedAfter}` : padded;
     });
 }
@@ -67,13 +76,27 @@ export function alignParameterLines(text) {
         if (!type) { out.push(lines[i]); i++; continue; }
         const block = [lines[i]];
         i++;
+        let blankRun = 0;
         // 'cont' lines extend whatever block precedes them — a run of bare
         // continuation values (P761, P762, ...) belongs to the same array as
         // the keyed line above it (P760), not its own separate block, and not
-        // pipe blocks (which have no comparable bare-continuation style).
+        // pipe blocks (which have no comparable bare-continuation style). A
+        // single blank line also doesn't end the block — these files
+        // routinely put one blank line between every parameter as visual
+        // spacing, even between otherwise-unrelated single-line parameters,
+        // so treating every blank line as a hard break would mean almost
+        // nothing outside a multi-line array ever gets grouped with its
+        // neighbors. Two blank lines in a row is treated as a real section
+        // break, same as a comment or header line.
         while (i < lines.length) {
             const nextType = classifyLine(lines[i]);
             if (nextType === type || (nextType === 'cont' && type !== 'pipe')) {
+                block.push(lines[i]);
+                blankRun = 0;
+                i++;
+            } else if (!lines[i].trim()) {
+                blankRun++;
+                if (blankRun > 1) break;
                 block.push(lines[i]);
                 i++;
             } else break;
