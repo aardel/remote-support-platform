@@ -210,3 +210,33 @@ export function compareConfigs(textA, textB) {
     }
     return rows.sort((a, b) => a.key.localeCompare(b.key));
 }
+
+// Appends new lines under a `; <header>` trailer at the end of a file,
+// preserving any prior entries already there (so repeated saves accumulate a
+// running log instead of overwriting it) and adding the header only once.
+function appendTrailer(content, header, newLines) {
+    const marker = `; ${header}`;
+    let priorLines = [];
+    let base = content;
+    const idx = content.indexOf(marker);
+    if (idx !== -1) {
+        priorLines = content.slice(idx).split(/\r\n|\r|\n/).slice(1).filter(l => l.trim());
+        base = content.slice(0, idx);
+    }
+    const trimmedBase = base.replace(/[\r\n]+$/, '');
+    const block = [marker, ...priorLines, ...newLines].join('\r\n');
+    return `${trimmedBase}\r\n\r\n${block}\r\n`;
+}
+
+// Appends a "Parameter Change History" trailer to the LIVE file being edited —
+// the exact same header and entry format (`; [timestamp] KEY old -> new`) the
+// built-in editors already use via their own "Append changes as comments"
+// checkbox, applied centrally here instead so it happens consistently
+// regardless of which editing mode was used (structured, plain text, or a
+// restore — none of which otherwise share a single save path).
+export function appendParameterChangeHistory(content, changes) {
+    if (!changes || !changes.length) return content;
+    const timestamp = new Date().toISOString();
+    const newLines = changes.map(c => `; [${timestamp}] ${c.key || `line ${c.line}`} ${c.oldValue || '(empty)'} -> ${c.newValue || '(empty)'}`);
+    return appendTrailer(content, 'Parameter Change History', newLines);
+}

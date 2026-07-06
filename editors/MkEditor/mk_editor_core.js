@@ -1582,7 +1582,11 @@
   // lock exists to stop end users from fat-fingering settings, but technicians
   // here are already authenticated by the platform itself, so it's just an
   // extra click. Also hides the local "Open .mk File" / "Load Sample" controls,
-  // which don't apply when content is fed in via loadContent() instead.
+  // which don't apply when content is fed in via loadContent() instead. And
+  // unchecks "Append changes as comments" — the embedding parent appends its
+  // own Parameter Change History centrally (covers plain-text-mode saves and
+  // restores too, neither of which go through this editor's own saveFile()),
+  // so leaving this on here would double the history entries.
   function enableEmbeddedMode() {
     isLocked = false;
     applyLockState();
@@ -1592,6 +1596,8 @@
     if (openWrap) openWrap.style.display = 'none';
     const sampleBtn = document.getElementById('load-sample-btn');
     if (sampleBtn) sampleBtn.style.display = 'none';
+    const appendHistory = document.getElementById('append-history');
+    if (appendHistory) appendHistory.checked = false;
   }
 
   function setupDragDrop() {

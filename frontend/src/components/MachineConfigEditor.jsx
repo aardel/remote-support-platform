@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import axios from '../api/axios';
 import { matchInstallFolder, looksLikeBackupFile, PFIELDS_FILENAME } from '../data/machineFolderMap';
-import { alignParameterLines, formatCheck, compareConfigs } from '../utils/configTextTools';
+import { alignParameterLines, formatCheck, compareConfigs, appendParameterChangeHistory } from '../utils/configTextTools';
 import './MachineConfigEditor.css';
 
 const CHUNK_SIZE = 128 * 1024;
@@ -428,24 +428,32 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
                 setBackupInfo(backup);
             }
 
+            // Append a "Parameter Change History" comment trailer to the LIVE file
+            // itself — same header/format the built-in editors already use via
+            // their own checkbox (now disabled for embedded use, see
+            // enableEmbeddedMode), applied centrally here so it happens
+            // consistently whether the edit came from the structured editor,
+            // plain-text mode, or a restore — none of which otherwise share it.
+            const contentToWrite = appendParameterChangeHistory(pendingSave.newContent, diff?.changes);
+
             setProgressMsg('Writing to the machine...');
-            await writeFileFull(selectedFile.path, pendingSave.newContent);
+            await writeFileFull(selectedFile.path, contentToWrite);
             setProgressMsg('Recording change history...');
             await axios.post('/api/machine-config/log-change', {
                 sessionId, deviceId, filePath: selectedFile.path,
-                oldContent: pendingSave.oldContent, newContent: pendingSave.newContent,
+                oldContent: pendingSave.oldContent, newContent: contentToWrite,
                 backupId: preSaveBackupId
             });
-            fileContentRef.current = pendingSave.newContent;
+            fileContentRef.current = contentToWrite;
             // Keep whatever's currently displayed in sync with what's now actually
             // on the machine — matters for restore, where newContent is an old
             // backup, not what the technician was just looking at.
             if (viewMode === 'text') {
-                setRawText(pendingSave.newContent);
+                setRawText(contentToWrite);
             } else {
                 const win = iframeRef.current?.contentWindow;
                 const api = selectedFile.editor === 'mk' ? win?.MkEditor : win?.PfieldEditor;
-                api?.loadContent(pendingSave.newContent, selectedFile.name);
+                api?.loadContent(contentToWrite, selectedFile.name);
             }
             setPendingSave(null);
             setDiff(null);
