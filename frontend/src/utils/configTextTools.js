@@ -46,7 +46,7 @@ function alignByFirstDelimiter(lines) {
     return parsed.map(p => {
         if (!p.hasDelim) return p.raw;
         const trimmedAfter = p.after.replace(/^\s+/, '');
-        const gap = Math.max(maxLen - p.prefix.length - p.valueToken.length, 1);
+        const gap = Math.max(maxLen - p.prefix.length - p.valueToken.length, 0);
         const padded = p.prefix + ' '.repeat(gap) + p.valueToken + p.delim;
         return trimmedAfter ? `${padded}   ${trimmedAfter}` : padded;
     });
@@ -116,7 +116,7 @@ function alignMkLine(line, delimiterColumn) {
     if (!valueMatch) return null;
     const valueToken = valueMatch[1];
     const prefix = before.slice(0, before.length - valueMatch[0].length);
-    const gap = Math.max(delimiterColumn - prefix.length - valueToken.length, 1);
+    const gap = Math.max(delimiterColumn - prefix.length - valueToken.length, 0);
     const trimmedAfter = after.replace(/^\s+/, '');
     const padded = prefix + ' '.repeat(gap) + valueToken + delim;
     return trimmedAfter ? `${padded}    ${trimmedAfter}` : padded;
