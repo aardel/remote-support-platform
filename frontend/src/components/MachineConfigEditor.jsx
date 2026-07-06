@@ -88,6 +88,7 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
     const textareaRef = useRef(null);
     const fileContentRef = useRef(''); // original content of the currently-open file
     const backupIdRef = useRef(null);
+    const lastBackedUpContentRef = useRef(null); // content captured by the most recent backup — skip taking an identical one again
 
     const sendRequest = useCallback((msg) => {
         if (!channel || channel.readyState !== 'open') return Promise.reject(new Error('Connection lost'));
@@ -244,6 +245,7 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
         } catch (e) {
             setBackupWarning(`Could not write the on-machine backup file (${e.message}) — a server-side backup was still taken, but nothing will be visible if the machine's files are opened outside this tool.`);
         }
+        lastBackedUpContentRef.current = content;
         const backupResp = await axios.post('/api/machine-config/backup', {
             sessionId, deviceId, filePath, content, reason, onMachinePath
         });
@@ -412,14 +414,19 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
         setPhase('saving');
         setError(null);
         try {
-            // A fresh backup of the state right before THIS write — the one taken
-            // at file-open only covers the very first edit; if the technician has
-            // already saved once this session, that snapshot no longer reflects
-            // what's about to be overwritten.
-            setProgressMsg('Creating safety backup...');
-            const backup = await createSafetyBackup(selectedFile.path, pendingSave.oldContent, 'pre-save', diff?.changes);
-            const preSaveBackupId = backup?.id || null;
-            setBackupInfo(backup);
+            // A fresh backup of the state right before THIS write — matters once the
+            // technician has saved before, since the file-open snapshot no longer
+            // reflects what's about to be overwritten. Skipped when it would be a
+            // second, byte-identical backup of the state already captured at open
+            // time — which is exactly what happens on the very first save (nothing
+            // changed between opening the file and starting this edit).
+            let preSaveBackupId = backupIdRef.current;
+            if (pendingSave.oldContent !== lastBackedUpContentRef.current) {
+                setProgressMsg('Creating safety backup...');
+                const backup = await createSafetyBackup(selectedFile.path, pendingSave.oldContent, 'pre-save', diff?.changes);
+                preSaveBackupId = backup?.id || preSaveBackupId;
+                setBackupInfo(backup);
+            }
 
             setProgressMsg('Writing to the machine...');
             await writeFileFull(selectedFile.path, pendingSave.newContent);
@@ -427,7 +434,7 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
             await axios.post('/api/machine-config/log-change', {
                 sessionId, deviceId, filePath: selectedFile.path,
                 oldContent: pendingSave.oldContent, newContent: pendingSave.newContent,
-                backupId: preSaveBackupId || backupIdRef.current
+                backupId: preSaveBackupId
             });
             fileContentRef.current = pendingSave.newContent;
             // Keep whatever's currently displayed in sync with what's now actually
