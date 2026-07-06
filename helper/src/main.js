@@ -129,6 +129,14 @@ function injectKeyboard(data) {
     const keyLower = (data.key || '').toLowerCase();
     if (['control', 'shift', 'alt', 'meta'].includes(keyLower)) return;
 
+    // Meta/Windows + arrow key is an OS-level window-snap shortcut (Aero Snap on
+    // Windows: Left/Right -> half-screen, Up -> maximize, Down -> minimize/
+    // restore) rather than application input — now that keyboard forwarding
+    // actually reaches the remote machine, sending this verbatim resizes
+    // whatever window has focus there. Almost never what a technician means to
+    // trigger during a support session, so it's dropped rather than forwarded.
+    if (data.metaKey && ['arrowleft', 'arrowright', 'arrowup', 'arrowdown'].includes(keyLower)) return;
+
     const mods = [];
     if (data.ctrlKey) mods.push('control');
     if (data.shiftKey) mods.push('shift');
