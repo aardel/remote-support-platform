@@ -89,6 +89,7 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
     const fileContentRef = useRef(''); // original content of the currently-open file
     const backupIdRef = useRef(null);
     const lastBackedUpContentRef = useRef(null); // content captured by the most recent backup — skip taking an identical one again
+    const openedFileIsBackupRef = useRef(false); // true when the currently open file is itself a backup — skip auto-backup entirely to avoid backup-of-a-backup
 
     const sendRequest = useCallback((msg) => {
         if (!channel || channel.readyState !== 'open') return Promise.reject(new Error('Connection lost'));
@@ -198,13 +199,11 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
             const pfields = items.find(i => !i.isDirectory && i.name.toLowerCase() === PFIELDS_FILENAME);
             if (pfields) found.push({ path: pfields.path, name: pfields.name, editor: 'pfields', backupLike: false });
 
-            if (found.length === 0) {
-                setBrowsePath(cfgPath);
-                setBrowseItems(items);
-                setPhase('picking');
-                return;
-            }
-
+            // Always populate the manual-browse section with this same cfg\ folder
+            // too — even when candidates were found, the "browse manually" hint
+            // below them needs something to actually show.
+            setBrowsePath(cfgPath);
+            setBrowseItems(items);
             setCandidates(found);
             setPhase('picking');
         } catch (e) {
@@ -302,6 +301,75 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
         );
     };
 
+    /* ---------- Remote file management: copy / rename / delete ---------- */
+    // Re-runs whatever listing is currently on screen so it reflects a change
+    // immediately, without the technician having to manually refresh.
+    const refreshPickerListing = () => {
+        if (candidates.length > 0) autoDetect();
+        else navigateTo(browsePath);
+    };
+
+    const splitDirName = (fullPath) => {
+        const sep = fullPath.includes('/') ? '/' : '\\';
+        const idx = fullPath.lastIndexOf(sep);
+        return { dir: idx === -1 ? '' : fullPath.slice(0, idx), sep, name: idx === -1 ? fullPath : fullPath.slice(idx + 1) };
+    };
+
+    const copyFile = async (item) => {
+        const { dir, sep, name } = splitDirName(item.path);
+        const dotIdx = name.lastIndexOf('.');
+        const base = dotIdx === -1 ? name : name.slice(0, dotIdx);
+        const ext = dotIdx === -1 ? '' : name.slice(dotIdx);
+        const suggested = `${base}_copy${ext}`;
+        const newName = window.prompt(`Copy "${name}" as:`, suggested);
+        if (!newName || newName === name) return;
+        try {
+            const content = await readFileFull(item.path);
+            await writeFileFull(`${dir}${sep}${newName}`, content);
+            setProgressMsg(`Copied to ${newName}.`);
+            setTimeout(() => setProgressMsg(''), 3000);
+            refreshPickerListing();
+        } catch (e) {
+            setError(`Copy failed: ${e.message}`);
+        }
+    };
+
+    const renameFile = async (item) => {
+        const { dir, sep, name } = splitDirName(item.path);
+        const isLiveConfig = !looksLikeBackupFile(name);
+        const warn = isLiveConfig
+            ? `"${name}" looks like a live machine config file, not a backup. If the machine's software expects this exact filename, renaming it may stop it from finding its configuration.\n\n`
+            : '';
+        const newName = window.prompt(`${warn}Rename "${name}" to:`, name);
+        if (!newName || newName === name) return;
+        try {
+            const resp = await sendRequest({ action: 'rename', path: item.path, newPath: `${dir}${sep}${newName}` });
+            if (resp.error) throw new Error(resp.error);
+            setProgressMsg(`Renamed to ${newName}.`);
+            setTimeout(() => setProgressMsg(''), 3000);
+            refreshPickerListing();
+        } catch (e) {
+            setError(`Rename failed: ${e.message}`);
+        }
+    };
+
+    const deleteFile = async (item) => {
+        const isLiveConfig = !looksLikeBackupFile(item.name);
+        const warn = isLiveConfig
+            ? `"${item.name}" looks like a live machine config file, not a backup. Deleting it may prevent the machine's software from starting correctly.\n\n`
+            : '';
+        if (!window.confirm(`${warn}Delete "${item.name}"? This cannot be undone.`)) return;
+        try {
+            const resp = await sendRequest({ action: 'delete', path: item.path });
+            if (resp.error) throw new Error(resp.error);
+            setProgressMsg(`Deleted ${item.name}.`);
+            setTimeout(() => setProgressMsg(''), 3000);
+            refreshPickerListing();
+        } catch (e) {
+            setError(`Delete failed: ${e.message}`);
+        }
+    };
+
     /* ---------- Open + safety backup + embed editor (or plain text) ---------- */
     const openFile = async (file, mode = 'structured') => {
         setSelectedFile(file);
@@ -318,9 +386,20 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
             const content = await readFileFull(file.path);
             fileContentRef.current = content;
             if (mode === 'text') setRawText(content);
-            const backup = await createSafetyBackup(file.path, content, 'pre-edit');
-            backupIdRef.current = backup?.id || null;
-            setBackupInfo(backup);
+            // A file that's itself a backup doesn't get auto-backed-up again —
+            // otherwise opening ptsneo_backup.mk creates ptsneo_backup_backup.mk,
+            // and opening that creates another layer, and so on.
+            openedFileIsBackupRef.current = looksLikeBackupFile(file.name);
+            if (openedFileIsBackupRef.current) {
+                backupIdRef.current = null;
+                lastBackedUpContentRef.current = null;
+                setBackupInfo(null);
+                setBackupWarning('This file looks like a backup itself — automatic backups are skipped here to avoid creating a backup of a backup.');
+            } else {
+                const backup = await createSafetyBackup(file.path, content, 'pre-edit');
+                backupIdRef.current = backup?.id || null;
+                setBackupInfo(backup);
+            }
             setPhase('editing');
         } catch (e) {
             setError(e.message);
@@ -421,7 +500,7 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
             // time — which is exactly what happens on the very first save (nothing
             // changed between opening the file and starting this edit).
             let preSaveBackupId = backupIdRef.current;
-            if (pendingSave.oldContent !== lastBackedUpContentRef.current) {
+            if (!openedFileIsBackupRef.current && pendingSave.oldContent !== lastBackedUpContentRef.current) {
                 setProgressMsg('Creating safety backup...');
                 const backup = await createSafetyBackup(selectedFile.path, pendingSave.oldContent, 'pre-save', diff?.changes);
                 preSaveBackupId = backup?.id || preSaveBackupId;
@@ -597,6 +676,9 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
                                         <div className="mce-cand-actions">
                                             <button className="mce-btn primary" onClick={() => openFile(c, 'structured')}>Open in Editor</button>
                                             <button className="mce-btn" onClick={() => openFile(c, 'text')}>Open as Text</button>
+                                            <button className="mce-btn" onClick={() => copyFile(c)} title="Copy">Copy</button>
+                                            <button className="mce-btn" onClick={() => renameFile(c)} title="Rename">Rename</button>
+                                            <button className="mce-btn danger" onClick={() => deleteFile(c)} title="Delete">Delete</button>
                                         </div>
                                     </div>
                                 ))}
@@ -633,6 +715,9 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
                                         <div className="mce-cand-actions">
                                             <button className="mce-btn primary" onClick={() => pickFile(item, 'structured')}>Open in Editor</button>
                                             <button className="mce-btn" onClick={() => pickFile(item, 'text')}>Open as Text</button>
+                                            <button className="mce-btn" onClick={() => copyFile(item)} title="Copy">Copy</button>
+                                            <button className="mce-btn" onClick={() => renameFile(item)} title="Rename">Rename</button>
+                                            <button className="mce-btn danger" onClick={() => deleteFile(item)} title="Delete">Delete</button>
                                         </div>
                                     </div>
                                 )
