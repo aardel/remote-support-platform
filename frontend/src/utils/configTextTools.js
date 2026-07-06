@@ -115,7 +115,14 @@ function alignMkLine(line, delimiterColumn) {
     const valueMatch = before.match(/(\S+)\s*$/);
     if (!valueMatch) return null;
     const valueToken = valueMatch[1];
-    const prefix = before.slice(0, before.length - valueMatch[0].length);
+    const beforeValue = before.slice(0, before.length - valueMatch[0].length);
+    // Normalize the prefix down to just the key identifier, if any (e.g.
+    // "MK_X_WINKEL") — discard whatever whitespace was actually there,
+    // whether too little or (as when someone manually pads a line for
+    // testing) too much. Padding can only ever be recomputed from a clean
+    // slate; you can't "fix" excess whitespace by adding more of it.
+    const keyMatch = beforeValue.match(/[A-Za-z_][\w.]*/);
+    const prefix = keyMatch ? keyMatch[0] : '';
     const gap = Math.max(delimiterColumn - prefix.length - valueToken.length, 0);
     const trimmedAfter = after.replace(/^\s+/, '');
     const padded = prefix + ' '.repeat(gap) + valueToken + delim;
