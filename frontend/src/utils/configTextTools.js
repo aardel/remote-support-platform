@@ -17,15 +17,27 @@ function classifyLine(line) {
     return null;
 }
 
+// Aligns a block of lines on their first comma or semicolon: the portion
+// before it is padded to a uniform width so the delimiters all land in the
+// same column, and everything after (typically a trailing comment) starts at
+// a consistent column too. Lines with no comma/semicolon are left untouched.
+function alignByFirstDelimiter(lines) {
+    const parsed = lines.map(l => {
+        const m = l.match(/^(.*?)([,;])(.*)$/);
+        return m ? { before: m[1], delim: m[2], after: m[3] } : { before: l, delim: null, after: null };
+    });
+    const withDelim = parsed.filter(p => p.delim !== null);
+    if (!withDelim.length) return lines;
+    const maxBeforeLen = Math.max(...withDelim.map(p => p.before.length));
+    return parsed.map(p => {
+        if (p.delim === null) return p.before;
+        const trimmedAfter = p.after.replace(/^\s+/, '');
+        const padded = p.before.padEnd(maxBeforeLen) + p.delim;
+        return trimmedAfter ? `${padded}   ${trimmedAfter}` : padded;
+    });
+}
+
 function alignBlock(lines, type) {
-    if (type === 'eq') {
-        const parsed = lines.map(l => {
-            const idx = l.indexOf('=');
-            return { indent: l.match(/^\s*/)[0], key: l.slice(0, idx).trim(), rest: l.slice(idx + 1) };
-        });
-        const maxKey = Math.max(...parsed.map(p => p.key.length));
-        return parsed.map(p => `${p.indent}${p.key.padEnd(maxKey)} =${p.rest}`);
-    }
     if (type === 'pipe') {
         const rows = lines.map(l => ({ indent: l.match(/^\s*/)[0], cols: l.trim().split('|') }));
         const colCount = Math.max(...rows.map(r => r.cols.length));
@@ -33,15 +45,10 @@ function alignBlock(lines, type) {
         rows.forEach(r => r.cols.forEach((c, i) => { widths[i] = Math.max(widths[i], c.trim().length); }));
         return rows.map(r => r.indent + r.cols.map((c, i) => c.trim().padEnd(i < colCount - 1 ? widths[i] : 0)).join(' | ').replace(/\s+$/, ''));
     }
-    if (type === 'ws') {
-        const parsed = lines.map(l => {
-            const m = l.match(/^(\s*)(\S+)(\s{2,}|\t)(.*)$/);
-            return m ? { indent: m[1], key: m[2], rest: m[4] } : { indent: '', key: l.trim(), rest: '' };
-        });
-        const maxKey = Math.max(...parsed.map(p => p.key.length));
-        return parsed.map(p => `${p.indent}${p.key.padEnd(maxKey)}    ${p.rest}`.replace(/\s+$/, m => m.includes('\r') ? m : ''));
-    }
-    return lines;
+    // 'eq' and 'ws' both align the same way: find the first comma/semicolon on
+    // each line and line those up, regardless of how the key/value portion
+    // before it was originally formatted.
+    return alignByFirstDelimiter(lines);
 }
 
 export function alignParameterLines(text) {
@@ -162,6 +169,15 @@ export function formatCheck(text) {
 // comparison, where two files' parameters need to line up by key rather than
 // by line number (they may be in a different order, or come from entirely
 // different machines).
+// Strips ALL whitespace — makes comparison immune to purely cosmetic
+// reformatting (e.g. Align Parameters padding before a semicolon/comma so
+// delimiters line up: "1;" vs "1   ;" must compare equal). Safe for this
+// format since values are numeric/short tokens, not free text where
+// whitespace could be meaningful.
+function normalizeValue(v) {
+    return String(v || '').replace(/\s+/g, '');
+}
+
 function parseKeyValueMap(text) {
     const map = new Map();
     text.split(/\r\n|\r|\n/).forEach(line => {
@@ -172,17 +188,17 @@ function parseKeyValueMap(text) {
         if (type === 'eq') {
             const idx = trimmed.indexOf('=');
             key = trimmed.slice(0, idx).trim();
-            value = trimmed.slice(idx + 1).trim();
+            value = trimmed.slice(idx + 1);
         } else if (type === 'pipe') {
             const idx = trimmed.indexOf('|');
             key = trimmed.slice(0, idx).trim();
-            value = trimmed.slice(idx + 1).trim();
+            value = trimmed.slice(idx + 1);
         } else {
             const m = trimmed.match(/^(\S+)(\s{2,}|\t)(.*)$/);
             key = m ? m[1] : trimmed;
-            value = m ? m[3].trim() : '';
+            value = m ? m[3] : '';
         }
-        if (key) map.set(key, value);
+        if (key) map.set(key, normalizeValue(value));
     });
     return map;
 }

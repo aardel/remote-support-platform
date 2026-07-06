@@ -11,26 +11,77 @@ function tooLarge(content) {
     return typeof content !== 'string' || content.length > MAX_CONTENT_SIZE;
 }
 
-// Line-level diff: identifies changed lines and, where the line looks like
-// KEY=value / KEY value / KEY|value, extracts the key so the audit trail and
-// the pre-save confirmation can show "KEY: old -> new" instead of raw lines.
+// Same line classification the frontend's Align Parameters / Format Check use
+// (configTextTools.js) — kept in sync manually since this runs in a separate
+// (CommonJS) module. Only lines that look like KEY=value / KEY|value /
+// KEY<ws>value are treated as parameters; everything else (comments, section
+// headers, blank lines) is ignored for diffing purposes.
+function classifyLine(line) {
+    const trimmed = line.trim();
+    if (!trimmed) return null;
+    if (/^[/*]/.test(trimmed)) return null;
+    if (/^;/.test(trimmed)) return null;
+    if (/^\[.*\]$/.test(trimmed)) return null;
+    if (/^[A-Za-z_][\w.]*\s*=/.test(trimmed)) return 'eq';
+    if (/^[A-Za-z_][\w.]*\s*\|/.test(trimmed)) return 'pipe';
+    if (/^[A-Za-z_][\w.]*(\s{2,}|\t)\S/.test(trimmed)) return 'ws';
+    return null;
+}
+
+// Strips ALL whitespace — makes the value comparison immune to purely
+// cosmetic reformatting (e.g. Align Parameters padding before a semicolon/
+// comma so delimiters line up: "1;" vs "1   ;" must compare equal). Safe for
+// this format since values are numeric/short tokens, not free text where
+// whitespace could be meaningful.
+function normalizeValue(v) {
+    return String(v || '').replace(/\s+/g, '');
+}
+
+function parseKeyValueMap(text) {
+    const map = new Map();
+    String(text || '').split(/\r\n|\r|\n/).forEach((line) => {
+        const type = classifyLine(line);
+        if (!type) return;
+        const trimmed = line.trim();
+        let key, value;
+        if (type === 'eq') {
+            const idx = trimmed.indexOf('=');
+            key = trimmed.slice(0, idx).trim();
+            value = trimmed.slice(idx + 1);
+        } else if (type === 'pipe') {
+            const idx = trimmed.indexOf('|');
+            key = trimmed.slice(0, idx).trim();
+            value = trimmed.slice(idx + 1);
+        } else {
+            const m = trimmed.match(/^(\S+)(\s{2,}|\t)(.*)$/);
+            key = m ? m[1] : trimmed;
+            value = m ? m[3] : '';
+        }
+        if (key) map.set(key, normalizeValue(value));
+    });
+    return map;
+}
+
+// Semantic (key/value) diff rather than raw line-by-line comparison — a pure
+// whitespace realignment (Align Parameters, or any reformatting that doesn't
+// touch an actual value) must NOT show up as a change here, since this feeds
+// both the pre-save confirmation dialog and the permanent audit log. Only
+// keys whose actual value differs (or that were added/removed) are reported.
 function diffContent(oldText, newText) {
-    const oldLines = String(oldText || '').split(/\r\n|\r|\n/);
-    const newLines = String(newText || '').split(/\r\n|\r|\n/);
-    const max = Math.max(oldLines.length, newLines.length);
+    const oldMap = parseKeyValueMap(oldText);
+    const newMap = parseKeyValueMap(newText);
+    const allKeys = new Set([...oldMap.keys(), ...newMap.keys()]);
     const changes = [];
-    for (let i = 0; i < max; i++) {
-        const a = oldLines[i] ?? '';
-        const b = newLines[i] ?? '';
-        if (a === b) continue;
-        const keyOf = (line) => {
-            const m = line.trim().match(/^([A-Za-z_][A-Za-z0-9_.]*)\s*[=|\t]/);
-            return m ? m[1] : null;
-        };
-        changes.push({ line: i + 1, key: keyOf(a) || keyOf(b), oldValue: a.trim(), newValue: b.trim() });
+    for (const key of allKeys) {
+        const hasOld = oldMap.has(key);
+        const hasNew = newMap.has(key);
+        const oldValue = oldMap.get(key);
+        const newValue = newMap.get(key);
+        if (hasOld && hasNew && oldValue === newValue) continue; // identical — not a change
+        changes.push({ key, oldValue: hasOld ? oldValue : null, newValue: hasNew ? newValue : null });
         if (changes.length >= 200) break; // cap — this is a summary, not a full diff viewer
     }
-    return changes;
+    return changes.sort((a, b) => a.key.localeCompare(b.key));
 }
 
 const VALID_BACKUP_REASONS = ['pre-edit', 'pre-save', 'post-edit'];

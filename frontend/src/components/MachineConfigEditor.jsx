@@ -68,6 +68,8 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
     const [searchQuery, setSearchQuery] = useState('');
     const [matchIdx, setMatchIdx] = useState(0);
     const [formatIssues, setFormatIssues] = useState(null); // null = not run, [] = clean, [...] = issues found
+    const [historyVersion, setHistoryVersion] = useState(0); // bumped to force a re-render whenever textHistoryRef changes
+    const [showTextHistory, setShowTextHistory] = useState(false);
     const [pendingSave, setPendingSave] = useState(null); // { newContent, filename, oldContent }
     const [diff, setDiff] = useState(null);
     const [progressMsg, setProgressMsg] = useState('');
@@ -90,6 +92,8 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
     const backupIdRef = useRef(null);
     const lastBackedUpContentRef = useRef(null); // content captured by the most recent backup — skip taking an identical one again
     const openedFileIsBackupRef = useRef(false); // true when the currently open file is itself a backup — skip auto-backup entirely to avoid backup-of-a-backup
+    const textHistoryRef = useRef({ list: [], index: -1 }); // undo/redo stack for text mode: { list: [{label, content, ts}], index }
+    const skipNextHistorySnapshotRef = useRef(false); // set before a programmatic setRawText (align/undo/redo/jump) so the debounced typing-snapshot doesn't also fire for it
 
     const sendRequest = useCallback((msg) => {
         if (!channel || channel.readyState !== 'open') return Promise.reject(new Error('Connection lost'));
@@ -382,10 +386,11 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
         setBackupWarning(null);
         setShowHistory(false);
         setBackupHistory([]);
+        setShowTextHistory(false);
         try {
             const content = await readFileFull(file.path);
             fileContentRef.current = content;
-            if (mode === 'text') setRawText(content);
+            if (mode === 'text') { setRawText(content); resetTextHistory(content); }
             // A file that's itself a backup doesn't get auto-backed-up again —
             // otherwise opening ptsneo_backup.mk creates ptsneo_backup_backup.mk,
             // and opening that creates another layer, and so on.
@@ -528,7 +533,8 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
             // on the machine — matters for restore, where newContent is an old
             // backup, not what the technician was just looking at.
             if (viewMode === 'text') {
-                setRawText(contentToWrite);
+                setRawTextProgrammatic(contentToWrite);
+                pushTextHistory('Saved', contentToWrite);
             } else {
                 const win = iframeRef.current?.contentWindow;
                 const api = selectedFile.editor === 'mk' ? win?.MkEditor : win?.PfieldEditor;
@@ -607,7 +613,67 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
     const findNext = () => jumpToMatch(matchIdx + 1);
     const findPrev = () => jumpToMatch(matchIdx - 1);
 
-    const runAlign = () => setRawText(prev => alignParameterLines(prev));
+    /* ---------- Undo/redo history for text mode (manual edits, Align Parameters, etc.) ---------- */
+    const resetTextHistory = (content) => {
+        textHistoryRef.current = { list: [{ label: 'Opened', content, ts: Date.now() }], index: 0 };
+        setHistoryVersion(v => v + 1);
+    };
+
+    const pushTextHistory = (label, content) => {
+        const h = textHistoryRef.current;
+        if (h.list[h.index]?.content === content) return; // no real change — nothing to record
+        const truncated = h.list.slice(0, h.index + 1); // drop any redo-able future once a new branch is taken
+        textHistoryRef.current = { list: [...truncated, { label, content, ts: Date.now() }], index: h.index + 1 };
+        setHistoryVersion(v => v + 1);
+    };
+
+    const setRawTextProgrammatic = (content) => {
+        skipNextHistorySnapshotRef.current = true;
+        setRawText(content);
+    };
+
+    const undoText = () => {
+        const h = textHistoryRef.current;
+        if (h.index <= 0) return;
+        textHistoryRef.current = { ...h, index: h.index - 1 };
+        setRawTextProgrammatic(h.list[h.index - 1].content);
+        setHistoryVersion(v => v + 1);
+    };
+
+    const redoText = () => {
+        const h = textHistoryRef.current;
+        if (h.index >= h.list.length - 1) return;
+        textHistoryRef.current = { ...h, index: h.index + 1 };
+        setRawTextProgrammatic(h.list[h.index + 1].content);
+        setHistoryVersion(v => v + 1);
+    };
+
+    const jumpToTextHistory = (idx) => {
+        const h = textHistoryRef.current;
+        if (idx < 0 || idx >= h.list.length) return;
+        textHistoryRef.current = { ...h, index: idx };
+        setRawTextProgrammatic(h.list[idx].content);
+        setHistoryVersion(v => v + 1);
+        setShowTextHistory(false);
+    };
+
+    // Manual typing gets a debounced snapshot (once the technician pauses) so
+    // every keystroke doesn't create its own history entry. Programmatic
+    // changes (align, undo/redo, jump) skip this — they record their own
+    // labeled entry explicitly instead.
+    useEffect(() => {
+        if (viewMode !== 'text' || phase !== 'editing') return;
+        if (skipNextHistorySnapshotRef.current) { skipNextHistorySnapshotRef.current = false; return; }
+        const t = setTimeout(() => pushTextHistory('Manual edit', rawText), 1500);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [rawText]);
+
+    const runAlign = () => {
+        const aligned = alignParameterLines(rawText);
+        setRawTextProgrammatic(aligned);
+        pushTextHistory('Align Parameters', aligned);
+    };
     const runFormatCheck = () => setFormatIssues(formatCheck(rawText));
 
     const saveTextEdits = () => {
@@ -827,11 +893,32 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
                                         <button className="mce-btn" onClick={findNext} disabled={!searchMatches.length} title="Next match">↓</button>
                                     </div>
                                     <div className="mce-toolbar-actions">
+                                        <button className="mce-btn" onClick={undoText} disabled={phase !== 'editing' || textHistoryRef.current.index <= 0} title="Undo">↶ Undo</button>
+                                        <button className="mce-btn" onClick={redoText} disabled={phase !== 'editing' || textHistoryRef.current.index >= textHistoryRef.current.list.length - 1} title="Redo">↷ Redo</button>
+                                        <button className="mce-btn" onClick={() => setShowTextHistory(s => !s)} title="View change history">History</button>
                                         <button className="mce-btn" onClick={runAlign} disabled={phase !== 'editing'} title="Line up parameter columns neatly">Align Parameters</button>
                                         <button className="mce-btn" onClick={runFormatCheck} disabled={phase !== 'editing'} title="Scan for duplicate keys, typos, and malformed lines">Format Check</button>
                                         <button className="mce-btn primary" onClick={saveTextEdits} disabled={phase !== 'editing'}>Save</button>
                                     </div>
                                 </div>
+                                {showTextHistory && (
+                                    <div className="mce-format-panel">
+                                        <div className="mce-format-header">
+                                            <span>Edit history (click a step to jump to it)</span>
+                                            <button className="mce-close-btn" onClick={() => setShowTextHistory(false)}>✕</button>
+                                        </div>
+                                        {textHistoryRef.current.list.map((h, i) => (
+                                            <div
+                                                key={i}
+                                                className={`mce-format-issue mce-history-step ${i === textHistoryRef.current.index ? 'current' : ''}`}
+                                                onClick={() => jumpToTextHistory(i)}
+                                            >
+                                                <span className="mce-format-line">{i === textHistoryRef.current.index ? '● ' : ''}{new Date(h.ts).toLocaleTimeString()}</span>
+                                                <span>{h.label}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                                 {formatIssues !== null && (
                                     <div className="mce-format-panel">
                                         <div className="mce-format-header">

@@ -152,6 +152,9 @@
 .mce-format-issue.error { background: rgba(220, 38, 38, 0.08); }
 .mce-format-issue.warning { background: rgba(217, 119, 6, 0.08); }
 .mce-format-line { color: #64748b; min-width: 40px; font-family: "SF Mono", monospace; }
+.mce-history-step { cursor: pointer; }
+.mce-history-step:hover { background: #263548; }
+.mce-history-step.current { background: rgba(37, 99, 235, 0.15); color: #93c5fd; font-weight: 600; }
 .mce-textarea {
   flex: 1; border: none; resize: none; padding: 14px;
   background: #0b1220; color: #e2e8f0; font-family: "SF Mono", Consolas, monospace;
