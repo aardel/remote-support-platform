@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import axios from '../api/axios';
 import { matchInstallFolder, looksLikeBackupFile, PFIELDS_FILENAME } from '../data/machineFolderMap';
-import { alignParameterLines, formatCheck } from '../utils/configTextTools';
+import { alignParameterLines, formatCheck, compareConfigs } from '../utils/configTextTools';
 import './MachineConfigEditor.css';
 
 const CHUNK_SIZE = 128 * 1024;
@@ -78,6 +78,9 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
     const [historyLoading, setHistoryLoading] = useState(false);
     const [viewingBackup, setViewingBackup] = useState(null); // { id, content, created_at, reason } — full content fetched on demand
     const [viewingLoading, setViewingLoading] = useState(null); // id currently being fetched
+    const [compareSelection, setCompareSelection] = useState([]); // up to 2: { path, name }
+    const [compareResult, setCompareResult] = useState(null); // { fileA, fileB, rows }
+    const [compareLoading, setCompareLoading] = useState(false);
 
     const reqIdCounter = useRef(0);
     const pending = useRef(new Map());
@@ -253,6 +256,48 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
             : null;
         if (!editor) { setError(`${item.name} isn't a recognized machine config file (.mk or pfields.dat)`); return; }
         openFile({ path: item.path, name: item.name, editor }, mode);
+    };
+
+    /* ---------- File comparison (read-only — no backup/edit involved) ---------- */
+    const toggleCompare = (item) => {
+        setCompareSelection(prev => {
+            const already = prev.find(f => f.path === item.path);
+            if (already) return prev.filter(f => f.path !== item.path);
+            if (prev.length >= 2) return [prev[1], { path: item.path, name: item.name }]; // keep most recent 2
+            return [...prev, { path: item.path, name: item.name }];
+        });
+    };
+
+    const runComparison = async () => {
+        if (compareSelection.length !== 2) return;
+        setCompareLoading(true);
+        setError(null);
+        try {
+            const [fileA, fileB] = compareSelection;
+            const [contentA, contentB] = await Promise.all([
+                readFileFull(fileA.path),
+                readFileFull(fileB.path)
+            ]);
+            const rows = compareConfigs(contentA, contentB);
+            setCompareResult({ fileA, fileB, rows });
+        } catch (e) {
+            setError(`Comparison failed: ${e.message}`);
+        } finally {
+            setCompareLoading(false);
+        }
+    };
+
+    const copyDifferencesToClipboard = () => {
+        if (!compareResult) return;
+        const { fileA, fileB, rows } = compareResult;
+        const lines = [`${fileA.name}\tvs\t${fileB.name}`, ''];
+        rows.forEach(r => {
+            lines.push(`${r.key}\t${r.valueA ?? '(missing)'}\t${r.valueB ?? '(missing)'}`);
+        });
+        navigator.clipboard.writeText(lines.join('\n')).then(
+            () => { setProgressMsg('Differences copied to clipboard.'); setTimeout(() => setProgressMsg(''), 3000); },
+            () => setError('Could not copy to clipboard — your browser may be blocking clipboard access.')
+        );
     };
 
     /* ---------- Open + safety backup + embed editor (or plain text) ---------- */
@@ -503,11 +548,33 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
 
                 {phase === 'picking' && (
                     <div className="mce-picker">
+                        {compareSelection.length > 0 && (
+                            <div className="mce-compare-bar">
+                                <span>
+                                    Compare: {compareSelection.map(f => f.name).join('  vs  ')}
+                                    {compareSelection.length < 2 && ' — pick one more file'}
+                                </span>
+                                <div className="mce-cand-actions" style={{ width: 'auto', marginTop: 0 }}>
+                                    <button className="mce-btn primary" disabled={compareSelection.length !== 2 || compareLoading} onClick={runComparison}>
+                                        {compareLoading ? 'Comparing...' : 'Compare Selected Files'}
+                                    </button>
+                                    <button className="mce-btn" onClick={() => setCompareSelection([])}>Clear</button>
+                                </div>
+                            </div>
+                        )}
+
                         {candidates.length > 0 && (
                             <>
                                 <p className="mce-hint">Found these machine config files:</p>
                                 {candidates.map(c => (
                                     <div key={c.path} className="mce-candidate">
+                                        <input
+                                            type="checkbox"
+                                            className="mce-compare-check"
+                                            checked={!!compareSelection.find(f => f.path === c.path)}
+                                            onChange={() => toggleCompare(c)}
+                                            title="Select to compare with another file"
+                                        />
                                         <span className="mce-icon">{c.editor === 'mk' ? '⚙️' : '📄'}</span>
                                         <span className="mce-cand-name">{c.name}</span>
                                         {c.backupLike && <span className="mce-badge">looks like a backup — verify before editing</span>}
@@ -540,6 +607,13 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
                                     </div>
                                 ) : (
                                     <div key={item.path} className="mce-browse-item mce-browse-file">
+                                        <input
+                                            type="checkbox"
+                                            className="mce-compare-check"
+                                            checked={!!compareSelection.find(f => f.path === item.path)}
+                                            onChange={() => toggleCompare(item)}
+                                            title="Select to compare with another file"
+                                        />
                                         <span>📄 {item.name}</span>
                                         <div className="mce-cand-actions">
                                             <button className="mce-btn primary" onClick={() => pickFile(item, 'structured')}>Open in Editor</button>
@@ -710,6 +784,36 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
                                 </div>
                             </div>
                         )}
+                    </div>
+                )}
+
+                {compareResult && (
+                    <div className="mce-history-overlay" onClick={() => setCompareResult(null)}>
+                        <div className="mce-compare-box" onClick={(e) => e.stopPropagation()}>
+                            <div className="mce-format-header">
+                                <span>{compareResult.rows.length} difference{compareResult.rows.length !== 1 ? 's' : ''}</span>
+                                <div className="mce-cand-actions" style={{ width: 'auto', marginTop: 0 }}>
+                                    <button className="mce-btn primary" onClick={copyDifferencesToClipboard}>Copy Differences to Clipboard</button>
+                                    <button className="mce-close-btn" onClick={() => setCompareResult(null)}>✕</button>
+                                </div>
+                            </div>
+                            <div className="mce-compare-columns">
+                                <div className="mce-compare-col-header">{compareResult.fileA.name}</div>
+                                <div className="mce-compare-col-header">{compareResult.fileB.name}</div>
+                            </div>
+                            <div className="mce-compare-rows">
+                                {compareResult.rows.length === 0 && (
+                                    <div className="mce-hint" style={{ padding: 14 }}>No differences found — every recognized parameter matches.</div>
+                                )}
+                                {compareResult.rows.map(r => (
+                                    <div key={r.key} className={`mce-compare-row ${r.status}`}>
+                                        <span className="mce-compare-key">{r.key}</span>
+                                        <span className="mce-compare-val a">{r.valueA ?? '(missing)'}</span>
+                                        <span className="mce-compare-val b">{r.valueB ?? '(missing)'}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>

@@ -156,3 +156,57 @@ export function formatCheck(text) {
 
     return issues.sort((a, b) => (a.line || 0) - (b.line || 0));
 }
+
+// Parses a config file's recognized parameter lines (eq/pipe/ws — same
+// classification as align/format-check) into key -> value. Used for file
+// comparison, where two files' parameters need to line up by key rather than
+// by line number (they may be in a different order, or come from entirely
+// different machines).
+function parseKeyValueMap(text) {
+    const map = new Map();
+    text.split(/\r\n|\r|\n/).forEach(line => {
+        const type = classifyLine(line);
+        if (!type) return;
+        const trimmed = line.trim();
+        let key, value;
+        if (type === 'eq') {
+            const idx = trimmed.indexOf('=');
+            key = trimmed.slice(0, idx).trim();
+            value = trimmed.slice(idx + 1).trim();
+        } else if (type === 'pipe') {
+            const idx = trimmed.indexOf('|');
+            key = trimmed.slice(0, idx).trim();
+            value = trimmed.slice(idx + 1).trim();
+        } else {
+            const m = trimmed.match(/^(\S+)(\s{2,}|\t)(.*)$/);
+            key = m ? m[1] : trimmed;
+            value = m ? m[3].trim() : '';
+        }
+        if (key) map.set(key, value);
+    });
+    return map;
+}
+
+// Compares two config files by key (not line position). Returns only the
+// differences: keys with a different value in each, plus keys present in
+// only one side — anything identical in both is omitted entirely.
+export function compareConfigs(textA, textB) {
+    const mapA = parseKeyValueMap(textA);
+    const mapB = parseKeyValueMap(textB);
+    const allKeys = new Set([...mapA.keys(), ...mapB.keys()]);
+    const rows = [];
+    for (const key of allKeys) {
+        const hasA = mapA.has(key);
+        const hasB = mapB.has(key);
+        const valueA = mapA.get(key);
+        const valueB = mapB.get(key);
+        if (hasA && hasB && valueA === valueB) continue; // identical — not a difference
+        rows.push({
+            key,
+            valueA: hasA ? valueA : null,
+            valueB: hasB ? valueB : null,
+            status: !hasA ? 'onlyB' : !hasB ? 'onlyA' : 'different'
+        });
+    }
+    return rows.sort((a, b) => a.key.localeCompare(b.key));
+}
