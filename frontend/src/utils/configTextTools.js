@@ -101,12 +101,35 @@ function alignPfieldsParameterLines(text) {
 // comma/semicolon always lands at a fixed column (counted from the start of
 // the line), regardless of neighboring lines — not a per-block computed
 // maximum. The value is right-justified so it ends immediately before the
-// delimiter, then exactly 4 spaces, then the comment. Applies uniformly to
+// delimiter, then exactly 3 spaces, then the comment. Applies uniformly to
 // every parameter line (keyed or a bare continuation value) — no block
 // grouping needed since the target column is constant.
 const MK_DELIMITER_COLUMN = 28;
+const MK_COMMENT_GAP = 3;
+// Quoted string values (e.g. MK_VOREINSTELLUNG "G24;G25;...;T0";) routinely
+// contain their own semicolons/commas as part of the string content, not as
+// the real delimiter — naively splitting on "the first comma or semicolon"
+// would land inside the string and corrupt the line. Short quoted values
+// (empty, or a handful of characters) are simple enough to still align
+// normally; longer ones are left completely untouched rather than risk
+// misparsing them.
+const MK_QUOTE_SKIP_THRESHOLD = 6;
 
 function alignMkLine(line, delimiterColumn) {
+    const quoteMatch = line.match(/^(\s*[A-Za-z_][\w.]*)?(\s*)"([^"]*)"(\s*)([,;])(.*)$/);
+    if (quoteMatch) {
+        const quotedContent = quoteMatch[3];
+        if (quotedContent.length > MK_QUOTE_SKIP_THRESHOLD) return null; // leave untouched — too risky to reformat
+        const prefix = (quoteMatch[1] || '').trim();
+        const valueToken = `"${quotedContent}"`;
+        const delim = quoteMatch[5];
+        const after = quoteMatch[6];
+        const gap = Math.max(delimiterColumn - prefix.length - valueToken.length, 0);
+        const trimmedAfter = after.replace(/^\s+/, '');
+        const padded = prefix + ' '.repeat(gap) + valueToken + delim;
+        return trimmedAfter ? `${padded}${' '.repeat(MK_COMMENT_GAP)}${trimmedAfter}` : padded;
+    }
+
     const m = line.match(/^(.*?)([,;])(.*)$/);
     if (!m) return null;
     const before = m[1];
@@ -126,7 +149,7 @@ function alignMkLine(line, delimiterColumn) {
     const gap = Math.max(delimiterColumn - prefix.length - valueToken.length, 0);
     const trimmedAfter = after.replace(/^\s+/, '');
     const padded = prefix + ' '.repeat(gap) + valueToken + delim;
-    return trimmedAfter ? `${padded}    ${trimmedAfter}` : padded;
+    return trimmedAfter ? `${padded}${' '.repeat(MK_COMMENT_GAP)}${trimmedAfter}` : padded;
 }
 
 function alignMkParameterLines(text) {
