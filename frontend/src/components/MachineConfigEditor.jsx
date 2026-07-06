@@ -918,16 +918,35 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
                                             <span>Edit history (click a step to jump to it)</span>
                                             <button className="mce-close-btn" onClick={() => setShowTextHistory(false)}>✕</button>
                                         </div>
-                                        {textHistoryRef.current.list.map((h, i) => (
-                                            <div
-                                                key={i}
-                                                className={`mce-format-issue mce-history-step ${i === textHistoryRef.current.index ? 'current' : ''}`}
-                                                onClick={() => jumpToTextHistory(i)}
-                                            >
-                                                <span className="mce-format-line">{i === textHistoryRef.current.index ? '● ' : ''}{new Date(h.ts).toLocaleTimeString()}</span>
-                                                <span>{h.label}</span>
-                                            </div>
-                                        ))}
+                                        {textHistoryRef.current.list.map((h, i) => {
+                                            const prev = textHistoryRef.current.list[i - 1];
+                                            const stepDiff = prev ? compareConfigs(prev.content, h.content) : [];
+                                            return (
+                                                <div
+                                                    key={i}
+                                                    className={`mce-history-entry ${i === textHistoryRef.current.index ? 'current' : ''}`}
+                                                    onClick={() => jumpToTextHistory(i)}
+                                                >
+                                                    <div className="mce-format-issue mce-history-step">
+                                                        <span className="mce-format-line">{i === textHistoryRef.current.index ? '● ' : ''}{new Date(h.ts).toLocaleTimeString()}</span>
+                                                        <span>{h.label}</span>
+                                                    </div>
+                                                    {stepDiff.length > 0 && (
+                                                        <div className="mce-history-diff">
+                                                            {stepDiff.slice(0, 8).map((c) => (
+                                                                <span key={c.key} className="mce-history-diff-item">
+                                                                    <span className="mce-diff-key">{c.key}</span>
+                                                                    {c.status !== 'onlyB' && <span className="mce-diff-old">{c.valueA ?? '(none)'}</span>}
+                                                                    {c.status === 'different' && <span className="mce-diff-arrow">→</span>}
+                                                                    {c.status !== 'onlyA' && <span className="mce-diff-new">{c.valueB ?? '(none)'}</span>}
+                                                                </span>
+                                                            ))}
+                                                            {stepDiff.length > 8 && <span className="mce-hint">+{stepDiff.length - 8} more</span>}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 )}
                                 {formatIssues !== null && (

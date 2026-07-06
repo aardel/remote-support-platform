@@ -152,9 +152,18 @@
 .mce-format-issue.error { background: rgba(220, 38, 38, 0.08); }
 .mce-format-issue.warning { background: rgba(217, 119, 6, 0.08); }
 .mce-format-line { color: #64748b; min-width: 40px; font-family: "SF Mono", monospace; }
-.mce-history-step { cursor: pointer; }
-.mce-history-step:hover { background: #263548; }
-.mce-history-step.current { background: rgba(37, 99, 235, 0.15); color: #93c5fd; font-weight: 600; }
+.mce-history-entry { cursor: pointer; border-top: 1px solid #263548; }
+.mce-history-entry:hover { background: #263548; }
+.mce-history-entry.current .mce-history-step { color: #93c5fd; font-weight: 600; }
+.mce-history-entry.current { background: rgba(37, 99, 235, 0.1); }
+.mce-history-step { display: flex; gap: 10px; padding: 6px 14px; font-size: 12px; color: #e2e8f0; }
+.mce-history-diff {
+  display: flex; flex-wrap: wrap; gap: 8px; padding: 0 14px 8px 14px;
+}
+.mce-history-diff-item {
+  display: flex; align-items: center; gap: 5px; font-size: 11px;
+  font-family: "SF Mono", Consolas, monospace;
+}
 .mce-textarea-wrap { flex: 1; display: flex; min-height: 0; }
 .mce-line-gutter {
   flex-shrink: 0; margin: 0; padding: 14px 10px 14px 14px; text-align: right;
@@ -192,9 +201,13 @@
 }
 .mce-diff-row:last-child { border-bottom: none; }
 .mce-diff-key { font-weight: 600; min-width: 160px; color: #93c5fd; }
-.mce-diff-old { color: #fca5a5; }
+.mce-diff-old {
+  background: #fca5a5; color: #450a0a; padding: 1px 6px; border-radius: 3px; font-weight: 600;
+}
 .mce-diff-arrow { color: #64748b; }
-.mce-diff-new { color: #86efac; }
+.mce-diff-new {
+  background: #86efac; color: #052e14; padding: 1px 6px; border-radius: 3px; font-weight: 600;
+}
 .mce-confirm-actions { display: flex; gap: 10px; margin-top: 16px; }
 
 .mce-btn {
