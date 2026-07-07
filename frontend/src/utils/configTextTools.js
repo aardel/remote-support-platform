@@ -321,6 +321,24 @@ export function locateValueInLine(line) {
 }
 
 // Parses every recognized parameter line in the whole text into
+// Maps a raw character offset (e.g. a textarea's selectionStart, which is an
+// index into the full text including line terminators) to { lineIndex,
+// column } consistent with parseEntries' own line splitting — used to figure
+// out which parameter (if any) a click landed on. Assumes a single, uniform
+// line-terminator style throughout the text (true for real .mk/pfields.dat
+// files), not truly mixed endings.
+export function offsetToLineColumn(text, offset) {
+    const eolLen = text.includes('\r\n') ? 2 : 1;
+    const lines = text.split(/\r\n|\r|\n/);
+    let pos = 0;
+    for (let i = 0; i < lines.length; i++) {
+        const lineLen = lines[i].length;
+        if (offset <= pos + lineLen) return { lineIndex: i, column: offset - pos };
+        pos += lineLen + eolLen;
+    }
+    return { lineIndex: lines.length - 1, column: offset - pos };
+}
+
 // { lineIndex, key, value, valueStart, valueEnd }. Continuation lines (no
 // identifier of their own — the P761, P762... values in a multi-line array
 // like MK_TECHNOLOGIEDATEN1) get a synthetic key of `${parentKey}#${n}`

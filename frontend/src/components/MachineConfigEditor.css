@@ -179,13 +179,27 @@
 }
 .mce-textarea:disabled { opacity: .7; }
 
-.mce-review-view { margin: 0; overflow: auto; cursor: default; }
-.mce-review-view > div { min-height: 1.5em; }
-.mce-inline-highlight {
-  background: #f59e0b; color: #451a03; padding: 0 3px; border-radius: 3px;
-  cursor: pointer; font-weight: 600;
+/* Always-on highlight: a styled read-through layer sits behind the actual
+   textarea, which has its own text made invisible (color: transparent) so
+   typing/cursor/selection all work completely normally, while what the
+   technician actually SEES is the styled layer showing through. Both must
+   share identical font metrics/padding so they align exactly. */
+.mce-overlay-wrap { position: relative; flex: 1; display: flex; min-height: 0; }
+.mce-highlight-overlay {
+  position: absolute; inset: 0; margin: 0; padding: 14px;
+  background: #0b1220; color: #e2e8f0; font-family: "SF Mono", Consolas, monospace;
+  font-size: 13px; line-height: 1.5; tab-size: 4; -moz-tab-size: 4;
+  white-space: pre; overflow: hidden; pointer-events: none;
 }
-.mce-inline-highlight:hover { background: #fbbf24; }
+.mce-textarea-overlaid {
+  position: absolute; inset: 0; background: transparent; color: transparent;
+  caret-color: #e2e8f0;
+}
+.mce-textarea-overlaid::selection { background: rgba(147, 197, 253, 0.35); color: transparent; }
+/* No padding/font-weight here deliberately — any change to this span's
+   rendered width would shift every character after it out of alignment with
+   the identical (invisible) text in the textarea sitting on top of it. */
+.mce-inline-highlight { background: #f59e0b; color: #451a03; }
 
 .mce-key-popup-overlay { position: absolute; inset: 0; z-index: 20; }
 .mce-key-popup {

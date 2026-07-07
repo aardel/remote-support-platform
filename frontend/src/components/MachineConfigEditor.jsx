@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import axios from '../api/axios';
 import { matchInstallFolder, looksLikeBackupFile, PFIELDS_FILENAME } from '../data/machineFolderMap';
-import { alignParameterLines, formatCheck, compareConfigs, appendParameterChangeHistory, getValueForKey, parseEntries } from '../utils/configTextTools';
+import { alignParameterLines, formatCheck, compareConfigs, appendParameterChangeHistory, getValueForKey, parseEntries, offsetToLineColumn } from '../utils/configTextTools';
 import './MachineConfigEditor.css';
 
 const CHUNK_SIZE = 128 * 1024;
@@ -70,7 +70,6 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
     const [formatIssues, setFormatIssues] = useState(null); // null = not run, [] = clean, [...] = issues found
     const [historyVersion, setHistoryVersion] = useState(0); // bumped to force a re-render whenever textHistoryRef changes
     const [showTextHistory, setShowTextHistory] = useState(false);
-    const [reviewMode, setReviewMode] = useState(false);
     const [keyHistoryPopup, setKeyHistoryPopup] = useState(null); // { key, x, y, history: [{label, ts, value}] }
     const [pendingSave, setPendingSave] = useState(null); // { newContent, filename, oldContent }
     const [diff, setDiff] = useState(null);
@@ -91,6 +90,7 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
     const iframeRef = useRef(null);
     const textareaRef = useRef(null);
     const gutterRef = useRef(null);
+    const overlayRef = useRef(null);
     const fileContentRef = useRef(''); // original content of the currently-open file
     const backupIdRef = useRef(null);
     const lastBackedUpContentRef = useRef(null); // content captured by the most recent backup — skip taking an identical one again
@@ -390,7 +390,6 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
         setShowHistory(false);
         setBackupHistory([]);
         setShowTextHistory(false);
-        setReviewMode(false);
         setKeyHistoryPopup(null);
         try {
             const content = await readFileFull(file.path);
@@ -686,23 +685,24 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
     const showKeyHistory = (key, e) => {
         const list = textHistoryRef.current.list;
         const history = list.map(h => ({ label: h.label, ts: h.ts, value: getValueForKey(h.content, key) }));
-        const rect = e.currentTarget.getBoundingClientRect();
+        // Positioned from the actual click point (not the target element's own
+        // rect) — the click originates from the textarea itself, not a
+        // precisely-sized element at the value's exact location.
         const containerRect = e.currentTarget.closest('.mce-editor-wrap')?.getBoundingClientRect();
         setKeyHistoryPopup({
             key,
-            x: rect.left - (containerRect?.left || 0),
-            y: rect.bottom - (containerRect?.top || 0),
+            x: e.clientX - (containerRect?.left || 0),
+            y: e.clientY - (containerRect?.top || 0) + 12,
             history
         });
     };
 
     // Precomputes, per line, plain text plus the changed-value span position
-    // (if any) — only for Review Mode's read-only rendering. Uses
-    // parseEntries (not a per-line lookup) so continuation lines in a
+    // (if any) — feeds the always-on highlight overlay behind the textarea.
+    // Uses parseEntries (not a per-line lookup) so continuation lines in a
     // multi-line array (P761, P762... with no key of their own) resolve to
     // their synthetic "ParentKey#n" identity and can be highlighted too.
     const reviewLines = useMemo(() => {
-        if (!reviewMode) return [];
         const lines = rawText.split(/\r\n|\r|\n/);
         const byLine = new Map(parseEntries(rawText).map(e => [e.lineIndex, e]));
         return lines.map((line, i) => {
@@ -710,7 +710,28 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
             if (!entry || !changedKeys.has(entry.key)) return { line, highlight: null };
             return { line, highlight: entry };
         });
-    }, [reviewMode, rawText, changedKeys]);
+    }, [rawText, changedKeys]);
+
+    // The overlay behind the textarea is purely visual (pointer-events: none)
+    // so all clicks/typing reach the (invisible-text) textarea normally for
+    // editing — the popup is triggered instead by mapping the click's cursor
+    // position back to a line/column and checking whether it landed inside a
+    // changed value's range.
+    const syncOverlayScroll = (e) => {
+        if (overlayRef.current) {
+            overlayRef.current.scrollTop = e.target.scrollTop;
+            overlayRef.current.scrollLeft = e.target.scrollLeft;
+        }
+    };
+
+    const handleTextareaClick = (e) => {
+        const pos = e.target.selectionStart;
+        const { lineIndex, column } = offsetToLineColumn(rawText, pos);
+        const rl = reviewLines[lineIndex];
+        if (!rl || !rl.highlight) return;
+        const { valueStart, valueEnd, key } = rl.highlight;
+        if (column >= valueStart && column < valueEnd) showKeyHistory(key, e);
+    };
 
     // Manual typing gets a debounced snapshot (once the technician pauses) so
     // every keystroke doesn't create its own history entry. Programmatic
@@ -951,13 +972,6 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
                                         <button className="mce-btn" onClick={undoText} disabled={phase !== 'editing' || textHistoryRef.current.index <= 0} title="Undo">↶ Undo</button>
                                         <button className="mce-btn" onClick={redoText} disabled={phase !== 'editing' || textHistoryRef.current.index >= textHistoryRef.current.list.length - 1} title="Redo">↷ Redo</button>
                                         <button className="mce-btn" onClick={() => setShowTextHistory(s => !s)} title="View change history">History</button>
-                                        <button
-                                            className={`mce-btn ${reviewMode ? 'primary' : ''}`}
-                                            onClick={() => { setReviewMode(m => !m); setKeyHistoryPopup(null); }}
-                                            title="Highlight changed values inline — click one to see its history"
-                                        >
-                                            {reviewMode ? 'Exit Highlight' : 'Highlight Changes'}
-                                        </button>
                                         <button className="mce-btn" onClick={runAlign} disabled={phase !== 'editing'} title="Line up parameter columns neatly">Align Parameters</button>
                                         <button className="mce-btn" onClick={runFormatCheck} disabled={phase !== 'editing'} title="Scan for duplicate keys, typos, and malformed lines">Format Check</button>
                                         <button className="mce-btn primary" onClick={saveTextEdits} disabled={phase !== 'editing'}>Save</button>
@@ -1016,38 +1030,35 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
                                 )}
                                 <div className="mce-textarea-wrap">
                                     <pre ref={gutterRef} className="mce-line-gutter">{lineNumbers}</pre>
-                                    {reviewMode ? (
-                                        <pre className="mce-textarea mce-review-view">
+                                    <div className="mce-overlay-wrap">
+                                        <pre ref={overlayRef} className="mce-highlight-overlay" aria-hidden="true">
                                             {reviewLines.map((rl, i) => (
-                                                <div key={i}>
+                                                <React.Fragment key={i}>
                                                     {rl.highlight ? (
                                                         <>
                                                             {rl.line.slice(0, rl.highlight.valueStart)}
-                                                            <span
-                                                                className="mce-inline-highlight"
-                                                                onClick={(e) => showKeyHistory(rl.highlight.key, e)}
-                                                                title={`Click to see ${rl.highlight.key}'s history`}
-                                                            >
+                                                            <span className="mce-inline-highlight">
                                                                 {rl.line.slice(rl.highlight.valueStart, rl.highlight.valueEnd)}
                                                             </span>
                                                             {rl.line.slice(rl.highlight.valueEnd)}
                                                         </>
                                                     ) : rl.line}
-                                                </div>
+                                                    {i < reviewLines.length - 1 ? '\n' : ''}
+                                                </React.Fragment>
                                             ))}
                                         </pre>
-                                    ) : (
                                         <textarea
                                             ref={textareaRef}
-                                            className="mce-textarea"
+                                            className="mce-textarea mce-textarea-overlaid"
                                             value={rawText}
                                             onChange={(e) => setRawText(e.target.value)}
                                             onKeyDown={handleTextareaKeyDown}
-                                            onScroll={syncGutterScroll}
+                                            onClick={handleTextareaClick}
+                                            onScroll={(e) => { syncGutterScroll(e); syncOverlayScroll(e); }}
                                             spellCheck={false}
                                             disabled={phase !== 'editing'}
                                         />
-                                    )}
+                                    </div>
                                 </div>
                                 {keyHistoryPopup && (
                                     <div className="mce-key-popup-overlay" onClick={() => setKeyHistoryPopup(null)}>
