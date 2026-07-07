@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import axios from '../api/axios';
 import { matchInstallFolder, looksLikeBackupFile, PFIELDS_FILENAME } from '../data/machineFolderMap';
-import { alignParameterLines, formatCheck, compareConfigs, appendParameterChangeHistory, getValueForKey, locateValueInLine } from '../utils/configTextTools';
+import { alignParameterLines, formatCheck, compareConfigs, appendParameterChangeHistory, getValueForKey, parseEntries } from '../utils/configTextTools';
 import './MachineConfigEditor.css';
 
 const CHUNK_SIZE = 128 * 1024;
@@ -697,13 +697,18 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
     };
 
     // Precomputes, per line, plain text plus the changed-value span position
-    // (if any) — only for Review Mode's read-only rendering.
+    // (if any) — only for Review Mode's read-only rendering. Uses
+    // parseEntries (not a per-line lookup) so continuation lines in a
+    // multi-line array (P761, P762... with no key of their own) resolve to
+    // their synthetic "ParentKey#n" identity and can be highlighted too.
     const reviewLines = useMemo(() => {
         if (!reviewMode) return [];
-        return rawText.split(/\r\n|\r|\n/).map((line) => {
-            const loc = locateValueInLine(line);
-            if (!loc || !loc.key || !changedKeys.has(loc.key)) return { line, highlight: null };
-            return { line, highlight: loc };
+        const lines = rawText.split(/\r\n|\r|\n/);
+        const byLine = new Map(parseEntries(rawText).map(e => [e.lineIndex, e]));
+        return lines.map((line, i) => {
+            const entry = byLine.get(i);
+            if (!entry || !changedKeys.has(entry.key)) return { line, highlight: null };
+            return { line, highlight: entry };
         });
     }, [reviewMode, rawText, changedKeys]);
 

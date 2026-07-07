@@ -287,45 +287,15 @@ function normalizeValue(v) {
     return String(v || '').replace(/\s+/g, '');
 }
 
-function parseKeyValueMap(text) {
-    const map = new Map();
-    text.split(/\r\n|\r|\n/).forEach(line => {
-        const type = classifyLine(line);
-        if (!type) return;
-        const trimmed = line.trim();
-        let key, value;
-        if (type === 'eq') {
-            const idx = trimmed.indexOf('=');
-            key = trimmed.slice(0, idx).trim();
-            value = trimmed.slice(idx + 1);
-        } else if (type === 'pipe') {
-            const idx = trimmed.indexOf('|');
-            key = trimmed.slice(0, idx).trim();
-            value = trimmed.slice(idx + 1);
-        } else {
-            const m = trimmed.match(/^(\S+)(\s{2,}|\t)(.*)$/);
-            key = m ? m[1] : trimmed;
-            value = m ? m[3] : '';
-        }
-        if (key) map.set(key, normalizeValue(value));
-    });
-    return map;
-}
-
-// Looks up a single key's current value — used to build a per-parameter
-// history (walking the undo stack, extracting this one key's value at each
-// snapshot) for the click-to-see-history popup in Review Mode.
-export function getValueForKey(text, key) {
-    const map = parseKeyValueMap(text);
-    return map.has(key) ? map.get(key) : null;
-}
-
 // Locates the value token within a single raw line (exact character offsets,
-// not just the semantic key/value) so a UI can render the line as plain text
-// with just that substring wrapped in a clickable/highlightable span — used
-// by Review Mode's inline highlighting. Returns null for lines that aren't a
-// recognized parameter (comments, headers, blank lines) or that use the
-// pipe format (multi-column, not a single highlightable value).
+// not just the semantic key/value) — used both to build the key->value map
+// below and by Review Mode's inline highlighting, so the two always agree on
+// what "the value" is. Returns { key, valueStart, valueEnd } where key is
+// null for a bare continuation line (no identifier of its own — the caller
+// is responsible for attaching it to whatever key precedes it). Returns null
+// entirely for lines that aren't a recognized parameter (comments, headers,
+// blank lines) or that use the pipe format (multi-column, not a single
+// highlightable value).
 export function locateValueInLine(line) {
     const type = classifyLine(line);
     if (!type || type === 'pipe') return null;
@@ -348,6 +318,58 @@ export function locateValueInLine(line) {
     const beforeValue = before.slice(0, valueStart);
     const keyMatch = beforeValue.match(/[A-Za-z_][\w.]*/);
     return { key: keyMatch ? keyMatch[0] : null, valueStart, valueEnd };
+}
+
+// Parses every recognized parameter line in the whole text into
+// { lineIndex, key, value, valueStart, valueEnd }. Continuation lines (no
+// identifier of their own — the P761, P762... values in a multi-line array
+// like MK_TECHNOLOGIEDATEN1) get a synthetic key of `${parentKey}#${n}`
+// (the preceding keyed line + their 1-based position in the array), so a
+// change to a continuation value can be tracked and highlighted exactly like
+// a normal keyed parameter — this is the single source of truth both
+// parseKeyValueMap (comparison) and Review Mode's highlighting build on, so
+// they always agree on what "this value" is identified as.
+export function parseEntries(text) {
+    const lines = text.split(/\r\n|\r|\n/);
+    const entries = [];
+    let parentKey = null;
+    let contIndex = 0;
+    lines.forEach((line, lineIndex) => {
+        const type = classifyLine(line);
+        if (!type || type === 'pipe') { parentKey = null; contIndex = 0; return; }
+        const loc = locateValueInLine(line);
+        if (!loc) { parentKey = null; contIndex = 0; return; }
+        let key;
+        if (loc.key) {
+            key = loc.key;
+            parentKey = loc.key;
+            contIndex = 0;
+        } else if (parentKey) {
+            contIndex += 1;
+            key = `${parentKey}#${contIndex}`;
+        } else {
+            return; // a bare value with no preceding key to attach to — nothing to track
+        }
+        entries.push({
+            lineIndex, key, valueStart: loc.valueStart, valueEnd: loc.valueEnd,
+            value: normalizeValue(line.slice(loc.valueStart, loc.valueEnd))
+        });
+    });
+    return entries;
+}
+
+function parseKeyValueMap(text) {
+    const map = new Map();
+    parseEntries(text).forEach((e) => map.set(e.key, e.value));
+    return map;
+}
+
+// Looks up a single key's current value — used to build a per-parameter
+// history (walking the undo stack, extracting this one key's value at each
+// snapshot) for the click-to-see-history popup in Review Mode.
+export function getValueForKey(text, key) {
+    const map = parseKeyValueMap(text);
+    return map.has(key) ? map.get(key) : null;
 }
 
 // Compares two config files by key (not line position). Returns only the
