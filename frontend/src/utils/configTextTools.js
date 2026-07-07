@@ -312,6 +312,44 @@ function parseKeyValueMap(text) {
     return map;
 }
 
+// Looks up a single key's current value — used to build a per-parameter
+// history (walking the undo stack, extracting this one key's value at each
+// snapshot) for the click-to-see-history popup in Review Mode.
+export function getValueForKey(text, key) {
+    const map = parseKeyValueMap(text);
+    return map.has(key) ? map.get(key) : null;
+}
+
+// Locates the value token within a single raw line (exact character offsets,
+// not just the semantic key/value) so a UI can render the line as plain text
+// with just that substring wrapped in a clickable/highlightable span — used
+// by Review Mode's inline highlighting. Returns null for lines that aren't a
+// recognized parameter (comments, headers, blank lines) or that use the
+// pipe format (multi-column, not a single highlightable value).
+export function locateValueInLine(line) {
+    const type = classifyLine(line);
+    if (!type || type === 'pipe') return null;
+
+    // Quoted string value: highlight includes the surrounding quotes.
+    const quoteMatch = line.match(/^(\s*[A-Za-z_][\w.]*)?(\s*)"([^"]*)"/d);
+    if (quoteMatch) {
+        const key = (quoteMatch[1] || '').trim() || null;
+        const [start, end] = quoteMatch.indices[3];
+        return { key, valueStart: start - 1, valueEnd: end + 1 };
+    }
+
+    const delimMatch = line.match(/^(.*?)([,;])/d);
+    if (!delimMatch) return null;
+    const before = delimMatch[1];
+    const valueMatch = before.match(/(\S+)\s*$/d);
+    if (!valueMatch) return null;
+    const [valueStart] = valueMatch.indices[1];
+    const valueEnd = valueStart + valueMatch[1].length;
+    const beforeValue = before.slice(0, valueStart);
+    const keyMatch = beforeValue.match(/[A-Za-z_][\w.]*/);
+    return { key: keyMatch ? keyMatch[0] : null, valueStart, valueEnd };
+}
+
 // Compares two config files by key (not line position). Returns only the
 // differences: keys with a different value in each, plus keys present in
 // only one side — anything identical in both is omitted entirely.

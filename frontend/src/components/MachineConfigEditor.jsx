@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import axios from '../api/axios';
 import { matchInstallFolder, looksLikeBackupFile, PFIELDS_FILENAME } from '../data/machineFolderMap';
-import { alignParameterLines, formatCheck, compareConfigs, appendParameterChangeHistory } from '../utils/configTextTools';
+import { alignParameterLines, formatCheck, compareConfigs, appendParameterChangeHistory, getValueForKey, locateValueInLine } from '../utils/configTextTools';
 import './MachineConfigEditor.css';
 
 const CHUNK_SIZE = 128 * 1024;
@@ -70,6 +70,8 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
     const [formatIssues, setFormatIssues] = useState(null); // null = not run, [] = clean, [...] = issues found
     const [historyVersion, setHistoryVersion] = useState(0); // bumped to force a re-render whenever textHistoryRef changes
     const [showTextHistory, setShowTextHistory] = useState(false);
+    const [reviewMode, setReviewMode] = useState(false);
+    const [keyHistoryPopup, setKeyHistoryPopup] = useState(null); // { key, x, y, history: [{label, ts, value}] }
     const [pendingSave, setPendingSave] = useState(null); // { newContent, filename, oldContent }
     const [diff, setDiff] = useState(null);
     const [progressMsg, setProgressMsg] = useState('');
@@ -388,6 +390,8 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
         setShowHistory(false);
         setBackupHistory([]);
         setShowTextHistory(false);
+        setReviewMode(false);
+        setKeyHistoryPopup(null);
         try {
             const content = await readFileFull(file.path);
             fileContentRef.current = content;
@@ -668,6 +672,41 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
         setShowTextHistory(false);
     };
 
+    // Keys that differ between the originally-opened content and the current
+    // text — these are the ones Review Mode highlights inline.
+    const changedKeys = useMemo(() => {
+        const original = textHistoryRef.current.list[0]?.content;
+        if (original === undefined) return new Set();
+        return new Set(compareConfigs(original, rawText).map(c => c.key));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [rawText]);
+
+    // Walks the full undo history, extracting this one key's value at every
+    // snapshot, for the click-to-see-history popup.
+    const showKeyHistory = (key, e) => {
+        const list = textHistoryRef.current.list;
+        const history = list.map(h => ({ label: h.label, ts: h.ts, value: getValueForKey(h.content, key) }));
+        const rect = e.currentTarget.getBoundingClientRect();
+        const containerRect = e.currentTarget.closest('.mce-editor-wrap')?.getBoundingClientRect();
+        setKeyHistoryPopup({
+            key,
+            x: rect.left - (containerRect?.left || 0),
+            y: rect.bottom - (containerRect?.top || 0),
+            history
+        });
+    };
+
+    // Precomputes, per line, plain text plus the changed-value span position
+    // (if any) — only for Review Mode's read-only rendering.
+    const reviewLines = useMemo(() => {
+        if (!reviewMode) return [];
+        return rawText.split(/\r\n|\r|\n/).map((line) => {
+            const loc = locateValueInLine(line);
+            if (!loc || !loc.key || !changedKeys.has(loc.key)) return { line, highlight: null };
+            return { line, highlight: loc };
+        });
+    }, [reviewMode, rawText, changedKeys]);
+
     // Manual typing gets a debounced snapshot (once the technician pauses) so
     // every keystroke doesn't create its own history entry. Programmatic
     // changes (align, undo/redo, jump) skip this — they record their own
@@ -907,6 +946,13 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
                                         <button className="mce-btn" onClick={undoText} disabled={phase !== 'editing' || textHistoryRef.current.index <= 0} title="Undo">↶ Undo</button>
                                         <button className="mce-btn" onClick={redoText} disabled={phase !== 'editing' || textHistoryRef.current.index >= textHistoryRef.current.list.length - 1} title="Redo">↷ Redo</button>
                                         <button className="mce-btn" onClick={() => setShowTextHistory(s => !s)} title="View change history">History</button>
+                                        <button
+                                            className={`mce-btn ${reviewMode ? 'primary' : ''}`}
+                                            onClick={() => { setReviewMode(m => !m); setKeyHistoryPopup(null); }}
+                                            title="Highlight changed values inline — click one to see its history"
+                                        >
+                                            {reviewMode ? 'Exit Highlight' : 'Highlight Changes'}
+                                        </button>
                                         <button className="mce-btn" onClick={runAlign} disabled={phase !== 'editing'} title="Line up parameter columns neatly">Align Parameters</button>
                                         <button className="mce-btn" onClick={runFormatCheck} disabled={phase !== 'editing'} title="Scan for duplicate keys, typos, and malformed lines">Format Check</button>
                                         <button className="mce-btn primary" onClick={saveTextEdits} disabled={phase !== 'editing'}>Save</button>
@@ -965,17 +1011,64 @@ export default function MachineConfigEditor({ channel, sessionId, deviceId, tech
                                 )}
                                 <div className="mce-textarea-wrap">
                                     <pre ref={gutterRef} className="mce-line-gutter">{lineNumbers}</pre>
-                                    <textarea
-                                        ref={textareaRef}
-                                        className="mce-textarea"
-                                        value={rawText}
-                                        onChange={(e) => setRawText(e.target.value)}
-                                        onKeyDown={handleTextareaKeyDown}
-                                        onScroll={syncGutterScroll}
-                                        spellCheck={false}
-                                        disabled={phase !== 'editing'}
-                                    />
+                                    {reviewMode ? (
+                                        <pre className="mce-textarea mce-review-view">
+                                            {reviewLines.map((rl, i) => (
+                                                <div key={i}>
+                                                    {rl.highlight ? (
+                                                        <>
+                                                            {rl.line.slice(0, rl.highlight.valueStart)}
+                                                            <span
+                                                                className="mce-inline-highlight"
+                                                                onClick={(e) => showKeyHistory(rl.highlight.key, e)}
+                                                                title={`Click to see ${rl.highlight.key}'s history`}
+                                                            >
+                                                                {rl.line.slice(rl.highlight.valueStart, rl.highlight.valueEnd)}
+                                                            </span>
+                                                            {rl.line.slice(rl.highlight.valueEnd)}
+                                                        </>
+                                                    ) : rl.line}
+                                                </div>
+                                            ))}
+                                        </pre>
+                                    ) : (
+                                        <textarea
+                                            ref={textareaRef}
+                                            className="mce-textarea"
+                                            value={rawText}
+                                            onChange={(e) => setRawText(e.target.value)}
+                                            onKeyDown={handleTextareaKeyDown}
+                                            onScroll={syncGutterScroll}
+                                            spellCheck={false}
+                                            disabled={phase !== 'editing'}
+                                        />
+                                    )}
                                 </div>
+                                {keyHistoryPopup && (
+                                    <div className="mce-key-popup-overlay" onClick={() => setKeyHistoryPopup(null)}>
+                                        <div
+                                            className="mce-key-popup"
+                                            style={{ left: keyHistoryPopup.x, top: keyHistoryPopup.y }}
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <div className="mce-format-header">
+                                                <span>{keyHistoryPopup.key}</span>
+                                                <button className="mce-close-btn" onClick={() => setKeyHistoryPopup(null)}>✕</button>
+                                            </div>
+                                            {keyHistoryPopup.history.map((h, i) => {
+                                                const prevValue = i > 0 ? keyHistoryPopup.history[i - 1].value : undefined;
+                                                const changed = i === 0 || h.value !== prevValue;
+                                                return (
+                                                    <div key={i} className="mce-key-popup-row">
+                                                        <span className="mce-format-line">{new Date(h.ts).toLocaleTimeString()}</span>
+                                                        <span className="mce-hint">{h.label}</span>
+                                                        <span className={changed ? 'mce-diff-new' : ''}>{h.value ?? '(not set)'}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 
