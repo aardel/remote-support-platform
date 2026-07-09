@@ -2,6 +2,8 @@ const statusEl = document.getElementById('status');
 const statusDot = document.getElementById('statusDot');
 const sessionInput = document.getElementById('sessionId');
 const sessionIdDisplay = document.getElementById('sessionIdDisplay');
+const supportCodeDisplay = document.getElementById('supportCodeDisplay');
+const copyCodeBtn = document.getElementById('copyCodeBtn');
 const startBtn = document.getElementById('startBtn');
 const allowUnattended = document.getElementById('allowUnattended');
 const logEl = document.getElementById('log');
@@ -222,6 +224,32 @@ async function renderConnectionLog() {
   }).join('');
 }
 
+// Formats the raw 9-digit device code as "123 456 789" for readability —
+// matches the grouping a technician would expect when typing it back in.
+function formatSupportCode(code) {
+  const digits = String(code || '').replace(/\D/g, '');
+  if (digits.length !== 9) return code || '';
+  return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
+}
+
+function showSupportCode(code) {
+  if (!supportCodeDisplay) return;
+  supportCodeDisplay.textContent = code ? formatSupportCode(code) : '— — —';
+}
+
+if (copyCodeBtn) {
+  copyCodeBtn.addEventListener('click', async () => {
+    const raw = (supportCodeDisplay?.textContent || '').replace(/\s/g, '');
+    if (!raw || raw === '———') return;
+    try {
+      await navigator.clipboard.writeText(raw);
+      copyCodeBtn.textContent = 'Copied!';
+      copyCodeBtn.classList.add('copied');
+      setTimeout(() => { copyCodeBtn.textContent = 'Copy'; copyCodeBtn.classList.remove('copied'); }, 2000);
+    } catch (_) { /* clipboard access denied — silently ignore */ }
+  });
+}
+
 function showSessionId(id, editable) {
   if (editable) {
     sessionIdDisplay.style.display = 'none';
@@ -381,6 +409,7 @@ async function init() {
   config = info.config;
   log(`Device ID: ${info.deviceId}`);
   log(`Server: ${config.server}`);
+  showSupportCode(info.shortCode);
   loadIceServers(); // fetch STUN/TURN (async; falls back to STUN until it returns)
 
   let sessionReady = false;

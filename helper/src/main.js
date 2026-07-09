@@ -333,6 +333,13 @@ function applyAutoStart() {
   }
 }
 
+// Short, human-readable code (e.g. "394 079 337") the server assigns once per
+// device and never changes — shown in the UI so the customer can read it to
+// a technician to start a new session without any download/link, similar to
+// AnyDesk's permanent ID. Cached in memory (and prefs, for instant display on
+// the next launch before the register round-trip completes).
+let cachedShortCode = null;
+
 // --- Persistent device presence ---
 // Keeps a lightweight authenticated socket open so the dashboard shows this
 // machine as online, and technician "Request session" reaches us instantly.
@@ -354,8 +361,13 @@ async function registerDeviceAndGetToken() {
   });
   if (!res.ok) throw new Error(`Device register failed: ${res.status}`);
   const data = await res.json();
-  if (data.deviceToken) {
-    writePrefs({ ...readPrefs(), deviceToken: data.deviceToken });
+  if (data.device?.short_code) cachedShortCode = data.device.short_code;
+  if (data.deviceToken || cachedShortCode) {
+    writePrefs({
+      ...readPrefs(),
+      ...(data.deviceToken ? { deviceToken: data.deviceToken } : {}),
+      ...(cachedShortCode ? { shortCode: cachedShortCode } : {})
+    });
   }
   return data.deviceToken || null;
 }
@@ -440,7 +452,14 @@ app.whenReady().then(() => {
 });
 app.on('activate', () => { if (!mainWindow || mainWindow.isDestroyed()) createWindow(); else mainWindow.show(); });
 
-ipcMain.handle('helper:get-info', () => ({ deviceId: getDeviceId(), config: readConfig(), platform: process.platform, hostname: os.hostname(), arch: os.arch() }));
+ipcMain.handle('helper:get-info', () => ({
+  deviceId: getDeviceId(),
+  config: readConfig(),
+  platform: process.platform,
+  hostname: os.hostname(),
+  arch: os.arch(),
+  shortCode: cachedShortCode || readPrefs().shortCode || null
+}));
 ipcMain.handle('helper:get-version', () => app.getVersion());
 
 function getHelperBuildTime() {
@@ -631,7 +650,9 @@ ipcMain.handle('helper:register-device', async (_event, allowUnattended) => {
   });
   if (!res.ok) throw new Error('Register device failed');
   const data = await res.json();
+  if (data.device?.short_code) cachedShortCode = data.device.short_code;
   if (data.deviceToken) writePrefs({ ...readPrefs(), deviceToken: data.deviceToken });
+  if (cachedShortCode) writePrefs({ ...readPrefs(), shortCode: cachedShortCode });
   return data;
 });
 

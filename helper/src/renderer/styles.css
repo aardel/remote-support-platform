@@ -84,6 +84,44 @@ body {
 }
 
 /* Session ID */
+.support-code-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.support-code-label {
+  color: #1e40af;
+  font-weight: 500;
+}
+
+.support-code-value {
+  color: #1e3a8a;
+  font-weight: 700;
+  font-family: monospace;
+  letter-spacing: 1px;
+  font-size: 15px;
+  flex: 1;
+}
+
+.copy-code-btn {
+  padding: 4px 10px;
+  border: 1px solid #93c5fd;
+  background: #fff;
+  color: #1e40af;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.copy-code-btn:hover { background: #dbeafe; }
+.copy-code-btn.copied { background: #dcfce7; border-color: #86efac; color: #166534; }
+
 .session-id-row {
   display: flex;
   align-items: center;
