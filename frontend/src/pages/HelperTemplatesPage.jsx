@@ -2,15 +2,23 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from '../api/axios';
 import './PageStyles.css';
 
+const VARIANT_LABELS = {
+  win: 'Windows 10/11 (EXE)',
+  win7: 'Windows 7/8/8.1 (EXE)',
+  mac: 'macOS (DMG)'
+};
+
 function HelperTemplatesPage() {
   const [templateStatus, setTemplateStatus] = useState(null);
   const [templateType, setTemplateType] = useState('exe');
   const [templateFile, setTemplateFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [variants, setVariants] = useState([]);
+  const [copiedVariant, setCopiedVariant] = useState(null);
   const fileInputRef = useRef(null);
 
-  useEffect(() => { loadStatus(); }, []);
+  useEffect(() => { loadStatus(); loadVariants(); }, []);
 
   const computeLatestTs = (templates) => {
     const ts = ['exe', 'dmg']
@@ -31,6 +39,22 @@ function HelperTemplatesPage() {
     } catch (e) {
       console.error('Error loading templates:', e);
     }
+  };
+
+  const loadVariants = async () => {
+    try {
+      const res = await axios.get('/api/packages/universal');
+      setVariants(res.data?.variants || []);
+    } catch (e) {
+      console.error('Error loading download variants:', e);
+    }
+  };
+
+  const copyLink = (variant) => {
+    const url = `${window.location.origin}/api/packages/universal/${variant}`;
+    navigator.clipboard.writeText(url);
+    setCopiedVariant(variant);
+    setTimeout(() => setCopiedVariant(null), 1500);
   };
 
   const upload = async () => {
@@ -107,6 +131,38 @@ function HelperTemplatesPage() {
           </div>
         )}
         <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>Upload a template once. New sessions will auto-copy it.</p>
+      </div>
+
+      <div className="page-header" style={{ marginTop: 28 }}><h2 style={{ fontSize: 18 }}>Shareable Download Links</h2></div>
+      <p className="muted" style={{ marginTop: -8, marginBottom: 14, fontSize: 12 }}>
+        Direct links to the current install. No session code embedded — safe to send to any customer for a first-time install.
+      </p>
+      <div className="template-grid">
+        {variants.map(v => (
+          <div key={v.variant} className="page-card">
+            <div className="card-top">
+              <span style={{ fontWeight: 600 }}>{VARIANT_LABELS[v.variant] || v.variant}</span>
+              <span className={`badge ${v.available ? 'badge-ok' : 'badge-danger'}`}>{v.available ? 'Available' : 'Missing'}</span>
+            </div>
+            {v.available && (
+              <>
+                <div className="card-meta">
+                  <span>Size: {fmt(v.size)}</span>
+                  {v.version && <span>Version: v{v.version}</span>}
+                </div>
+                <div className="card-link">
+                  <input className="link-input" readOnly value={`${window.location.origin}${v.downloadUrl}`} onFocus={e => e.target.select()} />
+                </div>
+                <div className="card-actions">
+                  <button className="btn-sm btn-secondary" onClick={() => copyLink(v.variant)}>
+                    {copiedVariant === v.variant ? 'Copied!' : 'Copy link'}
+                  </button>
+                  <a className="btn-sm btn-primary" href={v.downloadUrl} style={{ textDecoration: 'none' }}>Download</a>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

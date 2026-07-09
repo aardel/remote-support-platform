@@ -17,6 +17,52 @@ function normalizeTemplateType(type) {
     return null;
 }
 
+// Session-independent downloads — the same universal installer everyone
+// gets, no per-session package generation or byte-level ID embedding. Meant
+// to be shared as a plain, durable link (e.g. on a support/downloads page),
+// consistent with "install once, reconnect anytime" — the app picks up its
+// session via the existing short-code/pending-session mechanism instead.
+const UNIVERSAL_VARIANTS = {
+    win: { file: 'support-template.exe', filename: 'RemoteSupportHelper-Setup.exe', contentType: 'application/x-msdownload' },
+    win7: { file: 'support-template-win7.exe', filename: 'RemoteSupportHelper-Win7-Setup.exe', contentType: 'application/x-msdownload' },
+    mac: { file: 'support-template.dmg', filename: 'RemoteSupportHelper.dmg', contentType: 'application/x-apple-diskimage' }
+};
+
+router.get('/universal/:variant', (req, res) => {
+    const variant = UNIVERSAL_VARIANTS[(req.params.variant || '').toLowerCase()];
+    if (!variant) {
+        return res.status(400).json({ error: `Unknown variant. Use one of: ${Object.keys(UNIVERSAL_VARIANTS).join(', ')}` });
+    }
+    const packagesDir = path.join(__dirname, '../../packages');
+    const filePath = path.join(packagesDir, variant.file);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'This build is not available yet.' });
+    }
+    res.setHeader('Content-Type', variant.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${variant.filename}"`);
+    res.sendFile(filePath);
+});
+
+router.get('/universal', (req, res) => {
+    const packagesDir = path.join(__dirname, '../../packages');
+    const versionPath = path.join(packagesDir, 'support-template.version');
+    let version = null;
+    try { version = fs.readFileSync(versionPath, 'utf8').trim(); } catch (_) {}
+
+    const variants = Object.entries(UNIVERSAL_VARIANTS).map(([key, v]) => {
+        const filePath = path.join(packagesDir, v.file);
+        const available = fs.existsSync(filePath);
+        return {
+            variant: key,
+            available,
+            size: available ? fs.statSync(filePath).size : null,
+            version,
+            downloadUrl: `/api/packages/universal/${key}`
+        };
+    });
+    res.json({ variants });
+});
+
 function getTemplateStatus() {
     const packagesDir = path.join(__dirname, '../../packages');
     const types = ['exe', 'dmg'];
