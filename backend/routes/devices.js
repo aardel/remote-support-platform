@@ -153,58 +153,83 @@ router.patch('/:deviceId', requireAuth, async (req, res) => {
     }
 });
 
+// Shared by /:deviceId/request and /connect-by-code — both just need a
+// resolved device row to request/reuse a session for.
+async function requestSessionForDevice(req, res, device) {
+    const deviceId = device.device_id;
+    const technicianId = req.user?.id || req.user?.nextcloudId;
+
+    // Reuse the device's existing active session if it already has one.
+    // The helper's assignSession prefers an existing active (waiting/
+    // connected) session over a freshly-created pending one, so minting a
+    // new session here would leave the dashboard and the helper on
+    // different session IDs (dashboard waits on a session the helper never
+    // adopts). Only create — and mark pending — when none is active.
+    let sessionId;
+    try {
+        const active = await Session.findActiveByDeviceId(deviceId);
+        if (active) sessionId = active.session_id;
+    } catch (_) {}
+
+    if (!sessionId) {
+        const session = await SessionService.createSession({
+            technicianId,
+            expiresIn: 3600
+        });
+        sessionId = session.session_id || session.sessionId;
+        await Device.setPendingSession(deviceId, sessionId);
+    }
+
+    // If the device agent is online, push the request immediately —
+    // no need to ask the user to open the helper.
+    const ws = req.app.get('wsHandler');
+    const pushed = ws ? ws.notifyDevice(deviceId, 'pending-session', { sessionId }) : false;
+
+    // Report the device's unattended setting so the dashboard knows whether
+    // to auto-open the viewer (unattended) or wait for the user to accept.
+    const allowUnattended = device.allow_unattended !== false;
+
+    res.json({
+        success: true,
+        sessionId,
+        deviceId,
+        pushed,
+        allowUnattended,
+        message: pushed
+            ? 'Session request sent to the online device.'
+            : 'Session requested. Ask the user to open the helper.'
+    });
+}
+
 // Request session for a device (technician dashboard)
 router.post('/:deviceId/request', requireAuth, async (req, res) => {
     try {
         const { deviceId } = req.params;
-        const technicianId = req.user?.id || req.user?.nextcloudId;
-
         const device = await Device.findByDeviceId(deviceId);
         if (!device) {
             return res.status(404).json({ error: 'Device not found' });
         }
-
-        // Reuse the device's existing active session if it already has one.
-        // The helper's assignSession prefers an existing active (waiting/
-        // connected) session over a freshly-created pending one, so minting a
-        // new session here would leave the dashboard and the helper on
-        // different session IDs (dashboard waits on a session the helper never
-        // adopts). Only create — and mark pending — when none is active.
-        let sessionId;
-        try {
-            const active = await Session.findActiveByDeviceId(deviceId);
-            if (active) sessionId = active.session_id;
-        } catch (_) {}
-
-        if (!sessionId) {
-            const session = await SessionService.createSession({
-                technicianId,
-                expiresIn: 3600
-            });
-            sessionId = session.session_id || session.sessionId;
-            await Device.setPendingSession(deviceId, sessionId);
-        }
-
-        // If the device agent is online, push the request immediately —
-        // no need to ask the user to open the helper.
-        const ws = req.app.get('wsHandler');
-        const pushed = ws ? ws.notifyDevice(deviceId, 'pending-session', { sessionId }) : false;
-
-        // Report the device's unattended setting so the dashboard knows whether
-        // to auto-open the viewer (unattended) or wait for the user to accept.
-        const allowUnattended = device.allow_unattended !== false;
-
-        res.json({
-            success: true,
-            sessionId,
-            pushed,
-            allowUnattended,
-            message: pushed
-                ? 'Session request sent to the online device.'
-                : 'Session requested. Ask the user to open the helper.'
-        });
+        await requestSessionForDevice(req, res, device);
     } catch (error) {
         console.error('Error requesting session:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Start a session by the customer's short, spoken/typed code (e.g. read off
+// the helper's "Your Support Code" screen) — doesn't require the device to
+// already be in this technician's known-devices list, unlike /:deviceId/request.
+router.post('/connect-by-code', requireAuth, rateLimit({ windowMs: 60 * 1000, max: 20 }), async (req, res) => {
+    try {
+        const { code } = req.body || {};
+        if (!code) return res.status(400).json({ error: 'code is required' });
+        const device = await Device.findByShortCode(code);
+        if (!device) {
+            return res.status(404).json({ error: 'No device found with that code' });
+        }
+        await requestSessionForDevice(req, res, device);
+    } catch (error) {
+        console.error('Error connecting by code:', error);
         res.status(500).json({ error: error.message });
     }
 });

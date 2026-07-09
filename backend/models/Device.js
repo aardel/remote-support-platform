@@ -6,8 +6,27 @@ function ensureSchema() {
     if (schemaReady) return schemaReady;
     schemaReady = pool.query('ALTER TABLE devices ADD COLUMN IF NOT EXISTS tag VARCHAR(100)')
         .then(() => pool.query('ALTER TABLE devices ADD COLUMN IF NOT EXISTS helper_version VARCHAR(32)'))
+        .then(() => pool.query('ALTER TABLE devices ADD COLUMN IF NOT EXISTS short_code VARCHAR(9)'))
+        .then(() => pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_short_code ON devices(short_code) WHERE short_code IS NOT NULL'))
         .catch((e) => { schemaReady = null; throw e; });
     return schemaReady;
+}
+
+// A short, human-readable code (like AnyDesk's ID) a customer can read aloud
+// or type in, so a technician can start a session without the device already
+// being in their known-devices list. Plain 9 digits — easy to read/type on
+// any keyboard, no case-sensitivity or ambiguous-character concerns.
+function randomNineDigitCode() {
+    return String(Math.floor(100000000 + Math.random() * 900000000));
+}
+
+async function generateUniqueShortCode() {
+    for (let attempt = 0; attempt < 10; attempt++) {
+        const code = randomNineDigitCode();
+        const existing = await pool.query('SELECT 1 FROM devices WHERE short_code = $1', [code]);
+        if (existing.rows.length === 0) return code;
+    }
+    throw new Error('Could not generate a unique short code after 10 attempts');
 }
 
 class Device {
@@ -59,11 +78,17 @@ class Device {
 
         try { await ensureSchema(); } catch (_) {}
 
+        // Only a genuinely new device needs a code generated; an existing one
+        // keeps whatever it already has (COALESCE below never overwrites it).
+        // Generating unconditionally is harmless — the candidate is simply
+        // discarded by COALESCE when the row already has a code.
+        const candidateCode = await generateUniqueShortCode();
+
         const query = `
             INSERT INTO devices (
                 device_id, technician_id, display_name, os, hostname, arch, last_ip,
-                allow_unattended, mac_address, helper_version, last_seen, created_at, updated_at
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),NOW(),NOW())
+                allow_unattended, mac_address, helper_version, short_code, last_seen, created_at, updated_at
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),NOW(),NOW())
             ON CONFLICT (device_id) DO UPDATE SET
                 technician_id = COALESCE(EXCLUDED.technician_id, devices.technician_id),
                 display_name = COALESCE(EXCLUDED.display_name, devices.display_name),
@@ -74,6 +99,7 @@ class Device {
                 allow_unattended = COALESCE(EXCLUDED.allow_unattended, devices.allow_unattended),
                 mac_address = COALESCE(EXCLUDED.mac_address, devices.mac_address),
                 helper_version = COALESCE(EXCLUDED.helper_version, devices.helper_version),
+                short_code = COALESCE(devices.short_code, EXCLUDED.short_code),
                 last_seen = NOW(),
                 updated_at = NOW()
             RETURNING *
@@ -89,11 +115,19 @@ class Device {
             lastIp || null,
             typeof allowUnattended === 'boolean' ? allowUnattended : null,
             macAddress || null,
-            helperVersion ? String(helperVersion).slice(0, 32) : null
+            helperVersion ? String(helperVersion).slice(0, 32) : null,
+            candidateCode
         ];
 
         const result = await pool.query(query, values);
         return result.rows[0];
+    }
+
+    static async findByShortCode(code) {
+        const normalized = String(code || '').replace(/\D/g, '');
+        if (!normalized) return null;
+        const result = await pool.query('SELECT * FROM devices WHERE short_code = $1', [normalized]);
+        return result.rows[0] || null;
     }
 
     static async setPendingSession(deviceId, sessionId) {
