@@ -5,7 +5,8 @@ import './PageStyles.css';
 const VARIANT_LABELS = {
   win: 'Windows 10/11 (EXE)',
   win7: 'Windows 7/8/8.1 (EXE)',
-  mac: 'macOS (DMG)'
+  mac: 'macOS (DMG)',
+  xp: 'Windows XP / Legacy (ZIP)'
 };
 
 function HelperTemplatesPage() {

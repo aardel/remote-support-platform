@@ -13,15 +13,7 @@ class PackageBuilder {
         }
     }
     
-    async buildPackage(sessionId, technicianId) {
-        const packageDir = path.join(this.packagesDir, sessionId);
-        
-        // Create package directory
-        if (!fs.existsSync(packageDir)) {
-            fs.mkdirSync(packageDir, { recursive: true });
-        }
-        
-        // Create configuration file
+    buildServerConfig(sessionId, technicianId) {
         // serverBase is the full URL including any path prefix (e.g. https://backup.servicelc.com/remote)
         const serverBase = this.serverUrl.replace(/\/$/, '');
         const parsedServer = new URL(serverBase);
@@ -36,51 +28,35 @@ class PackageBuilder {
         // Keep as best-effort; the primary URL (serverBase) is the reliable path.
         const httpFallback = `http://${serverHostname}${serverPathPrefix}`;
 
-        const config = {
-            sessionId,
+        return {
+            sessionId: sessionId || '',
             server: serverBase,
             httpFallback,
             port: 5500,
-            technicianId,
+            technicianId: technicianId || null,
             createdAt: new Date().toISOString()
         };
-        
+    }
+
+    // Writes every script/bundle for a package into packageDir given a config
+    // object (shared by per-session packages and the session-less universal
+    // package — the only difference is whether config.sessionId is set).
+    writePackageFiles(packageDir, config) {
+        if (!fs.existsSync(packageDir)) {
+            fs.mkdirSync(packageDir, { recursive: true });
+        }
+
         fs.writeFileSync(
             path.join(packageDir, 'config.json'),
             this.toCrlf(JSON.stringify(config, null, 2))
         );
-        
-        // Create platform-specific scripts
+
         // Windows scripts
-        const windowsLauncher = this.createWindowsLauncher(config);
-        fs.writeFileSync(
-            path.join(packageDir, 'launch.bat'),
-            this.toCrlf(windowsLauncher)
-        );
-        
-        const windowsConnect = this.createWindowsConnect(config);
-        fs.writeFileSync(
-            path.join(packageDir, 'connect.bat'),
-            this.toCrlf(windowsConnect)
-        );
-        
-        const windowsRegister = this.createWindowsRegistration(config);
-        fs.writeFileSync(
-            path.join(packageDir, 'register-session.ps1'),
-            this.toCrlf(windowsRegister)
-        );
-
-        const windowsRegisterVbs = this.createWindowsRegistrationVbs(config);
-        fs.writeFileSync(
-            path.join(packageDir, 'register-session.vbs'),
-            this.toCrlf(windowsRegisterVbs)
-        );
-
-        const windowsNetCheckVbs = this.createWindowsNetworkCheckVbs(config);
-        fs.writeFileSync(
-            path.join(packageDir, 'netcheck.vbs'),
-            this.toCrlf(windowsNetCheckVbs)
-        );
+        fs.writeFileSync(path.join(packageDir, 'launch.bat'), this.toCrlf(this.createWindowsLauncher(config)));
+        fs.writeFileSync(path.join(packageDir, 'connect.bat'), this.toCrlf(this.createWindowsConnect(config)));
+        fs.writeFileSync(path.join(packageDir, 'register-session.ps1'), this.toCrlf(this.createWindowsRegistration(config)));
+        fs.writeFileSync(path.join(packageDir, 'register-session.vbs'), this.toCrlf(this.createWindowsRegistrationVbs(config)));
+        fs.writeFileSync(path.join(packageDir, 'netcheck.vbs'), this.toCrlf(this.createWindowsNetworkCheckVbs(config)));
 
         // Optional bundles (portable apps) for best compatibility, especially XP.
         // Drop files into:
@@ -91,53 +67,80 @@ class PackageBuilder {
         this.copyOptionalBundle(path.join(this.packagesDir, 'bundles', 'windows', 'tightvnc'), path.join(packageDir, 'tightvnc'));
         this.copyOptionalBundle(path.join(this.packagesDir, 'bundles', 'windows', 'tightvnc64'), path.join(packageDir, 'tightvnc64'));
         this.copyOptionalBundle(path.join(this.packagesDir, 'bundles', 'windows', 'mypal'), path.join(packageDir, 'mypal'));
-        
+
         // macOS/Linux scripts
-        const unixLauncher = this.createUnixLauncher(config);
-        fs.writeFileSync(
-            path.join(packageDir, 'launch.sh'),
-            unixLauncher
-        );
-        // Make executable
+        fs.writeFileSync(path.join(packageDir, 'launch.sh'), this.createUnixLauncher(config));
         fs.chmodSync(path.join(packageDir, 'launch.sh'), 0o755);
-        
-        const unixConnect = this.createUnixConnect(config);
-        fs.writeFileSync(
-            path.join(packageDir, 'connect.sh'),
-            unixConnect
-        );
+
+        fs.writeFileSync(path.join(packageDir, 'connect.sh'), this.createUnixConnect(config));
         fs.chmodSync(path.join(packageDir, 'connect.sh'), 0o755);
-        
-        const unixRegister = this.createUnixRegistration(config);
-        fs.writeFileSync(
-            path.join(packageDir, 'register-session.sh'),
-            unixRegister
-        );
+
+        fs.writeFileSync(path.join(packageDir, 'register-session.sh'), this.createUnixRegistration(config));
         fs.chmodSync(path.join(packageDir, 'register-session.sh'), 0o755);
-        
+
         // Universal launcher (detects OS)
-        const universalLauncher = this.createUniversalLauncher(config);
-        fs.writeFileSync(
-            path.join(packageDir, 'start-support'),
-            universalLauncher
-        );
+        fs.writeFileSync(path.join(packageDir, 'start-support'), this.createUniversalLauncher(config));
         fs.chmodSync(path.join(packageDir, 'start-support'), 0o755);
-        
-        // Create README
-        const readme = this.createReadme(config);
-        fs.writeFileSync(
-            path.join(packageDir, 'README.txt'),
-            this.toCrlf(readme)
-        );
-        
+
+        // README
+        fs.writeFileSync(path.join(packageDir, 'README.txt'), this.toCrlf(this.createReadme(config)));
+    }
+
+    async buildPackage(sessionId, technicianId) {
+        const packageDir = path.join(this.packagesDir, sessionId);
+        const config = this.buildServerConfig(sessionId, technicianId);
+        this.writePackageFiles(packageDir, config);
+
         // Create ZIP package
         const zipPath = await this.createZipPackage(packageDir, sessionId, {});
-        
+
         return {
             packageId: sessionId,
             file: zipPath,
             config
         };
+    }
+
+    // Session-independent Windows package (covers XP and any other legacy
+    // Windows that can't run the Electron helper). No session ID baked in —
+    // register-session.ps1/vbs self-register the device, display its short
+    // code, and poll for a technician to assign a session, mirroring the
+    // Electron helper's "install once, connect by code" flow. Built once and
+    // cached to disk since it bundles the (large) TightVNC/MyPal binaries;
+    // call with forceRebuild to regenerate after script-template changes.
+    async buildUniversalWindowsPackage({ forceRebuild = false } = {}) {
+        const zipPath = path.join(this.packagesDir, 'support-template-xp.zip');
+        if (!forceRebuild && fs.existsSync(zipPath)) {
+            return zipPath;
+        }
+
+        const packageDir = path.join(this.packagesDir, '_template-xp');
+        const config = this.buildServerConfig('', null);
+        this.writePackageFiles(packageDir, config);
+
+        await new Promise((resolve, reject) => {
+            if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
+            const output = fs.createWriteStream(zipPath);
+            const archive = archiver('zip', { zlib: { level: 9 } });
+            output.on('close', resolve);
+            archive.on('error', reject);
+            archive.pipe(output);
+
+            const includes = this.getZipIncludes('windows-xp');
+            for (const entry of includes) {
+                const fullPath = path.join(packageDir, entry);
+                if (!fs.existsSync(fullPath)) continue;
+                const stat = fs.statSync(fullPath);
+                if (stat.isDirectory()) {
+                    archive.directory(fullPath, entry);
+                } else {
+                    archive.file(fullPath, { name: entry });
+                }
+            }
+            archive.finalize();
+        });
+
+        return zipPath;
     }
 
     toCrlf(s) {
@@ -160,10 +163,11 @@ class PackageBuilder {
     // Windows launcher (compatible with Windows XP and later)
     createWindowsLauncher(config) {
         const serverHost = new URL(config.server).hostname;
+        const sessionBanner = config.sessionId ? config.sessionId : '(will be assigned - see your support code below)';
         return `@echo off
 REM Support Helper Launcher for Windows
 REM Compatible with Windows XP, Vista, 7, 8, 10, 11
-REM Launcher version: 2.2 (XP-safe, crash-protected, verbose logging)
+REM Launcher version: 2.3 (XP-safe, crash-protected, verbose logging, universal-package aware)
 
 REM --- Crash protection: call :main so parse errors inside cannot kill the window ---
 call :main
@@ -174,7 +178,7 @@ cd /d "%~dp0"
 
 echo ========================================
 echo   Remote Support Helper
-echo   Session: ${config.sessionId}
+echo   Session: ${sessionBanner}
 echo ========================================
 echo.
 
@@ -278,6 +282,17 @@ echo [INFO] The session may still work, but dashboard status will not update.
 :reg_done
 echo.
 
+REM --- STEP 3.5: Read the resolved session ID ---
+REM Universal packages have no session baked in at build time; the
+REM registration script (PS1/VBS) waits for a technician to assign one via
+REM the device's support code, then writes it here. Per-session packages
+REM (built with a known session ID) write the same file for consistency, so
+REM this always reflects the ID actually in use.
+set RESOLVED_SESSION=${config.sessionId}
+if exist "session_id.txt" (
+    set /p RESOLVED_SESSION=<session_id.txt
+)
+
 REM --- STEP 4: Connect to server ---
 echo [STEP 4] Connecting to support server...
 set CALLED_FROM_LAUNCHER=1
@@ -293,16 +308,16 @@ echo.
 
 echo ========================================
 echo   Support session is ready!
-echo   Session ID: ${config.sessionId}
+echo   Session ID: %RESOLVED_SESSION%
 echo   Waiting for technician to connect...
 echo ========================================
 echo.
 
 REM --- STEP 5: Open chat window ---
 echo [STEP 5] Opening chat window...
-set CHAT_URL=${config.server}/customer/xp-chat.html?session=${config.sessionId}
+set CHAT_URL=${config.server}/customer/xp-chat.html?session=%RESOLVED_SESSION%
 ver | find "5.1." >nul
-if not errorlevel 1 set CHAT_URL=${config.httpFallback}/customer/xp-chat.html?session=${config.sessionId}
+if not errorlevel 1 set CHAT_URL=${config.httpFallback}/customer/xp-chat.html?session=%RESOLVED_SESSION%
 echo [INFO] Chat URL: %CHAT_URL%
 start "" "%CHAT_URL%"
 echo [OK] Chat window opened in browser.
@@ -485,22 +500,92 @@ function Http-PostJson([string]$url, [string]$json) {
     return $wc.UploadString($url, 'POST', $json)
 }
 
-# Check for pending session
+function Format-Code([string]$code) {
+    $out = ""
+    for ($i = 0; $i -lt $code.Length; $i++) {
+        $out += $code[$i]
+        if ((($i + 1) % 3) -eq 0 -and ($i + 1) -ne $code.Length) { $out += " " }
+    }
+    return $out
+}
+
+# Register this device (upsert; safe to call every run). Creates the device
+# row on first run and returns a short, human-readable code (like AnyDesk's
+# ID) the user can read to a technician. Also required for the
+# /api/devices/pending polling below to find this device at all.
+$shortCode = $null
 try {
-    $pendingJson = Http-Get "$ServerBase/api/devices/pending/$deviceId"
-    if ($pendingJson -match '\"pending\"\\s*:\\s*true' -and $pendingJson -match '\"sessionId\"\\s*:\\s*\"([^\"]+)\"') {
-        $SessionId = $matches[1]
+    $regBody = "{""deviceId"":""$(Escape-Json $deviceId)"",""os"":""$(Escape-Json $clientInfo.os)"",""hostname"":""$(Escape-Json $clientInfo.hostname)"",""arch"":""$(Escape-Json $clientInfo.arch)"",""allowUnattended"":true,""version"":""xp-legacy""}"
+    $regResp = Http-PostJson "$ServerBase/api/devices/register" $regBody
+    if ($regResp -match '\"short_code\"\\s*:\\s*\"([^\"]+)\"') {
+        $shortCode = $matches[1]
     }
 } catch {
-    # Ignore pending lookup errors
+    Write-Host "Device registration failed: $_" -ForegroundColor Yellow
 }
+
+if ($SessionId -and $SessionId.Length -gt 0) {
+    # Per-session package (technician already created this session at build
+    # time). Check once for a pending override, else use the baked-in ID.
+    try {
+        $pendingJson = Http-Get "$ServerBase/api/devices/pending/$deviceId"
+        if ($pendingJson -match '\"pending\"\\s*:\\s*true' -and $pendingJson -match '\"sessionId\"\\s*:\\s*\"([^\"]+)\"') {
+            $SessionId = $matches[1]
+        }
+    } catch {
+        # Ignore pending lookup errors
+    }
+} else {
+    # Universal package: no session baked in. Show the code and wait for a
+    # technician to assign a session to this device, polling until it appears.
+    if (-not $shortCode) {
+        Write-Host "No device code available and no session assigned. Cannot continue." -ForegroundColor Red
+        exit 1
+    }
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ("  YOUR SUPPORT CODE: " + (Format-Code $shortCode)) -ForegroundColor Cyan
+    Write-Host "  Give this code to your technician." -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+
+    $maxWaitSeconds = 900
+    $waited = 0
+    $found = $false
+    while ($waited -lt $maxWaitSeconds) {
+        try {
+            $pendingJson = Http-Get "$ServerBase/api/devices/pending/$deviceId"
+            if ($pendingJson -match '\"pending\"\\s*:\\s*true' -and $pendingJson -match '\"sessionId\"\\s*:\\s*\"([^\"]+)\"') {
+                $SessionId = $matches[1]
+                $found = $true
+                break
+            }
+        } catch {
+            # Ignore poll errors, keep retrying until timeout
+        }
+        Write-Host ("Waiting for technician... (your code: " + (Format-Code $shortCode) + ")")
+        Start-Sleep -Seconds 5
+        $waited += 5
+    }
+
+    if (-not $found) {
+        Write-Host "Timed out waiting for a technician to connect." -ForegroundColor Red
+        Write-Host ("Your code was: " + (Format-Code $shortCode)) -ForegroundColor Red
+        Write-Host "Run launch.bat again to keep waiting." -ForegroundColor Red
+        exit 1
+    }
+}
+
+# Let launch.bat know which session ended up being used (needed for the chat
+# window URL, since universal packages have no session baked in at build time).
+try { $SessionId | Out-File -FilePath "session_id.txt" -Encoding ascii -NoNewline } catch {}
 
 $body = "{""sessionId"":""$(Escape-Json $SessionId)"",""clientInfo"":{""os"":""$(Escape-Json $clientInfo.os)"",""arch"":""$(Escape-Json $clientInfo.arch)"",""hostname"":""$(Escape-Json $clientInfo.hostname)"",""username"":""$(Escape-Json $clientInfo.username)""},""vncPort"":5900,""status"":""connected"",""deviceId"":""$(Escape-Json $deviceId)"",""deviceName"":""$(Escape-Json $env:COMPUTERNAME)""}"
 
 try {
     $uri = "$ServerBase/api/sessions/register"
     $response = Http-PostJson $uri $body
-    
+
     Write-Host "Session registered successfully!" -ForegroundColor Green
     Write-Host "Session ID: $SessionId" -ForegroundColor Cyan
 } catch {
@@ -522,6 +607,12 @@ Dim SessionId, ServerBase, FallbackBase
 SessionId = "${config.sessionId}"
 ServerBase = "${serverBase}"
 FallbackBase = "${fallbackBase}"
+
+' Universal (no session baked in at build time) packages wait here for a
+' technician to assign a session via the device's short code. Per-session
+' packages (SessionId already set) skip straight to using it, same as before.
+Const POLL_INTERVAL_MS = 5000
+Const MAX_WAIT_SECONDS = 900 ' 15 minutes
 
 WScript.Echo "[VBS] Starting registration script..."
 WScript.Echo "[VBS] SessionId: " & SessionId
@@ -599,27 +690,6 @@ Else
 End If
 On Error GoTo 0
 
-' Check pending session
-WScript.Echo "[VBS] Checking for pending session (base: " & baseUrl & ")..."
-On Error Resume Next
-Dim pendingUrl: pendingUrl = baseUrl & "/api/devices/pending/" & deviceId
-WScript.Echo "[VBS] Pending URL: " & pendingUrl
-Dim pendingJson: pendingJson = HttpGet(pendingUrl)
-If Err.Number <> 0 Then
-  WScript.Echo "[VBS] ERROR: HttpGet failed: " & Err.Description & " (Error " & Err.Number & ")"
-  Err.Clear
-Else
-  WScript.Echo "[VBS] Pending response received (length: " & Len(pendingJson) & ")"
-End If
-If InStr(1, pendingJson, """pending"":true", vbTextCompare) > 0 Then
-  Dim psid: psid = JsonGetString(pendingJson, "sessionId")
-  If Len(psid) > 0 Then
-    SessionId = psid
-    WScript.Echo "[VBS] Found pending session ID: " & SessionId
-  End If
-End If
-On Error GoTo 0
-
 Dim osName, osVer, arch, host, user
 osName = "Windows"
 osVer = ""
@@ -632,6 +702,84 @@ If Err.Number <> 0 Then
   WScript.Echo "[VBS] ERROR: Failed to get system info: " & Err.Description
   Err.Clear
 End If
+On Error GoTo 0
+
+' Register this device with the server. This is always safe to call (it's an
+' upsert): it creates the device row on first run and returns a short,
+' human-readable code (like AnyDesk's ID) the user can read to a technician.
+' It also makes this device eligible for /api/devices/pending polling below.
+WScript.Echo "[VBS] Registering device..."
+Dim regPayload, regResp, shortCode
+regPayload = "{""deviceId"":""" & EscapeJson(deviceId) & """,""os"":""" & EscapeJson(osName) & """,""hostname"":""" & EscapeJson(host) & """,""arch"":""" & EscapeJson(arch) & """,""allowUnattended"":true,""version"":""xp-legacy""}"
+regResp = HttpPostRaw(baseUrl & "/api/devices/register", regPayload)
+shortCode = JsonGetString(regResp, "short_code")
+If Len(shortCode) > 0 Then
+  WScript.Echo "[VBS] Device short code: " & FormatCode(shortCode)
+Else
+  WScript.Echo "[VBS] WARNING: Device registration did not return a short code."
+End If
+
+If Len(SessionId) > 0 Then
+  ' Per-session package (technician already created this session at build
+  ' time). Check once for a pending override, else use the baked-in ID.
+  WScript.Echo "[VBS] Checking for pending session (base: " & baseUrl & ")..."
+  On Error Resume Next
+  Dim pendingJson: pendingJson = HttpGet(baseUrl & "/api/devices/pending/" & deviceId)
+  If InStr(1, pendingJson, """pending"":true", vbTextCompare) > 0 Then
+    Dim psid: psid = JsonGetString(pendingJson, "sessionId")
+    If Len(psid) > 0 Then
+      SessionId = psid
+      WScript.Echo "[VBS] Found pending session ID: " & SessionId
+    End If
+  End If
+  On Error GoTo 0
+Else
+  ' Universal package: no session baked in. Show the code and wait for a
+  ' technician to assign a session to this device (dashboard "Connect by
+  ' code"), polling until it appears.
+  If Len(shortCode) = 0 Then
+    WScript.Echo "[ERROR] No device code available and no session assigned. Cannot continue."
+    WScript.Quit 1
+  End If
+  WScript.Echo ""
+  WScript.Echo "========================================"
+  WScript.Echo "  YOUR SUPPORT CODE: " & FormatCode(shortCode)
+  WScript.Echo "  Give this code to your technician."
+  WScript.Echo "========================================"
+  WScript.Echo ""
+
+  Dim waited, found
+  waited = 0
+  found = False
+  Do While waited < MAX_WAIT_SECONDS
+    On Error Resume Next
+    Dim pj: pj = HttpGet(baseUrl & "/api/devices/pending/" & deviceId)
+    If InStr(1, pj, """pending"":true", vbTextCompare) > 0 Then
+      Dim sid: sid = JsonGetString(pj, "sessionId")
+      If Len(sid) > 0 Then
+        SessionId = sid
+        found = True
+      End If
+    End If
+    On Error GoTo 0
+    If found Then Exit Do
+    WScript.Echo "[INFO] Waiting for technician... (your code: " & FormatCode(shortCode) & ")"
+    WScript.Sleep POLL_INTERVAL_MS
+    waited = waited + (POLL_INTERVAL_MS \\ 1000)
+  Loop
+
+  If Not found Then
+    WScript.Echo "[ERROR] Timed out waiting for a technician to connect."
+    WScript.Echo "[ERROR] Your code was: " & FormatCode(shortCode)
+    WScript.Echo "[ERROR] Run launch.bat again to keep waiting."
+    WScript.Quit 1
+  End If
+End If
+
+' Let launch.bat know which session ended up being used (needed for the chat
+' window URL, since universal packages have no session baked in at build time).
+On Error Resume Next
+WriteAllText "session_id.txt", SessionId
 On Error GoTo 0
 
 Dim payload
@@ -751,6 +899,38 @@ Function HttpPostJson(url, json)
     End If
   End If
   On Error GoTo 0
+End Function
+
+Function HttpPostRaw(url, json)
+  ' Like HttpPostJson but returns the raw response body (for reading fields
+  ' like short_code out of the JSON) instead of a boolean.
+  On Error Resume Next
+  HttpPostRaw = ""
+  Dim x: Set x = CreateHTTP()
+  If x Is Nothing Then
+    Exit Function
+  End If
+  Err.Clear
+  x.Open "POST", url, False
+  x.setRequestHeader "Content-Type", "application/json"
+  x.Send json
+  If Err.Number <> 0 Then
+    WScript.Echo "[VBS] ERROR: HTTP POST failed: " & Err.Description & " (Error " & Err.Number & ")"
+  Else
+    HttpPostRaw = x.responseText
+  End If
+  On Error GoTo 0
+End Function
+
+Function FormatCode(raw)
+  ' "123456789" -> "123 456 789"
+  Dim i, out
+  out = ""
+  For i = 1 To Len(raw)
+    out = out & Mid(raw, i, 1)
+    If (i Mod 3 = 0) And (i <> Len(raw)) Then out = out & " "
+  Next
+  FormatCode = out
 End Function
 
 Function JsonGetString(json, key)
@@ -1046,24 +1226,30 @@ fi
     }
     
     createReadme(config) {
-        const supportLink = `${String(config.server).replace(/\/$/, '')}/support/${config.sessionId}`;
+        const isUniversal = !config.sessionId;
+        const sessionLine = isUniversal
+            ? 'Session ID: (assigned automatically on first run - see below)'
+            : `Session ID: ${config.sessionId}`;
+        const supportLinkLine = isUniversal
+            ? ''
+            : `Support Link: ${String(config.server).replace(/\/$/, '')}/support/${config.sessionId}\n`;
         return `Remote Support Helper
 ====================
 
-Session ID: ${config.sessionId}
-Support Link: ${supportLink}
-
+${sessionLine}
+${supportLinkLine}
 WINDOWS XP QUICK START (recommended for XP):
   1. Extract this ZIP to your Desktop (or any folder).
   2. Double-click "launch.bat" (shown as "launch" if file extensions are hidden).
   3. If Windows Firewall asks, click "Unblock" / "Allow".
-  4. Keep the black window open until your technician finishes.
-  5. If the technician asks you to reconnect, double-click "connect.bat".
+  4. The window will show a support code (9 digits) - read it to your technician.
+  5. Keep the black window open until your technician finishes.
+  6. If the technician asks you to reconnect, double-click "connect.bat".
 
   Notes for XP:
   - Ignore the *.sh files (they are for macOS/Linux).
-  - If your browser cannot open the support link, run: mypal\\mypal.exe (if included)
-    and paste the Support Link above into MyPal.
+  - If your browser cannot open automatically, run: mypal\\mypal.exe (if included)
+    ${isUniversal ? 'and it will open once a technician has connected.' : 'and paste the Support Link above into MyPal.'}
 
 PLATFORM NOTES:
 
@@ -1096,7 +1282,7 @@ Universal (Auto-detect):
 IMPORTANT:
 - Keep the terminal/window open while receiving support
 - Do not close until the technician is done
-- Session ID: ${config.sessionId}
+- ${sessionLine}
 
 For support, contact your technician.
 `;

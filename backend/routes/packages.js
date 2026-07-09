@@ -27,11 +27,32 @@ const UNIVERSAL_VARIANTS = {
     win7: { file: 'support-template-win7.exe', filename: 'RemoteSupportHelper-Win7-Setup.exe', contentType: 'application/x-msdownload' },
     mac: { file: 'support-template.dmg', filename: 'RemoteSupportHelper.dmg', contentType: 'application/x-apple-diskimage' }
 };
+// 'xp' isn't a pre-built CI artifact like the others — it's plain scripts +
+// bundled TightVNC/MyPal, generated locally by PackageBuilder and cached to
+// disk, so it's handled separately below instead of via UNIVERSAL_VARIANTS.
+const XP_FILE = 'support-template-xp.zip';
+const XP_FILENAME = 'RemoteSupportHelper-XP-Legacy.zip';
 
-router.get('/universal/:variant', (req, res) => {
-    const variant = UNIVERSAL_VARIANTS[(req.params.variant || '').toLowerCase()];
+router.get('/universal/:variant', async (req, res) => {
+    const key = (req.params.variant || '').toLowerCase();
+
+    if (key === 'xp') {
+        try {
+            const packageBuilder = new PackageBuilder(process.env.SERVER_URL || process.env.SUPPORT_URL || '');
+            const forceRebuild = (req.query.refresh || '').toString().toLowerCase() === '1';
+            const filePath = await packageBuilder.buildUniversalWindowsPackage({ forceRebuild });
+            res.setHeader('Content-Type', 'application/zip');
+            res.setHeader('Content-Disposition', `attachment; filename="${XP_FILENAME}"`);
+            return res.sendFile(filePath);
+        } catch (error) {
+            console.error('Error building universal XP package:', error);
+            return res.status(500).json({ error: error.message });
+        }
+    }
+
+    const variant = UNIVERSAL_VARIANTS[key];
     if (!variant) {
-        return res.status(400).json({ error: `Unknown variant. Use one of: ${Object.keys(UNIVERSAL_VARIANTS).join(', ')}` });
+        return res.status(400).json({ error: `Unknown variant. Use one of: ${Object.keys(UNIVERSAL_VARIANTS).join(', ')}, xp` });
     }
     const packagesDir = path.join(__dirname, '../../packages');
     const filePath = path.join(packagesDir, variant.file);
@@ -43,7 +64,7 @@ router.get('/universal/:variant', (req, res) => {
     res.sendFile(filePath);
 });
 
-router.get('/universal', (req, res) => {
+router.get('/universal', async (req, res) => {
     const packagesDir = path.join(__dirname, '../../packages');
     const versionPath = path.join(packagesDir, 'support-template.version');
     let version = null;
@@ -60,6 +81,24 @@ router.get('/universal', (req, res) => {
             downloadUrl: `/api/packages/universal/${key}`
         };
     });
+
+    // Build the XP package on first listing so it shows as available right
+    // away — it's plain scripts + already-local bundles, so this is cheap
+    // (no native compile, unlike the Electron builds).
+    try {
+        const packageBuilder = new PackageBuilder(process.env.SERVER_URL || process.env.SUPPORT_URL || '');
+        await packageBuilder.buildUniversalWindowsPackage({ forceRebuild: false });
+    } catch (_) {}
+    const xpPath = path.join(packagesDir, XP_FILE);
+    const xpAvailable = fs.existsSync(xpPath);
+    variants.push({
+        variant: 'xp',
+        available: xpAvailable,
+        size: xpAvailable ? fs.statSync(xpPath).size : null,
+        version: null,
+        downloadUrl: '/api/packages/universal/xp'
+    });
+
     res.json({ variants });
 });
 
