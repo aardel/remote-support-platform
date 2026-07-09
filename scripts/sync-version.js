@@ -10,6 +10,7 @@ const path = require('path');
 const rootDir = path.join(__dirname, '..');
 const rootPkgPath = path.join(rootDir, 'package.json');
 const helperPkgPath = path.join(rootDir, 'helper', 'package.json');
+const helperWin7PkgPath = path.join(rootDir, 'helper', 'package.win7.json');
 const frontendPkgPath = path.join(rootDir, 'frontend', 'package.json');
 
 const rootPkg = JSON.parse(fs.readFileSync(rootPkgPath, 'utf8'));
@@ -27,5 +28,6 @@ function writeVersion(pkgPath, label) {
 }
 
 writeVersion(helperPkgPath, 'helper');
+if (fs.existsSync(helperWin7PkgPath)) writeVersion(helperWin7PkgPath, 'helper (win7)');
 writeVersion(frontendPkgPath, 'frontend');
 console.log('Version synced. Root is canonical at', newVersion);

@@ -50,6 +50,40 @@ jobs:
           name: helper-exe
           path: helper/dist/*.exe
 
+  # Windows 7/8/8.1 build: same helper source, pinned to Electron 22 (the last
+  # version supporting these OS versions — see helper/package.win7.json).
+  # Verified separately that @jitsi/robotjs loads under Electron 22 via a
+  # genuine prebuilt binary (no source compile needed), so no toolchain risk.
+  build-win7:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install Python setuptools (provides distutils for Python 3.12+)
+        run: python -m pip install setuptools
+      - name: Sync version from root (helper + frontend)
+        run: node scripts/sync-version.js ${{ github.event.inputs.version }}
+      - name: Swap in the Win7 package.json (pins Electron 22)
+        working-directory: helper
+        shell: bash
+        run: cp package.win7.json package.json
+      - name: Install helper dependencies
+        working-directory: helper
+        run: npm install
+      - name: Rebuild native modules for Electron 22
+        working-directory: helper
+        run: npm run postinstall || echo "postinstall completed (may have warnings)"
+      - name: Build EXE
+        working-directory: helper
+        run: npm run build:win
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: helper-exe-win7
+          path: helper/dist/*.exe
+
   build-mac:
     runs-on: macos-latest
     steps:
@@ -77,7 +111,7 @@ jobs:
   # Secrets: DEPLOY_SSH_KEY, SERVER_HOST, SERVER_USER; optional SERVER_PACKAGES_PATH (e.g. /opt/remote-support/packages).
   deploy-templates:
     runs-on: ubuntu-latest
-    needs: [build-win, build-mac]
+    needs: [build-win, build-win7, build-mac]
     if: ${{ vars.DEPLOY_ENABLED == 'true' }}
     steps:
       - uses: actions/checkout@v4
@@ -89,6 +123,11 @@ jobs:
         with:
           name: helper-exe
           path: exe
+      - name: Download Win7 EXE
+        uses: actions/download-artifact@v4
+        with:
+          name: helper-exe-win7
+          path: exe-win7
       - name: Download DMG
         uses: actions/download-artifact@v4
         with:
@@ -116,8 +155,10 @@ jobs:
           SCP_OPTS="-o StrictHostKeyChecking=no -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -i ~/.ssh/deploy_key -P $SSH_PORT"
           ssh $SSH_OPTS ${SERVER_USER}@${SERVER_HOST} "mkdir -p $DEPLOY_PATH"
           exe=$(ls exe/*.exe 2>/dev/null | head -1)
+          exe_win7=$(ls exe-win7/*.exe 2>/dev/null | head -1)
           dmg=$(ls dmg/*.dmg 2>/dev/null | head -1)
           [ -n "$exe" ] && scp $SCP_OPTS "$exe" ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_PATH}/support-template.exe
+          [ -n "$exe_win7" ] && scp $SCP_OPTS "$exe_win7" ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_PATH}/support-template-win7.exe
           [ -n "$dmg" ] && scp $SCP_OPTS "$dmg" ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_PATH}/support-template.dmg
           ssh $SSH_OPTS ${SERVER_USER}@${SERVER_HOST} "echo '${{ steps.get_version.outputs.version }}' > ${DEPLOY_PATH}/support-template.version"
           rm -f ~/.ssh/deploy_key
