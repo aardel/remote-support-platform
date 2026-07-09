@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from '../api/axios';
 import './PageStyles.css';
 
+const BASE = '/remote';
+
 const VARIANT_LABELS = {
   win: 'Windows 10/11 (EXE)',
   win7: 'Windows 7/8/8.1 (EXE)',
@@ -52,7 +54,7 @@ function HelperTemplatesPage() {
   };
 
   const copyLink = (variant) => {
-    const url = `${window.location.origin}/api/packages/universal/${variant}`;
+    const url = `${window.location.origin}${BASE}/api/packages/universal/${variant}`;
     navigator.clipboard.writeText(url);
     setCopiedVariant(variant);
     setTimeout(() => setCopiedVariant(null), 1500);
@@ -152,13 +154,13 @@ function HelperTemplatesPage() {
                   {v.version && <span>Version: v{v.version}</span>}
                 </div>
                 <div className="card-link">
-                  <input className="link-input" readOnly value={`${window.location.origin}${v.downloadUrl}`} onFocus={e => e.target.select()} />
+                  <input className="link-input" readOnly value={`${window.location.origin}${BASE}${v.downloadUrl}`} onFocus={e => e.target.select()} />
                 </div>
                 <div className="card-actions">
                   <button className="btn-sm btn-secondary" onClick={() => copyLink(v.variant)}>
                     {copiedVariant === v.variant ? 'Copied!' : 'Copy link'}
                   </button>
-                  <a className="btn-sm btn-primary" href={v.downloadUrl} style={{ textDecoration: 'none' }}>Download</a>
+                  <a className="btn-sm btn-primary" href={`${BASE}${v.downloadUrl}`} style={{ textDecoration: 'none' }}>Download</a>
                 </div>
               </>
             )}
