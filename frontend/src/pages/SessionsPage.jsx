@@ -129,7 +129,7 @@ function SessionsPage() {
             {loading ? (
                 <div className="page-empty">Loading...</div>
             ) : filtered.length === 0 ? (
-                <div className="page-empty">{search ? 'No sessions match.' : 'No active sessions. Generate a support package to start one.'}</div>
+                <div className="page-empty">{search ? 'No sessions match.' : 'No active sessions. Share a download link or use Connect by Code on the Devices page to start one.'}</div>
             ) : (
                 <div className="page-cards">
                     {filtered.map(s => {

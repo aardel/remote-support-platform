@@ -153,7 +153,7 @@ function ClassicDashboard({ user, onLogout }) {
                         </select>
                     </div>
                     {sessions.length === 0 ? (
-                        <div className="empty-state"><p>No active sessions</p><p>Generate a package to start a support session</p></div>
+                        <div className="empty-state"><p>No active sessions</p><p>Share a download link or use Connect by Code to start a support session</p></div>
                     ) : (
                         <div className="sessions-grid">
                             {sessions

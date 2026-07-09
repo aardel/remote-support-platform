@@ -18,7 +18,7 @@ const NAV_ITEMS = [
     { to: '/dashboard/classic', icon: '📋', label: 'Classic Dashboard' },
     { to: '/preferences', icon: '⚙', label: 'Preferences' },
 ];
-export default function Layout({ user, onLogout, onGenerateClick }) {
+export default function Layout({ user, onLogout }) {
     // Sidebar states
     const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -212,6 +212,9 @@ export default function Layout({ user, onLogout, onGenerateClick }) {
                         >
                             <span className="sidebar-link-icon">{item.icon}</span>
                             <span className="sidebar-link-label">{item.label}</span>
+                            {item.to === '/helper-templates' && newTemplates && (
+                                <span className="sidebar-notify-dot" title="New helper templates available" />
+                            )}
                         </NavLink>
                     ))}
                 </div>
@@ -234,17 +237,6 @@ export default function Layout({ user, onLogout, onGenerateClick }) {
                             <span className="header-brand">Remote Support</span>
                         </>
                     )}
-                </div>
-
-                <div className="header-center">
-                    <div className="header-generate-wrap">
-                        <button className="header-generate-btn" onClick={onGenerateClick}>
-                            + Generate Support Package
-                        </button>
-                        {newTemplates && (
-                            <span className="header-notify-dot" title="New helper templates available" />
-                        )}
-                    </div>
                 </div>
 
                 <div className="header-right">

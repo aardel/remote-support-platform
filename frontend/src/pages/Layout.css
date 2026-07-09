@@ -62,22 +62,6 @@
     width: auto;
 }
 
-.header-generate-btn {
-    background-color: #3b82f6;
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-weight: 500;
-    font-size: 0.875rem;
-    cursor: pointer;
-    transition: background-color 0.2s;
-}
-
-.header-generate-btn:hover {
-    background-color: #2563eb;
-}
-
 .header-user {
     font-weight: 500;
     color: #334155;
@@ -155,6 +139,7 @@
 .sidebar-link {
     display: flex;
     align-items: center;
+    position: relative;
     padding: 10px 16px;
     color: #94a3b8;
     text-decoration: none;
@@ -162,6 +147,15 @@
     border-radius: 8px;
     font-weight: 500;
     font-size: 0.95rem;
+}
+
+.sidebar-notify-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #ef4444;
+    margin-left: 8px;
+    flex-shrink: 0;
 }
 
 .sidebar-link:hover {

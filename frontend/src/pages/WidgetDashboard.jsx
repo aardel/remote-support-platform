@@ -3,7 +3,6 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from 
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import axios from '../api/axios';
-import GeneratePackageWidget from '../components/widgets/GeneratePackageWidget';
 import ActiveSessionsWidget from '../components/widgets/ActiveSessionsWidget';
 import RegisteredDevicesWidget from '../components/widgets/RegisteredDevicesWidget';
 import HelperTemplatesWidget from '../components/widgets/HelperTemplatesWidget';
@@ -14,7 +13,6 @@ import ClassicDashboardWidget from '../components/widgets/ClassicDashboardWidget
 import './WidgetDashboard.css';
 
 const WIDGET_TYPES = {
-  generate:   { label: 'Generate Package',   component: GeneratePackageWidget, defaultSize: 'medium' },
   sessions:   { label: 'Active Sessions',    component: ActiveSessionsWidget,  defaultSize: 'medium', linkTo: '/sessions' },
   activity:   { label: 'Recent Activity',    component: RecentActivityWidget,  defaultSize: 'medium', linkTo: '/sessions' },
   devices:    { label: 'Registered Devices',  component: RegisteredDevicesWidget, defaultSize: 'medium', linkTo: '/devices' },
@@ -25,7 +23,6 @@ const WIDGET_TYPES = {
 };
 
 const DEFAULT_LAYOUT = [
-  { id: 'generate', type: 'generate', size: 'medium', visible: true },
   { id: 'sessions', type: 'sessions', size: 'medium', visible: true },
   { id: 'activity', type: 'activity', size: 'medium', visible: true },
   { id: 'devices', type: 'devices', size: 'medium', visible: true },
@@ -54,7 +51,6 @@ function WidgetDashboard() {
   const [layout, setLayout] = useState(DEFAULT_LAYOUT);
   const [editing, setEditing] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [generateOpen, setGenerateOpen] = useState(false);
   const [whatsNew, setWhatsNew] = useState(null);
   const [whatsNewVisible, setWhatsNewVisible] = useState(false);
 
@@ -115,12 +111,6 @@ function WidgetDashboard() {
   };
 
   const visibleWidgets = layout.filter(w => w.visible);
-
-  // Generate modal trigger (passed to GeneratePackageWidget; also available via header)
-  const openGenerate = () => {
-    // Dispatch a custom event that App.jsx listens for
-    window.dispatchEvent(new CustomEvent('open-generate-modal'));
-  };
 
   if (!loaded) return <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>Loading dashboard...</div>;
 
@@ -186,7 +176,6 @@ function WidgetDashboard() {
               const WidgetComp = widgetDef?.component;
               if (!WidgetComp) return null;
               const props = { size: w.size, linkTo: widgetDef.linkTo };
-              if (w.type === 'generate') props.onGenerate = openGenerate;
               return editing ? (
                 <SortableWidget key={w.id} id={w.id}>
                   <WidgetComp {...props} />

@@ -16,7 +16,6 @@ import OpsPage from './pages/OpsPage';
 import StatisticsPage from './pages/StatisticsPage';
 import HelperTemplatesPage from './pages/HelperTemplatesPage';
 import PreferencesPage from './pages/PreferencesPage';
-import GenerateModal from './components/GenerateModal';
 
 const BASE = '/remote';
 
@@ -35,14 +34,6 @@ export default function App() {
     const [isAuthenticated, setAuth] = useState(false);
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [modalOpen, setModalOpen] = useState(false);
-
-    // Listen for custom event to open the generate modal from anywhere
-    useEffect(() => {
-        const handler = () => setModalOpen(true);
-        window.addEventListener('open-generate-modal', handler);
-        return () => window.removeEventListener('open-generate-modal', handler);
-    }, []);
 
     // Check authentication on mount
     useEffect(() => {
@@ -78,8 +69,6 @@ export default function App() {
 
     return (
         <BrowserRouter basename="/remote">
-            <GenerateModal open={modalOpen} onClose={() => setModalOpen(false)} />
-
             <Routes>
                 {/* Auth pages */}
                 <Route
@@ -101,7 +90,7 @@ export default function App() {
                 <Route
                     element={
                         isAuthenticated
-                            ? <Layout user={user} onLogout={handleLogout} onGenerateClick={() => setModalOpen(true)} />
+                            ? <Layout user={user} onLogout={handleLogout} />
                             : <Navigate to="/login" />
                     }
                 >
