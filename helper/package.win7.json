@@ -1,7 +1,7 @@
 {
   "name": "remote-support-helper",
   "_comment": "Windows 7/8/8.1 variant — same source as package.json, pinned to Electron 22 (the last version supporting these OS versions; Electron 23+ requires Windows 10+). Do not bump the electron version here without re-verifying Win7 compatibility. See scripts/build-win7-package.js for how this is swapped in during CI.",
-  "version": "1.1.22",
+  "version": "1.1.23",
   "description": "Customer helper app for Remote Support (Windows 7/8/8.1 build)",
   "author": "ServiceLC",
   "main": "src/main.js",

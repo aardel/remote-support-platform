@@ -410,6 +410,12 @@ async function init() {
   log(`Device ID: ${info.deviceId}`);
   log(`Server: ${config.server}`);
   showSupportCode(info.shortCode);
+  // Device registration runs in parallel with startup and can still be in
+  // flight here (it's a network call), leaving the code blank above — pick
+  // it up once it resolves instead of staying blank until next restart.
+  if (window.helperApi.onShortCodeUpdated) {
+    window.helperApi.onShortCodeUpdated((code) => showSupportCode(code));
+  }
   loadIceServers(); // fetch STUN/TURN (async; falls back to STUN until it returns)
 
   let sessionReady = false;

@@ -361,6 +361,7 @@ async function registerDeviceAndGetToken() {
   });
   if (!res.ok) throw new Error(`Device register failed: ${res.status}`);
   const data = await res.json();
+  const isNewCode = data.device?.short_code && data.device.short_code !== cachedShortCode;
   if (data.device?.short_code) cachedShortCode = data.device.short_code;
   if (data.deviceToken || cachedShortCode) {
     writePrefs({
@@ -368,6 +369,13 @@ async function registerDeviceAndGetToken() {
       ...(data.deviceToken ? { deviceToken: data.deviceToken } : {}),
       ...(cachedShortCode ? { shortCode: cachedShortCode } : {})
     });
+  }
+  // This runs as a fire-and-forget network call started alongside window
+  // creation, so the renderer's one-time getInfo() read at startup often
+  // wins the race and shows a blank code. Push the code once it's known so
+  // the UI can update instead of staying blank until the next full restart.
+  if (isNewCode && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('helper:short-code-updated', cachedShortCode);
   }
   return data.deviceToken || null;
 }

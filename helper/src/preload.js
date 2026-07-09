@@ -63,6 +63,11 @@ contextBridge.exposeInMainWorld('helperApi', {
     ipcRenderer.on('signaling:pending-session', h);
     return () => ipcRenderer.removeListener('signaling:pending-session', h);
   },
+  onShortCodeUpdated: (callback) => {
+    const h = (_event, code) => callback(code);
+    ipcRenderer.on('helper:short-code-updated', h);
+    return () => ipcRenderer.removeListener('helper:short-code-updated', h);
+  },
 
   // Auto-start on login
   getAutoStart: () => ipcRenderer.invoke('helper:get-auto-start'),
