@@ -17,6 +17,8 @@ function DevicesPage() {
     const [editTag, setTag] = useState('');
     const [groupFilter, setGroupFilter] = useState('');
     const [requesting, setReq] = useState(null);
+    const [connectCode, setConnectCode] = useState('');
+    const [connecting, setConnecting] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -104,6 +106,31 @@ function DevicesPage() {
         }
     };
 
+    // Connect directly by the customer's short support code (read off the
+    // helper's "Your Support Code" screen) — doesn't require the device to
+    // already be in this list, unlike the per-row "Request" button.
+    const connectByCode = async (e) => {
+        e.preventDefault();
+        const code = connectCode.trim();
+        if (!code) return;
+        setConnecting(true);
+        try {
+            const res = await axios.post('/api/devices/connect-by-code', { code });
+            if (res.data.success) {
+                setConnectCode('');
+                if (!res.data.pushed) {
+                    alert('Session requested. Ask the user to open the helper.');
+                } else {
+                    navigate(`/session/${res.data.sessionId}`);
+                }
+            }
+        } catch (e) {
+            alert('Error: ' + (e.response?.data?.error || e.message));
+        } finally {
+            setConnecting(false);
+        }
+    };
+
     // Country flag helper
     const flag = (country) => {
         if (!country) return '';
@@ -152,6 +179,22 @@ function DevicesPage() {
                 <span className="page-count">{devices.length} device{devices.length !== 1 ? 's' : ''}</span>
             </div>
 
+            <form className="connect-by-code-row" onSubmit={connectByCode}>
+                <label htmlFor="connectCodeInput" className="page-toolbar-label">Connect by code</label>
+                <input
+                    id="connectCodeInput"
+                    type="text"
+                    placeholder="123 456 789"
+                    value={connectCode}
+                    onChange={e => setConnectCode(e.target.value)}
+                    className="page-search"
+                    style={{ maxWidth: 180, fontFamily: 'monospace' }}
+                />
+                <button type="submit" className="btn-sm btn-primary" disabled={connecting || !connectCode.trim()}>
+                    {connecting ? 'Connecting...' : 'Connect'}
+                </button>
+            </form>
+
             <div className="page-toolbar">
                 <input type="text" placeholder="Search devices..." value={search} onChange={e => setSearch(e.target.value)} className="page-search" />
                 {groups.length > 0 && (
@@ -180,7 +223,7 @@ function DevicesPage() {
                     <table className="page-table">
                         <thead>
                             <tr>
-                                <th>Customer</th><th>Machine</th><th>Tag</th><th>Hostname</th><th>OS</th>
+                                <th>Customer</th><th>Machine</th><th>Tag</th><th>Code</th><th>Hostname</th><th>OS</th>
                                 <th>IP</th><th>Location</th><th>Last Seen</th><th>Status</th><th>Actions</th>
                             </tr>
                         </thead>
@@ -190,6 +233,7 @@ function DevicesPage() {
                                     <td>{editId === d.device_id ? <input className="inline-edit" value={editCustomer} onChange={e => setCust(e.target.value)} placeholder="Customer name" /> : d.customer_name || <span className="muted">—</span>}</td>
                                     <td>{editId === d.device_id ? <input className="inline-edit" value={editMachine} onChange={e => setMach(e.target.value)} placeholder="Machine name" /> : d.machine_name || d.display_name || <span className="muted">—</span>}</td>
                                     <td>{editId === d.device_id ? <input className="inline-edit" value={editTag} onChange={e => setTag(e.target.value)} placeholder="Tag" /> : (d.tag ? <span className="badge badge-neutral">{d.tag}</span> : <span className="muted">—</span>)}</td>
+                                    <td className="mono">{d.short_code ? `${d.short_code.slice(0,3)} ${d.short_code.slice(3,6)} ${d.short_code.slice(6)}` : <span className="muted">—</span>}</td>
                                     <td>{d.hostname || '—'}</td>
                                     <td>{d.os || '—'}</td>
                                     <td className="mono">{d.last_ip || '—'}</td>

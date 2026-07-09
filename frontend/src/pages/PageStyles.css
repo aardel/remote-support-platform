@@ -31,6 +31,17 @@
   margin-bottom: 16px;
 }
 
+.connect-by-code-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+}
+
 .page-search {
   padding: 8px 14px;
   border: 1px solid #e2e8f0;
