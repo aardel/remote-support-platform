@@ -390,14 +390,22 @@ async function startPresenceAgent() {
   const config = readConfig();
   if (!config.server) return;
 
-  let token = readPrefs().deviceToken;
-  if (!token) {
+  let prefs = readPrefs();
+  let token = prefs.deviceToken;
+  // Also re-register when a token exists but we never got a short code back —
+  // devices that registered before short codes existed (pre-1.1.22) would
+  // otherwise stay blank forever, since a valid cached token alone used to
+  // skip registration entirely on every future launch.
+  if (!token || !prefs.shortCode) {
     try {
-      token = await registerDeviceAndGetToken();
+      const freshToken = await registerDeviceAndGetToken();
+      if (freshToken) token = freshToken;
     } catch (e) {
       console.warn('Presence: device registration failed, retrying in 60s:', e.message);
-      schedulePresenceRetry(60 * 1000);
-      return;
+      if (!token) {
+        schedulePresenceRetry(60 * 1000);
+        return;
+      }
     }
   }
   if (!token) return;
